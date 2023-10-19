@@ -34,15 +34,23 @@ class PairwiseDecoding:
         print('loading data...')
         data = np.load(f'{self.data_dir}/CleanedEEG/{self.sid}/data4rdms_perm-{self.permutation_number}.npz', allow_pickle=True)
 
+        # Take some data out of the dict for faster access
+        X = data['X']
+        labels_pseudo_train = data['labels_pseudo_train']
+        labels_pseudo_test = data['labels_pseudo_test']
+        ind_pseudo_train = data['ind_pseudo_train']
+        ind_pseudo_test = data['ind_pseudo_test']
+        conditions_nCk = data['conditions_nCk']
+
         # 1. Compute pseudo-trials for training and test
         print('computing pseudo-trials...')
         start = time.time()
         Xpseudo_train = np.full((len(data['train_indices']), data['n_sensors'], data['n_time']), np.nan)
         Xpseudo_test = np.full((len(data['test_indices']), data['n_sensors'], data['n_time']), np.nan)
         for i, ind in tqdm(enumerate(data['train_indices']), total=len(data['train_indices'])):
-            Xpseudo_train[i, :, :] = np.mean(data['X'][ind.astype('int'), :, :], axis=0)
+            Xpseudo_train[i, :, :] = np.mean(X[ind.astype('int'), :, :], axis=0)
         for i, ind in tqdm(enumerate(data['test_indices']), total=len(data['test_indices'])):
-            Xpseudo_test[i, :, :] = np.mean(data['X'][ind.astype('int'), :, :], axis=0)
+            Xpseudo_test[i, :, :] = np.mean(X[ind.astype('int'), :, :], axis=0)
         end = time.time()
         print(f'computing pseudo-trials took {end-start:0f} s.')
 
@@ -69,13 +77,12 @@ class PairwiseDecoding:
         for t in tqdm(range(data['n_time']), total=data['n_time']):
             result_for_t = Parallel(n_jobs=-1)(
                 delayed(fit_and_predict)(0, c1, c2, Xpseudo_train, Xpseudo_test,
-                                        data['labels_pseudo_train'],
-                                        data['labels_pseudo_test'],
-                                        data['ind_pseudo_train'],
-                                        data['ind_pseudo_test']) for c1, c2 in data['conditions_nCk']  # Just first two combinations
+                                        labels_pseudo_train,
+                                        labels_pseudo_test,
+                                        ind_pseudo_train,
+                                        ind_pseudo_test) for c1, c2 in conditions_nCk
             )
-            print(result_for_t)
-            for c1, c2, val in result:
+            for c1, c2, val in result_for_t:
                 result[c1, c2, t] = val
 
         print('saving...')
