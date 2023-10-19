@@ -15,5 +15,6 @@ perm=$2
 ml anaconda
 conda activate nibabel
 
-python voxel_permutation.py --sid "$subj" --perm "$perm"\
-  --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim 
+python pairwise_decoding.py \
+ --sid "$subj" --perm "$perm" \
+ --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim 
