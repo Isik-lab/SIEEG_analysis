@@ -29,6 +29,7 @@ class PairwiseDecoding:
         self.sid = f'subj{str(args.sid).zfill(3)}'
         self.permutation_number = str(args.perm).zfill(2)
         Path(f'{self.data_dir}/{self.process}/{self.sid}').mkdir(parents=True, exist_ok=True)
+        print(vars(self))
 
     def run(self):
         print('loading data...')
