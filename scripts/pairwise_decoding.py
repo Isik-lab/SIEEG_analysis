@@ -76,7 +76,7 @@ class PairwiseDecoding:
                         data['n_time'])) * np.nan
         for t in tqdm(range(data['n_time']), total=data['n_time']):
             result_for_t = Parallel(n_jobs=-1)(
-                delayed(fit_and_predict)(0, c1, c2, Xpseudo_train, Xpseudo_test,
+                delayed(fit_and_predict)(t, c1, c2, Xpseudo_train, Xpseudo_test,
                                         labels_pseudo_train,
                                         labels_pseudo_test,
                                         ind_pseudo_train,
