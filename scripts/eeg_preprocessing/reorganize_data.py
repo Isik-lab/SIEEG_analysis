@@ -13,6 +13,9 @@ import matplotlib.pyplot as plt
 from src.tools import corr2d
 from src.cv import ShuffleBinLeaveOneOut
 from itertools import combinations
+from scipy.spatial.distance import pdist
+from sklearn.discriminant_analysis import _cov
+import scipy
 
 
 # # Pilot Data Check
@@ -26,7 +29,7 @@ data_path = '../../data'
 figure_path = f'../../reports/figures/{process}'
 eeg_path = f'{data_path}/interim/SIdyads_EEG_pilot'
 trial_path = f'{data_path}/raw/SIdyads_trials_pilot'
-subj = 'subj001_10062023'
+subj = 'subj003_10182023'
 subj_out = subj.split('_')[0]
 preproc_file = f'{eeg_path}/{subj}/{subj}_preproc.mat'
 trial_files = f'{trial_path}/{subj}/timingfiles/*.csv'
@@ -67,7 +70,8 @@ catch_trials = np.invert(trials.condition.to_numpy().astype('bool'))
 response_trials = trials.response.to_numpy().astype('bool')
 trial_to_remove = catch_trials + response_trials
 trials = trials[~trial_to_remove].reset_index(drop=True)
-print(f'number of catch trials plus false alarms: {np.sum(trial_to_remove)}')
+print(f'number of catch trials: {np.sum(catch_trials)}')
+print(f'number of false alarms: {np.sum(response_trials & np.invert(catch_trials))}')
 print(f'final number of trials: {len(trials)}')
 print()
 
@@ -102,14 +106,19 @@ print(f'n_conditions = {n_conditions}')
 
 # In[8]:
 
-
-grouped_indices = trials.groupby(['video_name']).indices
-split_half = np.zeros((len(grouped_indices), 2, n_sensors, n_time))
-average_data_array = np.zeros((len(grouped_indices), n_sensors, n_time))
-for i, (_, val) in enumerate(grouped_indices.items()):
+split_half = np.zeros((n_conditions, 2, n_sensors, n_time))
+average_data_array = np.zeros((n_conditions, n_sensors, n_time))
+sigma_ = np.empty((n_conditions, n_sensors, n_sensors))
+for i, (_, val) in enumerate(trials.groupby(['video_name']).indices.items()):
     split_half[i, 0, :, :] = data_array[val[::2], :, :].mean(axis=0, keepdims=True)
     split_half[i, 1, :, :] = data_array[val[1::2], :, :].mean(axis=0, keepdims=True)
-    average_data_array[i, :, :] = data_array[val, :, :].mean(axis=0, keepdims=True)
+    sigma_[i] = np.mean([_cov(data_array[val, :, t], shrinkage='auto') for t in range(n_time)], axis=0)
+    average_data_array[i, :, :] = data_array[val, ...].mean(axis=0, keepdims=True)
+sigma = sigma_.mean(axis=0)  # average across conditions
+sigma_inv = scipy.linalg.fractional_matrix_power(sigma, -0.5)
+normed_data = (average_data_array.swapaxes(1, 2) @ sigma_inv).swapaxes(1, 2)
+
+
 
 # In[10]:
 
@@ -118,64 +127,87 @@ reliability = []
 for isample in range(n_time):
     reliability.append(corr2d(split_half[:, 0, :, isample].squeeze(), split_half[:, 1, :, isample].squeeze()))
 reliability = np.vstack(reliability)
-_, ax = plt.subplots(2)
-ax[0].plot(reliability)
-ax[1].plot(reliability.mean(axis=-1))
+_, axes = plt.subplots(2)
+r_datas = [reliability, reliability.mean(axis=-1)]
+for ax, r_data in zip(axes, r_datas):
+    ymin, ymax = r_data.min(), r_data.max()
+    ax.plot(time, r_data)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Reliability')
+    ax.vlines(x=[0, 0.5], ymin=ymin, ymax=ymax,
+            colors='gray', linestyles='dashed', zorder=0)
+    ax.hlines(y=0, xmin=time.min(), xmax=time.max(),
+            colors='gray', linestyles='solid', zorder=0)
+    ax.set_xlim([time.min(), time.max()])
+    ax.set_ylim([ymin, ymax])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+plt.tight_layout()
 plt.savefig(f'{figure_path}/subj-{subj_out}_reliability.png')
 
+# ## RDM
 
-# ## Pairwise Decoding
+# In[11]:
 
-# In[13]:
+videos_nCk = list(combinations(np.unique(trials.video_name.to_numpy()), 2))
+rdms = np.zeros((n_time, len(videos_nCk)))
+for t_i, _ in enumerate(time):
+    rdms[t_i, :] = pdist(normed_data[..., t_i], 'correlation')
+np.save(f'{out_dir}/correlation_rdm.npy', rdms)
 
-video_name = trials.video_name.to_numpy()
+# # ## Pairwise Decoding
 
-X = data_array.copy()
-y = trials.video_id.to_numpy()
-print(f'X shape = {X.shape}')
-print(f'y shape = {y.shape}')
+# # In[13]:
 
-conditions_list = np.unique(y)
-video_list = np.unique(video_name)
-conditions_nCk = list(combinations(conditions_list, 2))
-videos_nCk = list(combinations(np.unique(video_name), 2))
+# video_name = trials.video_name.to_numpy()
 
-# Print if a condition does not have enough repeats
-vids, vid_counts = np.unique(video_name, return_counts=True)
-for vid, vid_count in zip(vids, vid_counts):
-    if vid_count < n_pseudo:
-        print(f'video {vid} ({vid_count}) does not have enough repeats for {n_pseudo} pseudo trials.')
+# X = data_array.copy()
+# y = trials.video_id.to_numpy()
+# print(f'X shape = {X.shape}')
+# print(f'y shape = {y.shape}')
 
-# In[14]:
+# conditions_list = np.unique(y)
+# video_list = np.unique(video_name)
+# conditions_nCk = list(combinations(conditions_list, 2))
+# videos_nCk = list(combinations(np.unique(video_name), 2))
+
+# # Print if a condition does not have enough repeats
+# vids, vid_counts = np.unique(video_name, return_counts=True)
+# for vid, vid_count in zip(vids, vid_counts):
+#     if vid_count < n_pseudo:
+#         print(f'video {vid} ({vid_count}) does not have enough repeats for {n_pseudo} pseudo trials.')
+
+# # In[14]:
 
 
-np.random.seed(0)
-cv = ShuffleBinLeaveOneOut(y, n_iter=n_perm, n_pseudo=n_pseudo) 
-out = {'video_name': video_name,
-       'conditions': conditions_list,
-      'conditions_nCk': conditions_nCk,
-      'videos_nCk': videos_nCk, 
-      'n_sensors': n_sensors,
-      'n_conditions': n_conditions,
-      'n_time': n_time,
-      'n_perm': n_perm,
-      'n_pseudo': n_pseudo,
-      'X': X,
-      'y': y,
-      'train_indices': [],
-      'test_indices': [],
-      'permutation_number': 0,
-      'labels_pseudo_train': [],
-      'labels_pseudo_test': [],
-      'ind_pseudo_train': [],
-      'ind_pseudo_test': [],
-      'time': time}
-for f, (train_indices, test_indices) in enumerate(cv.split(X)):
-    out['permutation_number'] = f
-    out['train_indices'] = train_indices
-    out['test_indices'] = train_indices
-    out['labels_pseudo_train'] = cv.labels_pseudo_train
-    out['labels_pseudo_test'] = cv.labels_pseudo_test
-    out['ind_pseudo_train'] = cv.ind_pseudo_train
-    out['ind_pseudo_test'] = cv.ind_pseudo_test
-    np.savez(f'{out_dir}/data4rdms_perm-{str(f).zfill(2)}.npz', **out)
+# np.random.seed(0)
+# cv = ShuffleBinLeaveOneOut(y, n_iter=n_perm, n_pseudo=n_pseudo) 
+# out = {'video_name': video_name,
+#        'conditions': conditions_list,
+#       'conditions_nCk': conditions_nCk,
+#       'videos_nCk': videos_nCk, 
+#       'n_sensors': n_sensors,
+#       'n_conditions': n_conditions,
+#       'n_time': n_time,
+#       'n_perm': n_perm,
+#       'n_pseudo': n_pseudo,
+#       'X': X,
+#       'y': y,
+#       'train_indices': [],
+#       'test_indices': [],
+#       'permutation_number': 0,
+#       'labels_pseudo_train': [],
+#       'labels_pseudo_test': [],
+#       'ind_pseudo_train': [],
+#       'ind_pseudo_test': [],
+#       'time': time}
+# for f, (train_indices, test_indices) in enumerate(cv.split(X)):
+#     out['permutation_number'] = f
+#     out['train_indices'] = train_indices
+#     out['test_indices'] = train_indices
+#     out['labels_pseudo_train'] = cv.labels_pseudo_train
+#     out['labels_pseudo_test'] = cv.labels_pseudo_test
+#     out['ind_pseudo_train'] = cv.ind_pseudo_train
+#     out['ind_pseudo_test'] = cv.ind_pseudo_test
+#     np.savez(f'{out_dir}/data4rdms_perm-{str(f).zfill(2)}.npz', **out)
