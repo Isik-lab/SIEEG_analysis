@@ -78,7 +78,7 @@ class PairwiseDecoding:
                                          labels_pseudo_train[c1, c2],
                                            labels_pseudo_test[c1, c2]) for c1, c2 in conditions_nCk
             )
-            for v1, v2, accuracy in zip(result_for_t, videos_nCk):
+            for accuracy, (v1, v2) in zip(result_for_t, videos_nCk):
                 results.append({'v1': v1, 'v2': v2, 'time': t, 'accuracy': accuracy})
 
         print('saving...')
