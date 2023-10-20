@@ -2,9 +2,9 @@
 addpath /Applications/fieldtrip-20230926/
 addpath progressbar/
 
-input_path = '../data/raw/SIdyads_EEG_pilot/';
-out_path = '../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj003_10182023';
+input_path = '../../data/raw/SIdyads_EEG_pilot/';
+out_path = '../../data/interim/SIdyads_EEG_pilot/';
+subj_file = 'subj001_10062023';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -205,32 +205,15 @@ cfg.resamplefs = 200;
 data_resampled = ft_resampledata(cfg, data_lp_filtered);
 
 %% Save
-%save the artifact rejection info in a preproc structure that can be reused
-comp = rmfield(comp, 'time');
-comp = rmfield(comp, 'trial');
-preproc.idx_badtrial = badtrial_idx;
-preproc.badtrial_variance = badtrl_var;
-preproc.badtrial_muscle = badtrl_msc;
-preproc.muscle_zvalue = zval;
-preproc.icacomponent = comp;
-preproc.comp_rmv = comp_rmv;
-preproc.chan = data_resampled.label;
-
-%save outputs
-if ~exist([out_path, subj_file], 'dir')
-    mkdir([out_path, subj_file]);
-end
-data_file = [out_path, subj_file, '/', [subj_file, '_data.mat']];
-preproc_file = [out_path, subj_file, '/', [subj_file, '_preproc.mat']];
-save(data_file, '-v7.3', '-struct', 'data_resampled');
-save(preproc_file,'-struct','preproc');
 
 %Find the trial with the smallest number of samples
 min_samples = 100000;
+trial_number = 0; 
 for i=1:length(data_resampled.trial)
     d = data_resampled.trial(i);
     if size(d{1},2) < min_samples
         min_samples = size(d{1},2);
+        trial_number = i; 
     end
 end
 
@@ -244,6 +227,27 @@ end
 trial_file = [out_path, subj_file, '/', [subj_file, '_trialonly.mat']];
 save(trial_file, 'trl');
 fprintf('saved and complete \n');
+
+%save the artifact rejection info in a preproc structure that can be reused
+comp = rmfield(comp, 'time');
+comp = rmfield(comp, 'trial');
+preproc.idx_badtrial = badtrial_idx;
+preproc.badtrial_variance = badtrl_var;
+preproc.badtrial_muscle = badtrl_msc;
+preproc.muscle_zvalue = zval;
+preproc.icacomponent = comp;
+preproc.comp_rmv = comp_rmv;
+preproc.chan = data_resampled.label;
+preproc.time = data_resampled.time{trial_number};
+
+%save outputs
+if ~exist([out_path, subj_file], 'dir')
+    mkdir([out_path, subj_file]);
+end
+data_file = [out_path, subj_file, '/', [subj_file, '_data.mat']];
+preproc_file = [out_path, subj_file, '/', [subj_file, '_preproc.mat']];
+save(data_file, '-v7.3', '-struct', 'data_resampled');
+save(preproc_file,'-struct','preproc');
 
 %% Functions
 function [badtrl] = eeg_badtrialidx(art,rawdata)

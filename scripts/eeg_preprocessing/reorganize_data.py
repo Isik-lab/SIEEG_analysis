@@ -41,8 +41,10 @@ n_pseudo = 5  # number of pseudo-trials
 
 # In[4]:
 
+preproc = loadmat(preproc_file)
+artifact_trials = preproc['idx_badtrial'].squeeze().astype('bool')
+time = preproc['time'].squeeze()
 
-artifact_trials = loadmat(preproc_file)['idx_badtrial'].squeeze().astype('bool')
 trials = []
 for run, tf in enumerate(sorted(glob(trial_files))):
     df = pd.read_csv(tf)
@@ -133,8 +135,10 @@ y = trials.video_id.to_numpy()
 print(f'X shape = {X.shape}')
 print(f'y shape = {y.shape}')
 
-conditions_list = sorted(np.unique(y))
+conditions_list = np.unique(y)
+video_list = np.unique(video_name)
 conditions_nCk = list(combinations(conditions_list, 2))
+videos_nCk = list(combinations(np.unique(video_name), 2))
 
 # Print if a condition does not have enough repeats
 vids, vid_counts = np.unique(video_name, return_counts=True)
@@ -150,6 +154,7 @@ cv = ShuffleBinLeaveOneOut(y, n_iter=n_perm, n_pseudo=n_pseudo)
 out = {'video_name': video_name,
        'conditions': conditions_list,
       'conditions_nCk': conditions_nCk,
+      'videos_nCk': videos_nCk, 
       'n_sensors': n_sensors,
       'n_conditions': n_conditions,
       'n_time': n_time,
@@ -163,7 +168,8 @@ out = {'video_name': video_name,
       'labels_pseudo_train': [],
       'labels_pseudo_test': [],
       'ind_pseudo_train': [],
-      'ind_pseudo_test': []}
+      'ind_pseudo_test': [],
+      'time': time}
 for f, (train_indices, test_indices) in enumerate(cv.split(X)):
     out['permutation_number'] = f
     out['train_indices'] = train_indices
