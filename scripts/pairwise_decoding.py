@@ -34,7 +34,6 @@ class PairwiseDecoding:
 
         # Take some data out of the dict for faster access
         X = data['X']
-        time = data['time']
         labels_pseudo_train = data['labels_pseudo_train']
         labels_pseudo_test = data['labels_pseudo_test']
         ind_pseudo_train = data['ind_pseudo_train']
@@ -72,7 +71,7 @@ class PairwiseDecoding:
 
         print('computing pairwise distances...')
         results = []
-        for t_i, t in tqdm(enumerate(time), total=data['n_time']):
+        for t_i, t in tqdm(enumerate(data['time']), total=data['n_time']):
             result_for_t = Parallel(n_jobs=-1)(
                 delayed(fit_and_predict)(Xpseudo_train[ind_pseudo_train[c1, c2], :, t_i],
                                          Xpseudo_test[ind_pseudo_test[c1, c2], :, t_i],
