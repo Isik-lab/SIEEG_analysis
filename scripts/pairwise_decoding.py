@@ -93,7 +93,7 @@ class PairwiseDecoding:
         print('now beginning the tasks...')
         start = time.time()
         results = []
-        with ProcessPoolExecutor(max_workers=4) as executor:
+        with ProcessPoolExecutor() as executor:
             for result in tqdm(executor.map(unpack_and_call_worker, tasks), total=len(tasks)):
                 results.append(result)
         end = time.time()
