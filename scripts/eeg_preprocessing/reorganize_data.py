@@ -29,7 +29,7 @@ data_path = '../../data'
 figure_path = f'../../reports/figures/{process}'
 eeg_path = f'{data_path}/interim/SIdyads_EEG_pilot'
 trial_path = f'{data_path}/raw/SIdyads_trials_pilot'
-subj = 'subj003_10182023'
+subj = 'subj002_10162023'
 subj_out = subj.split('_')[0]
 preproc_file = f'{eeg_path}/{subj}/{subj}_preproc.mat'
 trial_files = f'{trial_path}/{subj}/timingfiles/*.csv'
@@ -39,7 +39,7 @@ Path(figure_path).mkdir(parents=True, exist_ok=True)
 
 # Parameters
 n_perm = 20  # number of permutations
-n_pseudo = 5  # number of pseudo-trials
+n_pseudo = 3  # number of pseudo-trials
 
 
 # In[4]:
@@ -118,8 +118,6 @@ sigma = sigma_.mean(axis=0)  # average across conditions
 sigma_inv = scipy.linalg.fractional_matrix_power(sigma, -0.5)
 normed_data = (average_data_array.swapaxes(1, 2) @ sigma_inv).swapaxes(1, 2)
 
-
-
 # In[10]:
 
 
@@ -156,58 +154,58 @@ for t_i, _ in enumerate(time):
     rdms[t_i, :] = pdist(normed_data[..., t_i], 'correlation')
 np.save(f'{out_dir}/correlation_rdm.npy', rdms)
 
-# # ## Pairwise Decoding
+# ## Pairwise Decoding
 
-# # In[13]:
+# In[13]:
 
-# video_name = trials.video_name.to_numpy()
+video_name = trials.video_name.to_numpy()
 
-# X = data_array.copy()
-# y = trials.video_id.to_numpy()
-# print(f'X shape = {X.shape}')
-# print(f'y shape = {y.shape}')
+X = data_array.copy()
+y = trials.video_id.to_numpy()
+print(f'X shape = {X.shape}')
+print(f'y shape = {y.shape}')
 
-# conditions_list = np.unique(y)
-# video_list = np.unique(video_name)
-# conditions_nCk = list(combinations(conditions_list, 2))
-# videos_nCk = list(combinations(np.unique(video_name), 2))
+conditions_list = np.unique(y)
+video_list = np.unique(video_name)
+conditions_nCk = list(combinations(conditions_list, 2))
+videos_nCk = list(combinations(np.unique(video_name), 2))
 
-# # Print if a condition does not have enough repeats
-# vids, vid_counts = np.unique(video_name, return_counts=True)
-# for vid, vid_count in zip(vids, vid_counts):
-#     if vid_count < n_pseudo:
-#         print(f'video {vid} ({vid_count}) does not have enough repeats for {n_pseudo} pseudo trials.')
+# Print if a condition does not have enough repeats
+vids, vid_counts = np.unique(video_name, return_counts=True)
+for vid, vid_count in zip(vids, vid_counts):
+    if vid_count < n_pseudo:
+        print(f'video {vid} (n = {vid_count}) does not have enough repeats for {n_pseudo} pseudo trials.')
 
-# # In[14]:
+# In[14]:
 
 
-# np.random.seed(0)
-# cv = ShuffleBinLeaveOneOut(y, n_iter=n_perm, n_pseudo=n_pseudo) 
-# out = {'video_name': video_name,
-#        'conditions': conditions_list,
-#       'conditions_nCk': conditions_nCk,
-#       'videos_nCk': videos_nCk, 
-#       'n_sensors': n_sensors,
-#       'n_conditions': n_conditions,
-#       'n_time': n_time,
-#       'n_perm': n_perm,
-#       'n_pseudo': n_pseudo,
-#       'X': X,
-#       'y': y,
-#       'train_indices': [],
-#       'test_indices': [],
-#       'permutation_number': 0,
-#       'labels_pseudo_train': [],
-#       'labels_pseudo_test': [],
-#       'ind_pseudo_train': [],
-#       'ind_pseudo_test': [],
-#       'time': time}
-# for f, (train_indices, test_indices) in enumerate(cv.split(X)):
-#     out['permutation_number'] = f
-#     out['train_indices'] = train_indices
-#     out['test_indices'] = train_indices
-#     out['labels_pseudo_train'] = cv.labels_pseudo_train
-#     out['labels_pseudo_test'] = cv.labels_pseudo_test
-#     out['ind_pseudo_train'] = cv.ind_pseudo_train
-#     out['ind_pseudo_test'] = cv.ind_pseudo_test
-#     np.savez(f'{out_dir}/data4rdms_perm-{str(f).zfill(2)}.npz', **out)
+np.random.seed(0)
+cv = ShuffleBinLeaveOneOut(y, n_iter=n_perm, n_pseudo=n_pseudo) 
+out = {'video_name': video_name,
+       'conditions': conditions_list,
+      'conditions_nCk': conditions_nCk,
+      'videos_nCk': videos_nCk, 
+      'n_sensors': n_sensors,
+      'n_conditions': n_conditions,
+      'n_time': n_time,
+      'n_perm': n_perm,
+      'n_pseudo': n_pseudo,
+      'X': X,
+      'y': y,
+      'train_indices': [],
+      'test_indices': [],
+      'permutation_number': 0,
+      'labels_pseudo_train': [],
+      'labels_pseudo_test': [],
+      'ind_pseudo_train': [],
+      'ind_pseudo_test': [],
+      'time': time}
+for f, (train_indices, test_indices) in enumerate(cv.split(X)):
+    out['permutation_number'] = f
+    out['train_indices'] = train_indices
+    out['test_indices'] = train_indices
+    out['labels_pseudo_train'] = cv.labels_pseudo_train
+    out['labels_pseudo_test'] = cv.labels_pseudo_test
+    out['ind_pseudo_train'] = cv.ind_pseudo_train
+    out['ind_pseudo_test'] = cv.ind_pseudo_test
+    np.savez(f'{out_dir}/data4rdms_perm-{str(f).zfill(2)}.npz', **out)

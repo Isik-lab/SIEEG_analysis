@@ -15,8 +15,7 @@ def fit_and_predict(X_train, X_test, y_train, y_test):
     model = LinearSVC()
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
-    accuracy = np.mean(predictions == y_test)
-    return accuracy
+    return np.mean(predictions == y_test)
 
 
 class PairwiseDecoding:

@@ -1,7 +1,8 @@
 function [data, badtrl_photo] = eeg_alignphoto(data, toilim,...
     photo_threshold, down,...
     onset_sample_number, frames_per_second, ...
-    plotting)
+    plotting, ...
+    low_pass_filter, time_exclude)
 %realign trials to photodiode onset
 %searches for photodiode down flanks within specified toilim
 %assumes channel is labelled photodiode
@@ -10,8 +11,6 @@ function [data, badtrl_photo] = eeg_alignphoto(data, toilim,...
 % Edited by E McMahon (emaliemcmahon@gmail.com) Oct 2023
 
 % Setting variables
-low_pass_filter = 50;
-time_exclude = .1; %s
 sample_exclude = time_exclude * frames_per_second;
 
 %get the data into matrix format

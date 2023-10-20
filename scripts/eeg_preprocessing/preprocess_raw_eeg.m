@@ -10,6 +10,8 @@ eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
 prestim_time = 0.2;
 photo_threshold = 0;
+photodiode_lpf = 50;
+time_exclude = .1;
 if contains(subj_file, 'subj001')
     down = 0;
     poststim_time = 0.75;
