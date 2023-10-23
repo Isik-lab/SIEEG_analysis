@@ -1,7 +1,7 @@
 #/Applications/anaconda3/envs/nibabel/bin/python
 import scipy
 from sklearn.discriminant_analysis import _cov
-from sklearn.svm import LinearSVC
+from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 from joblib import Parallel, delayed
 import numpy as np
@@ -11,11 +11,20 @@ import argparse
 import pandas as pd
 
 
+def dvw_accuracy_scorer(pred_, y_test_, dvw):
+    return np.mean(dvw.diagonal() * (pred_ == y_test_))
+
+
+def accuracy_scorer(pred_, y_test_):
+    return np.mean(pred_ == y_test_)
+
+
 def fit_and_predict(X_train, X_test, y_train, y_test):
-    model = LinearSVC()
+    model = LogisticRegression(solver='liblinear')
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
-    return np.mean(predictions == y_test)
+    prob = model.predict_proba(X_test)
+    return accuracy_scorer(predictions, y_test), dvw_accuracy_scorer(predictions, y_test, prob)
 
 
 class PairwiseDecoding:
@@ -77,8 +86,10 @@ class PairwiseDecoding:
                                          labels_pseudo_train[c1, c2],
                                            labels_pseudo_test[c1, c2]) for c1, c2 in conditions_nCk
             )
-            for accuracy, (v1, v2) in zip(result_for_t, videos_nCk):
-                results.append({'v1': v1, 'v2': v2, 'time': t, 'accuracy': accuracy})
+            for (acc, dvw_acc), (v1, v2) in zip(result_for_t, videos_nCk):
+                results.append({'v1': v1, 'v2': v2, 'time': t,
+                                 'accuracy': acc,
+                                 'dvw_accuracy': dvw_acc})
 
         print('saving...')
         results = pd.DataFrame(results)
@@ -91,7 +102,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', type=int, default=1)
     parser.add_argument('--perm', type=int, default=0)
-    parser.add_argument('--data_dir', '-data', type=str, default='../data/interim')
+    parser.add_argument('--data_dir', '-data', type=str,
+                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data/interim')
     args = parser.parse_args()
     PairwiseDecoding(args).run()
 

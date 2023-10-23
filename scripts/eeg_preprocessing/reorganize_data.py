@@ -29,7 +29,7 @@ data_path = '../../data'
 figure_path = f'../../reports/figures/{process}'
 eeg_path = f'{data_path}/interim/SIdyads_EEG_pilot'
 trial_path = f'{data_path}/raw/SIdyads_trials_pilot'
-subj = 'subj002_10162023'
+subj = 'subj001_10062023'
 subj_out = subj.split('_')[0]
 preproc_file = f'{eeg_path}/{subj}/{subj}_preproc.mat'
 trial_files = f'{trial_path}/{subj}/timingfiles/*.csv'
@@ -39,7 +39,7 @@ Path(figure_path).mkdir(parents=True, exist_ok=True)
 
 # Parameters
 n_perm = 20  # number of permutations
-n_pseudo = 3  # number of pseudo-trials
+n_pseudo = 5  # number of pseudo-trials
 
 
 # In[4]:
@@ -209,3 +209,4 @@ for f, (train_indices, test_indices) in enumerate(cv.split(X)):
     out['ind_pseudo_train'] = cv.ind_pseudo_train
     out['ind_pseudo_test'] = cv.ind_pseudo_test
     np.savez(f'{out_dir}/data4rdms_perm-{str(f).zfill(2)}.npz', **out)
+print('Saving complete')
