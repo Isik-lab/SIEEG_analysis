@@ -2,10 +2,10 @@
 
 #SBATCH
 #SBATCH --job-name=pairwise-decoding
-#SBATCH --time=3:00:00
+#SBATCH --time=4:00:00
 #SBATCH --partition=defq
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=48
+#SBATCH --cpus-per-task=16
 #SBATCH --mail-type=end
 #SBATCH --mail-user=emcmaho7@jhu.edu
 
