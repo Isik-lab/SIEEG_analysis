@@ -69,7 +69,7 @@ class PairwiseDecoding:
         self.process = 'PairwiseDecoding'
         self.data_dir = args.data_dir
         self.sid = f'subj{str(args.sid).zfill(3)}'
-        self.n_groups = 5
+        self.n_groups = args.n_groups
         Path(f'{self.data_dir}/{self.process}/{self.sid}').mkdir(parents=True, exist_ok=True)
         print(vars(self))
 
@@ -99,7 +99,7 @@ class PairwiseDecoding:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', type=int, default=1)
-    parser.add_argument('--perm', type=int, default=0)
+    parser.add_argument('--n_groups', type=int, default=5)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data/interim')
     args = parser.parse_args()

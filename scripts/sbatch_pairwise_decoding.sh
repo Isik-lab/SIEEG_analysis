@@ -10,11 +10,11 @@
 #SBATCH --mail-user=emcmaho7@jhu.edu
 
 subj=$1
-perm=$2
+n_groups=$2
 
 ml anaconda
 conda activate nibabel
 
 python pairwise_decoding.py \
- --sid "$subj" --perm "$perm" \
+ --sid "$subj" --n_groups "$n_groups" \
  --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim 
