@@ -16,6 +16,7 @@ from itertools import combinations
 from scipy.spatial.distance import pdist
 from sklearn.discriminant_analysis import _cov
 import scipy
+from scipy.stats import pearsonr
 
 
 # # Pilot Data Check
@@ -25,11 +26,12 @@ import scipy
 # In[3]:
 
 process = 'CleanedEEG'
-data_path = '../../data'
-figure_path = f'../../reports/figures/{process}'
+top_dir = '/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis'
+data_path = f'{top_dir}/data'
+figure_path = f'{top_dir}/reports/figures/{process}'
 eeg_path = f'{data_path}/interim/SIdyads_EEG_pilot'
 trial_path = f'{data_path}/raw/SIdyads_trials_pilot'
-subj = 'subj001_10062023'
+subj = 'subj006'
 subj_out = subj.split('_')[0]
 preproc_file = f'{eeg_path}/{subj}/{subj}_preproc.mat'
 trial_files = f'{trial_path}/{subj}/timingfiles/*.csv'
@@ -109,7 +111,7 @@ print(f'n_conditions = {n_conditions}')
 split_half = np.zeros((n_conditions, 2, n_sensors, n_time))
 average_data_array = np.zeros((n_conditions, n_sensors, n_time))
 sigma_ = np.empty((n_conditions, n_sensors, n_sensors))
-for i, (_, val) in enumerate(trials.groupby(['video_name']).indices.items()):
+for i, (video_name, val) in enumerate(trials.groupby(['video_name']).indices.items()):
     split_half[i, 0, :, :] = data_array[val[::2], :, :].mean(axis=0, keepdims=True)
     split_half[i, 1, :, :] = data_array[val[1::2], :, :].mean(axis=0, keepdims=True)
     sigma_[i] = np.mean([_cov(data_array[val, :, t], shrinkage='auto') for t in range(n_time)], axis=0)
@@ -142,7 +144,7 @@ for ax, r_data in zip(axes, r_datas):
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
 plt.tight_layout()
-plt.savefig(f'{figure_path}/subj-{subj_out}_reliability.png')
+plt.savefig(f'{figure_path}/{subj_out}_reliability.png')
 
 # ## RDM
 

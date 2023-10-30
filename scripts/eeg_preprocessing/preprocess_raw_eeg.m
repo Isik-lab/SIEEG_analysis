@@ -4,25 +4,36 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
 out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj003_10182023';
+subj_file = 'subj003';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
 prestim_time = 0.2;
 photo_threshold = 0;
-photodiode_lpf = 50;
+photodiode_lpf = 50; 
 time_exclude = .1;
+plotting = 0;
+poststim_time = 1.25;
+new_poststim_time = 1;
+resample_rate = 250; %Hz
+down = 1; 
+
+%Set the direction of photodiode and the timing
 if contains(subj_file, 'subj001')
     down = 0;
     poststim_time = 0.75;
+    new_poststim_time = 0.6; 
 elseif contains(subj_file, 'subj002')
     down = 0;
-    poststim_time = 1.25;
-else
-    down = 1;
-    poststim_time = 1.25;
 end
-plotting = 0;
+
+%Mark trials for removal. These trials should only be removed
+%because the run was aborted or the participant was asleep
+if contains(subj_file, 'subj005')
+    trials_to_remove = 661:661+52; 
+else
+    trials_to_remove = []; 
+end 
 
 %% define trials and realign to photodiode onset
 cfg = [];
@@ -37,6 +48,12 @@ cfg = ft_definetrial(cfg);
 data = ft_preprocessing(cfg);
 n_trls = size(data.sampleinfo, 1);
 
+%% remove predefined trials
+all_trials = ones(1, n_trls); 
+all_trials(trials_to_remove) = 0; 
+cfg.trials = logical(all_trials');
+data = ft_preprocessing(cfg, data);
+
 %% Adjust onset based on photodiode
 toilim = [-1*prestim_time poststim_time];
 frames_per_second = data.hdr.Fs;
@@ -44,11 +61,13 @@ onset_sample_number = prestim_time * frames_per_second;
 [data_aligned, badtrl_photo] = eeg_alignphoto(data, toilim,...
     photo_threshold, down, ...
     onset_sample_number, frames_per_second, ...
-    plotting); %custom function to fix triggers
+    plotting,...
+    photodiode_lpf, time_exclude); %custom function to fix triggers
 
 fprintf([num2str(round((length(badtrl_photo)/n_trls)*100)),...
     '%% bad photo trials\n']);
 close all;
+
 %% minimally preprocess data before artefact rejection
 
 cfg = [];
@@ -151,6 +170,7 @@ cfg.resamplefs = 150;
 cfg.detrend = 'no';
 data_clean_ds = ft_resampledata(cfg, data_clean);
 
+
 %compute the rank of the data to constrain number of components
 data_cat = cat(2,data_clean_ds.trial{:});
 data_cat(isnan(data_cat)) = 0;
@@ -200,35 +220,43 @@ cfg.lpfilter = 'yes';
 cfg.lpfreq = 30;
 data_lp_filtered = ft_preprocessing(cfg, data_ica_preproc);
 
-%resample if required
+%% Resample data
+time_vector = linspace((-1*prestim_time), new_poststim_time, ...
+        ((new_poststim_time+prestim_time) * resample_rate)); 
+time_vector = round(time_vector, 3); 
+time = cell(1, length(data_lp_filtered.time));
+for t=1:length(data_lp_filtered.time)
+    time{t} = time_vector;
+end 
+
 cfg = [];
 cfg.detrend = 'no';
-cfg.resamplefs = 200;
+cfg.time = time;
 data_resampled = ft_resampledata(cfg, data_lp_filtered);
 
 %% Save
-
-%Find the trial with the smallest number of samples
-min_samples = 100000;
-trial_number = 0; 
+progressbar
+df = table();
 for i=1:length(data_resampled.trial)
-    d = data_resampled.trial(i);
-    if size(d{1},2) < min_samples
-        min_samples = size(d{1},2);
-        trial_number = i; 
-    end
+    d = data_resampled.trial{i}';
+    time = data_resampled.time{i};
+    rows = cellstr(num2str(time(1:end)'));
+    cols = data_resampled.label;
+    T = array2table(d(1:end, :), 'VariableNames', cols);
+    T.time = rows;
+    T.trial = ones(size(T,1),1)*(i-1);
+    df = vertcat(df, T); 
+    progressbar(i/length(data_resampled.trial)); %update progress bar
 end
 
-trl = ones(length(data_resampled.trial), length(data_resampled.label), min_samples);
-for i=1:length(data_resampled.trial)
-    in = data_resampled.trial(i);
-    in = in{1};
-    trl(i, :, :) = in(:, 1:min_samples);
+if ~exist([out_path, subj_file], 'dir')
+    mkdir([out_path, subj_file]);
 end
-
-trial_file = [out_path, subj_file, '/', [subj_file, '_trialonly.mat']];
-save(trial_file, 'trl');
-fprintf('saved and complete \n');
+trial_file = [out_path, subj_file, '/', [subj_file, '_trials.csv']];
+writetable(df, trial_file);
+gzip(trial_file);
+delete(trial_file)
+clear df
 
 %save the artifact rejection info in a preproc structure that can be reused
 comp = rmfield(comp, 'time');
@@ -240,16 +268,25 @@ preproc.muscle_zvalue = zval;
 preproc.icacomponent = comp;
 preproc.comp_rmv = comp_rmv;
 preproc.chan = data_resampled.label;
-preproc.time = data_resampled.time{trial_number};
+preproc.time = data_resampled.time{1};
 
 %save outputs
-if ~exist([out_path, subj_file], 'dir')
-    mkdir([out_path, subj_file]);
-end
 data_file = [out_path, subj_file, '/', [subj_file, '_data.mat']];
 preproc_file = [out_path, subj_file, '/', [subj_file, '_preproc.mat']];
 save(data_file, '-v7.3', '-struct', 'data_resampled');
 save(preproc_file,'-struct','preproc');
+
+% Array structure
+trl = ones(length(data_resampled.trial), length(data_resampled.label), length(time_vector));
+for i=1:length(data_resampled.trial)
+    in = data_resampled.trial(i);
+    in = in{1};
+    trl(i, :, :) = in(:, 1:end);
+end
+
+trial_file = [out_path, subj_file, '/', [subj_file, '_trialonly.mat']];
+save(trial_file, 'trl');
+fprintf('saved and complete \n');
 
 %% Functions
 function [badtrl] = eeg_badtrialidx(art,rawdata)
