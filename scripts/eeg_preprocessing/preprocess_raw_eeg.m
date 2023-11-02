@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
 out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj002';
+subj_file = 'subj007';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -58,7 +58,7 @@ data = ft_preprocessing(cfg, data);
 toilim = [-1*prestim_time poststim_time];
 frames_per_second = data.hdr.Fs;
 onset_sample_number = prestim_time * frames_per_second;
-[data_aligned, badtrl_photo] = eeg_alignphoto(data, toilim,...
+[data_aligned, offsets, badtrl_photo] = eeg_alignphoto(data, toilim,...
     photo_threshold, down, ...
     onset_sample_number, frames_per_second, ...
     plotting,...
@@ -154,6 +154,9 @@ cfg.trials = find(~badtrial_idx);
 cfg.channel = chan;
 data_clean = ft_preprocessing(cfg, data_variance_preproc);
 
+%remove bad trials from offsets
+offsets_clean = offsets(~badtrial_idx);
+
 %optionally - rereference again - will be more robust after data cleaning
 cfg = [];
 cfg.channel = 'all';
@@ -234,6 +237,9 @@ cfg.detrend = 'no';
 cfg.time = time;
 data_resampled = ft_resampledata(cfg, data_lp_filtered);
 
+% resample offsets
+offsets_resampled = round(offsets_clean * (resample_rate/data.fsample));
+
 %% Save
 progressbar
 df = table();
@@ -245,6 +251,7 @@ for i=1:length(data_resampled.trial)
     T = array2table(d(1:end, :), 'VariableNames', cols);
     T.time = rows;
     T.trial = ones(size(T,1),1)*(i-1);
+    T.offset = ones(size(T,1),1)*offsets_resampled(i); 
     df = vertcat(df, T); 
     progressbar(i/length(data_resampled.trial)); %update progress bar
 end

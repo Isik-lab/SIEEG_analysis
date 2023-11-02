@@ -93,7 +93,7 @@ class PairwiseDecoding:
             for accuracy, (video1, video2) in zip(result_for_t, videos_nCk):
                 results.append([time, video1, video2, accuracy])
         results = pd.DataFrame(results, columns=['time', 'video1', 'video2', 'accuracy'])
-        results.to_csv(f'{self.data_dir}/EEG_RSA/{self.sid}_pairwise-decoding.csv', index=False)
+        results.to_csv(f'{self.data_dir}/EEG_RSA/{self.sid}_decoding-distance.csv', index=False)
         print('Finished!')
 
 def main():

@@ -1,4 +1,4 @@
-function [data, badtrl_photo] = eeg_alignphoto(data, toilim,...
+function [data, offsets, badtrl_photo] = eeg_alignphoto(data, toilim,...
     photo_threshold, down,...
     onset_sample_number, frames_per_second, ...
     plotting, ...
@@ -79,12 +79,12 @@ cfg = [];
 cfg.offset = offsets; %the offsets are added to the current time to create new time axis
 cfg.trials = 'all';
 cfg.overlap = 1;
-data = ft_redefinetrial(cfg,data);
+data = ft_redefinetrial(cfg, data);
 
 %cut the epochs of interest (non-overlapping and only up to 1 s after onset)
 cfg = [];
 cfg.toilim = toilim;
-data = ft_redefinetrial(cfg,data);
+data = ft_redefinetrial(cfg, data);
 
 %check that the realignment worked
 si = reshape(data.sampleinfo',numel(data.sampleinfo),1);
