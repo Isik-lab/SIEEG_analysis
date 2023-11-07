@@ -10,30 +10,16 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('mode.chained_assignment',  None)
 
-
-def resample_frame(frame, resample_rate):
-    # Downsample the dataframe to the EEG output rate
-    frame['time'] = pd.to_timedelta(frame['time'], unit='s')
-    frame.set_index('time', inplace=True)
-    frame = frame.resample(resample_rate).mean()
-    frame.reset_index(inplace=True)
-    frame['time'] = frame['time'].dt.total_seconds()
-    return frame
-
-
-subj = 'subj007'
+subj = 'subj008'
 top_path = '/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data/'
 in_path = f'{top_path}/raw/SIdyads_trials_pilot'
 out_path = f'{top_path}/interim/SIdyads_eyetracking_pilot'
 Path(f'{in_path}/{subj}/asc').mkdir(exist_ok=True, parents=True)
 Path(out_path).mkdir(exist_ok=True, parents=True)
 
-fps = 500
-out_fps = 250
-s_to_ms = 1000
-post_stim = 1.25 * s_to_ms
-pre_stim = .2 * s_to_ms
-resample_rate = f'{int((1/out_fps)*s_to_ms)}ms'
+ms_to_s = 1000
+post_stim = 1.25 * ms_to_s
+pre_stim = .2 * ms_to_s
 
 out_data = []
 for edf_file in tqdm(glob(f'{in_path}/{subj}/edfs/*.edf')):
@@ -89,19 +75,21 @@ for edf_file in tqdm(glob(f'{in_path}/{subj}/edfs/*.edf')):
     df_runfile = pd.read_csv(f'{in_path}/{subj}/runfiles/run{run_str}.csv')
     df_ev_pivot = df_ev_pivot.join(df_runfile)
 
-    for i, row in df_ev_pivot.iterrows():
+    for i, row in tqdm(df_ev_pivot.iterrows(), total=len(df_ev_pivot)):
         onset = row.STIMULUS_START - pre_stim
         offset = row.STIMULUS_START + post_stim
         cur = df_samples[(df_samples.time >= onset) & (df_samples.time <= offset)]
         cur.reset_index(drop=True, inplace=True)
 
+        # round time to the nearest ms 
+        cur['time'] = cur['time'].round(decimals=3)
+
         # center to stimulus start and convert to seconds
-        cur['time'] = ((cur['time'] - row.STIMULUS_START) / s_to_ms)
-        if cur['time'].min() != -1*(pre_stim/s_to_ms):
+        cur['time'] = ((cur['time'] - row.STIMULUS_START) / ms_to_s)
+
+        # adjust the time by 1 ms if necessary
+        if cur['time'].min() != -1 * (pre_stim / ms_to_s):
             cur['time'] = cur['time'] - .001
-        
-        # resample to output Hz
-        cur = resample_frame(cur, resample_rate)
 
         # fill in data that is needed in the frame
         cur['run'] = run 
@@ -114,5 +102,4 @@ df = pd.concat(out_data)
 df.sort_values(by=['run', 'trial', 'time'], inplace=True)
 df.reset_index(drop=True, inplace=True)
 
-print(df.head())
 df.to_csv(f'{out_path}/{subj}_eyetracking.csv.gz', index=False, compression='gzip')

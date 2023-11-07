@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
 out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj007';
+subj_file = 'subj008';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -15,7 +15,6 @@ time_exclude = .1;
 plotting = 0;
 poststim_time = 1.25;
 new_poststim_time = 1;
-resample_rate = 250; %Hz
 down = 1; 
 
 %Set the direction of photodiode and the timing
@@ -223,37 +222,20 @@ cfg.lpfilter = 'yes';
 cfg.lpfreq = 30;
 data_lp_filtered = ft_preprocessing(cfg, data_ica_preproc);
 
-%% Resample data
-time_vector = linspace((-1*prestim_time), new_poststim_time, ...
-        ((new_poststim_time+prestim_time) * resample_rate)); 
-time_vector = round(time_vector, 3); 
-time = cell(1, length(data_lp_filtered.time));
-for t=1:length(data_lp_filtered.time)
-    time{t} = time_vector;
-end 
-
-cfg = [];
-cfg.detrend = 'no';
-cfg.time = time;
-data_resampled = ft_resampledata(cfg, data_lp_filtered);
-
-% resample offsets
-offsets_resampled = round(offsets_clean * (resample_rate/data.fsample));
-
-%% Save
+%% Save data frame
 progressbar
 df = table();
-for i=1:length(data_resampled.trial)
-    d = data_resampled.trial{i}';
-    time = data_resampled.time{i};
+for i=1:length(data_lp_filtered.trial)
+    d = data_lp_filtered.trial{i}';
+    time = data_lp_filtered.time{i};
     rows = cellstr(num2str(time(1:end)'));
-    cols = data_resampled.label;
+    cols = data_lp_filtered.label;
     T = array2table(d(1:end, :), 'VariableNames', cols);
     T.time = rows;
     T.trial = ones(size(T,1),1)*(i-1);
-    T.offset = ones(size(T,1),1)*offsets_resampled(i); 
+    T.offset = ones(size(T,1),1)*offsets_clean(i); 
     df = vertcat(df, T); 
-    progressbar(i/length(data_resampled.trial)); %update progress bar
+    progressbar(i/length(data_lp_filtered.trial)); %update progress bar
 end
 
 if ~exist([out_path, subj_file], 'dir')
@@ -264,8 +246,12 @@ writetable(df, trial_file);
 gzip(trial_file);
 delete(trial_file)
 clear df
+fprintf('dataframe saved \n');
 
+
+%% Save other formats
 %save the artifact rejection info in a preproc structure that can be reused
+fprintf('here \n')
 comp = rmfield(comp, 'time');
 comp = rmfield(comp, 'trial');
 preproc.idx_badtrial = badtrial_idx;
@@ -274,19 +260,19 @@ preproc.badtrial_muscle = badtrl_msc;
 preproc.muscle_zvalue = zval;
 preproc.icacomponent = comp;
 preproc.comp_rmv = comp_rmv;
-preproc.chan = data_resampled.label;
-preproc.time = data_resampled.time{1};
+preproc.chan = data_lp_filtered.label;
+preproc.time = data_lp_filtered.time{1};
 
 %save outputs
 data_file = [out_path, subj_file, '/', [subj_file, '_data.mat']];
 preproc_file = [out_path, subj_file, '/', [subj_file, '_preproc.mat']];
-save(data_file, '-v7.3', '-struct', 'data_resampled');
+save(data_file, '-v7.3', '-struct', 'data_lp_filtered');
 save(preproc_file,'-struct','preproc');
 
 % Array structure
-trl = ones(length(data_resampled.trial), length(data_resampled.label), length(time_vector));
-for i=1:length(data_resampled.trial)
-    in = data_resampled.trial(i);
+trl = ones(length(data_lp_filtered.trial), length(data_lp_filtered.label), length(data_lp_filtered.time));
+for i=1:length(data_lp_filtered.trial)
+    in = data_lp_filtered.trial(i);
     in = in{1};
     trl(i, :, :) = in(:, 1:end);
 end
