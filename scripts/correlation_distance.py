@@ -6,18 +6,14 @@ from itertools import combinations
 from src import rsa, plotting
 
 
-class PairwiseDecoding:
+class CorrelationDistance:
     def __init__(self, args):
-        self.process = 'PairwiseDecoding'
+        self.process = 'CorrelationDistance'
         self.sid = f'subj{str(args.sid).zfill(3)}'
-        self.n_groups = args.n_groups
         self.data_dir = args.data_dir
-        self.figures_dir = args.figures_dir
         self.regress_gaze = args.regress_gaze
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
-        Path(f'{self.figures_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz'
-        self.out_figure = f'{self.figures_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.png'
         print(vars(self))
 
     def run(self):
@@ -25,29 +21,26 @@ class PairwiseDecoding:
         df = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
         df.sort_values(['time', 'video_name'], inplace=True)
         videos = df.video_name.unique()
-        videos_nCk = list(combinations(videos, 2))
+        videos_nCk = list(combinations(range(len(videos)), 2))
         all_cols = set(df.columns.to_list())
         other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack_x', 'video_name',
                     'gaze_x', 'gaze_y', 'pupil_size', 'target_x', 'target_y',
                     'target_distance', 'offset_eyetrack_y', 'repetition', 'even'])
         channels = list(all_cols - other_cols)
 
-        results = rsa.eeg_decoding_distance(df, channels, videos_nCk, self.n_groups)
+        print('computing rdms...')
+        results = rsa.eeg_correlation_distance(df, channels, videos_nCk, videos)
         results.to_csv(self.out_file, index=False, compression='gzip')
-        plotting.plot_pairwise_decoding(results, self.out_figure)
         print('Finished!')
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', type=int, default=1)
-    parser.add_argument('--n_groups', type=int, default=5)
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
-    parser.add_argument('--figures_dir', '-figures', type=str,
-                        default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/reports/figures')
     args = parser.parse_args()
-    PairwiseDecoding(args).run()
+    CorrelationDistance(args).run()
 
 
 if __name__ == '__main__':
