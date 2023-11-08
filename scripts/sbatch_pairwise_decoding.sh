@@ -2,7 +2,7 @@
 
 #SBATCH
 #SBATCH --job-name=pairwise-decoding
-#SBATCH --time=4:30:00
+#SBATCH --time=5:00:00
 #SBATCH --partition=defq
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
