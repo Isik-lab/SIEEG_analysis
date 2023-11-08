@@ -12,12 +12,12 @@ class PairwiseDecoding:
         self.sid = f'subj{str(args.sid).zfill(3)}'
         self.n_groups = args.n_groups
         self.data_dir = args.data_dir
-        self.figures_dir = args.figures_dir
+        self.figure_dir = args.figure_dir
         self.regress_gaze = args.regress_gaze
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
-        Path(f'{self.figures_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
+        Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz'
-        self.out_figure = f'{self.figures_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.png'
+        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.png'
         print(vars(self))
 
     def run(self):
@@ -44,7 +44,7 @@ def main():
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
-    parser.add_argument('--figures_dir', '-figures', type=str,
+    parser.add_argument('--figure_dir', '-figure', type=str,
                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/reports/figures')
     args = parser.parse_args()
     PairwiseDecoding(args).run()
