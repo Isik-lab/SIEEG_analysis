@@ -11,12 +11,13 @@
 
 subj=$1
 n_groups=$2
+gaze=$3
 
 ml anaconda
 conda activate nibabel
 
 python pairwise_decoding.py \
- --sid "$subj" --n_groups "$n_groups" --regress_gaze \
+ --sid "$subj" --n_groups "$n_groups" "$gaze" \
  --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data \
  --figure_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures  
 

@@ -1,4 +1,5 @@
 #/Applications/anaconda3/envs/nibabel/bin/python
+import os
 from pathlib import Path
 import argparse
 import pandas as pd
@@ -49,15 +50,19 @@ class PreprocessData:
         return trials
     
     def load_eyetracking(self):
-        print('loading and processing eyetracking...')
-        df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_eyetracking_pilot/{self.sid}_eyetracking.csv.gz')
-        df.drop(columns=['video_name', 'block', 'condition'], inplace=True)
+        file = f'{self.data_dir}/interim/SIdyads_eyetracking_pilot/{self.sid}_eyetracking.csv.gz'
+        if os.path.exists(file):
+            print('loading and processing eyetracking...')
+            df = pd.read_csv(file)
+            df.drop(columns=['video_name', 'block', 'condition'], inplace=True)
 
-        # uniquely number all the trials in the eyetracking data
-        df.sort_values(by=['run', 'trial', 'time'], inplace=True)
-        df['trial'] = df.groupby('time').cumcount()
-        df.set_index(['trial', 'time'], inplace=True)
-        return df 
+            # uniquely number all the trials in the eyetracking data
+            df.sort_values(by=['run', 'trial', 'time'], inplace=True)
+            df['trial'] = df.groupby('time').cumcount()
+            df.set_index(['trial', 'time'], inplace=True)
+            return df 
+        else:
+            return None
 
     def save(self, df):
         print('saving...')
@@ -69,9 +74,11 @@ class PreprocessData:
                                                   self.resample_rate,
                                                   self.start_time, self.end_time)
         trials = preprocessing.filter_trials(self.load_trials(), self.load_artifact())
-        eyetracking = preprocessing.process_eyetracking(self.load_eyetracking(), self.load_artifact(),
-                                                        eeg[['trial', 'offset_eyetrack']].drop_duplicates(),
-                                                        self.resample_rate, self.start_time, self.end_time)
+        eyetracking = self.load_eyetracking()
+        if eyetracking is not None:
+            eyetracking = preprocessing.process_eyetracking(eyetracking, self.load_artifact(),
+                                                            eeg[['trial', 'offset_eyetrack']].drop_duplicates(),
+                                                            self.resample_rate, self.start_time, self.end_time)
         combined = preprocessing.combine_data(eeg, trials, eyetracking)
 
         if self.regress_gaze:
