@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
 out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj008';
+subj_file = 'subj010';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -268,17 +268,6 @@ data_file = [out_path, subj_file, '/', [subj_file, '_data.mat']];
 preproc_file = [out_path, subj_file, '/', [subj_file, '_preproc.mat']];
 save(data_file, '-v7.3', '-struct', 'data_lp_filtered');
 save(preproc_file,'-struct','preproc');
-
-% Array structure
-trl = ones(length(data_lp_filtered.trial), length(data_lp_filtered.label), length(data_lp_filtered.time));
-for i=1:length(data_lp_filtered.trial)
-    in = data_lp_filtered.trial(i);
-    in = in{1};
-    trl(i, :, :) = in(:, 1:end);
-end
-
-trial_file = [out_path, subj_file, '/', [subj_file, '_trialonly.mat']];
-save(trial_file, 'trl');
 fprintf('saved and complete \n');
 
 %% Functions

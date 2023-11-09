@@ -44,7 +44,7 @@ def process_eyetracking(eyetracking, artifacts, offsets_df,
 def regress_out_gaze(df, channels): 
     print('regressing out gaze')
     residuals = []
-    for trial, trial_df in tqdm(df.groupby('trial'), total=len(df.trial.unique())):
+    for trial, trial_df in tqdm(df.groupby('trial'), total=len(df.trial.unique()), desc='Trial-wise regression'):
         raw_gaze = trial_df[['gaze_x', 'gaze_y']].to_numpy().T
         raw_eeg = trial_df[channels].to_numpy().T
         eeg_corrected = raw_eeg.copy() # make a matrix to put the output in 

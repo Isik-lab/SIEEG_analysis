@@ -23,7 +23,7 @@ class PreprocessData:
         print(vars(self))
 
     def load_eeg(self):
-        print('loading eeg')
+        print('loading eeg...')
         df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_trials.csv.gz')
         self.channels = df.drop(columns=['time','trial', 'offset']).columns
         df['offset_eyetrack'] = (df.offset / self.eeg_fps)
@@ -31,7 +31,7 @@ class PreprocessData:
 
     def load_artifact(self):
         # Load the trials that were removed in preprocessing
-        preproc_file = f'{self.data_dir}/interim//SIdyads_EEG_pilot/{self.sid}/{self.sid}_preproc.mat'
+        preproc_file = f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_preproc.mat'
         preproc = loadmat(preproc_file)
         return preproc['idx_badtrial'].squeeze().astype('bool')
 
@@ -49,7 +49,7 @@ class PreprocessData:
         return trials
     
     def load_eyetracking(self):
-        print('loading and processing eyetracking')
+        print('loading and processing eyetracking...')
         df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_eyetracking_pilot/{self.sid}_eyetracking.csv.gz')
         df.drop(columns=['video_name', 'block', 'condition'], inplace=True)
 
@@ -60,7 +60,7 @@ class PreprocessData:
         return df 
 
     def save(self, df):
-        print('saving')
+        print('saving...')
         df.to_csv(self.out_file, compression='gzip', index=False)
         print('Finished!')
 
@@ -84,7 +84,7 @@ class PreprocessData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=1)
+    parser.add_argument('--sid', type=int, default=9)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)

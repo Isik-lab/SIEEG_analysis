@@ -147,8 +147,7 @@ def plot_eeg_feature_decoding(out_file, results, features, hue=None):
                 ax.legend_.remove()
     plt.tight_layout()
     plt.savefig(out_file)
-    plt.close()
-
+    
 
 def plot_pairwise_decoding(results, out_file):
     results.rename(columns={'accuracy': 'distance'}, inplace=True)

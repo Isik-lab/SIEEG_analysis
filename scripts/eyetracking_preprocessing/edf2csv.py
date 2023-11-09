@@ -1,4 +1,4 @@
-#
+#/Applications/anaconda3/envs/nibabel/bin/python
 import pandas as pd
 import numpy as np
 import os
@@ -10,8 +10,8 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('mode.chained_assignment',  None)
 
-subj = 'subj008'
-top_path = '/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data/'
+subj = 'subj009'
+top_path = '/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data'
 in_path = f'{top_path}/raw/SIdyads_trials_pilot'
 out_path = f'{top_path}/interim/SIdyads_eyetracking_pilot'
 Path(f'{in_path}/{subj}/asc').mkdir(exist_ok=True, parents=True)
@@ -44,6 +44,7 @@ for edf_file in tqdm(glob(f'{in_path}/{subj}/edfs/*.edf')):
     df_samples['target_distance'] = df_samples['target_distance'].map(lambda x: x.rstrip(' .............'))
     df_samples.drop(columns=['empty'], inplace=True)
     gaze_inds = np.isclose(df_samples.pupil_size, 0) #Find the missing gaze points
+    gaze_inds += df_samples['gaze_x'].str.contains(' ') # Find missing gaze
     target_inds = df_samples['target_distance'].str.contains('[a-zA-Z]') # Find missing targets
     df_samples.loc[gaze_inds, ['gaze_x', 'gaze_y']] = '-7777' #Fill with a value to be replaced
     df_samples.loc[target_inds, ['target_x', 'target_y', 'target_distance']] = '-7777' #Fill with a value to be replaced

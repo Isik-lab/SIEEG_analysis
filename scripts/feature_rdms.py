@@ -1,3 +1,4 @@
+#/Applications/anaconda3/envs/nibabel/bin/python
 import pandas as pd
 from pathlib import Path
 import argparse
@@ -23,7 +24,7 @@ class FeatureRDMs:
         rename['transitivity'] = 'object_directedness'
         feature_df.rename(columns=rename, inplace=True)
         feature_df.sort_index(inplace=True)
-
+        
         alexnet = pd.read_csv(f'{self.data_dir}/interim/ActivationPCA/alexnet_PCs.csv').drop(columns=['split'])
         feature_df = feature_df.merge(alexnet, on='video_name')
 
@@ -31,13 +32,14 @@ class FeatureRDMs:
         feature_df = feature_df.merge(moten, on='video_name')
         return feature_df
     
-    def save(self, rdms):
-        rdms.to_csv(f'{self.data_dir}/interim/{self.process}/feature_rdms.csv', index=False)
+    def save(self, df, name):
+        df.to_csv(f'{self.data_dir}/interim/{self.process}/feature_{name}.csv', index=False)
 
     def run(self):
         df = self.load_annotations()
+        self.save(df, 'annotations')
         rdms = rsa.feature_distance(df, self.features)
-        self.save(rdms)
+        self.save(rdms, 'rdms')
 
 
 def main():
