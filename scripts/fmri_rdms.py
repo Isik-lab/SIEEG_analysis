@@ -23,11 +23,11 @@ class fMRIRDMs:
         Path(self.figure_dir).mkdir(parents=True, exist_ok=True)
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         if self.decoding: 
-            self.out_figure = f'{self.figure_path}/{self.sid}_rsa-decoding.png'
+            self.out_figure = f'{self.figure_dir}/{self.sid}_rsa-decoding.png'
             self.out_rdm = f'{self.data_dir}/interim/{self.process}/{self.sid}_decoding-distance.csv'
             self.out_rsa = f'{self.data_dir}/interim/{self.process}/{self.sid}_rsa-decoding.csv'
         else:
-            self.out_figure = f'{self.figure_path}/{self.sid}_rsa-correlation.png'
+            self.out_figure = f'{self.figure_dir}/{self.sid}_rsa-correlation.png'
             self.out_rdm = f'{self.data_dir}/interim/{self.process}/{self.sid}_correlation-distance.csv'
             self.out_rsa = f'{self.data_dir}/interim/{self.process}/{self.sid}_rsa-correlation.csv'
         print(vars(self))
@@ -90,7 +90,7 @@ class fMRIRDMs:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=9)
+    parser.add_argument('--sid', type=int, default=1)
     parser.add_argument('--decoding', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
