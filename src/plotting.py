@@ -187,4 +187,40 @@ def feature2color(key=None):
     if key is not None:
         return d[key]
     else:
-        return d
+        return d    
+
+
+def plot_feature_fmri_rsa(results, features, out_file):
+    feature_group = results.groupby('roi')
+    _, axes = plt.subplots(3, 3, sharey=True, sharex=True)
+    axes = axes.flatten()
+    ymin, ymax = results['Spearman rho'].min(), results['Spearman rho'].max()
+    for ax, (roi, feature_df) in zip(axes, feature_group):
+        sns.barplot(x='feature', y='Spearman rho',
+                    data=feature_df, ax=ax, color='gray')
+        if roi in ['EVC', 'LOC', 'pSTS']:
+            ax.set_ylabel('Spearman rho')
+        else:
+            ax.set_ylabel('')
+            
+        if roi in ['pSTS', 'face-pSTS', 'aSTS']:
+            ax.set_xlabel('Feature')
+            ax.set_xticklabels(features, rotation=90, ha='center')
+        else:
+            ax.set_xlabel('')
+            ax.tick_params(axis='x', which='both', length=0)
+
+        for bar, feature in zip(ax.patches, features):
+            color = feature2color(feature)
+            bar.set_color(color)
+            
+        ax.set_ylim([ymin, ymax])
+        ax.hlines(y=0, xmin=ax.get_xlim()[0], xmax=ax.get_xlim()[1],
+            colors='gray', linestyles='solid', zorder=1)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.set_title(roi)
+
+    plt.tight_layout()
+    plt.savefig(out_file)

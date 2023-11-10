@@ -1,5 +1,6 @@
 from tqdm import tqdm 
 from itertools import combinations
+import warnings
 import pandas as pd
 import numpy as np
 
@@ -72,6 +73,33 @@ def fit_and_predict(video1_array, video2_array, n_groups):
     return np.mean(np.array(y_pred) == np.array(y_true))
 
 
+def fmri_decoding_distance(betas, masks, combo_list, videos, n_groups=5):
+    results = []
+    for roi, val in tqdm(masks.items(), desc='ROIs'):
+        betas_masked = betas[val, ...]
+        result_for_t = Parallel(n_jobs=-1)(
+            delayed(fit_and_predict)(betas_masked[:, video1, :].squeeze().T,
+                                    betas_masked[:, video2, :].squeeze().T,
+                                    n_groups) for video1, video2 in tqdm(combo_list, total=len(combo_list), desc='Pairwise decoding')
+        )
+        for accuracy, (video1, video2) in zip(result_for_t, combo_list):
+            results.append([roi, videos[video1], videos[video2], accuracy])
+    return pd.DataFrame(results, columns=['roi', 'video1', 'video2', 'distance'])
+
+
+def fmri_correlation_distance(betas, masks, combo_list, videos):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Mean of empty slice")
+
+        results = []
+        for roi, val in tqdm(masks.items(), desc='ROIs'):
+            betas_masked = betas[val, ...]
+            rdm = pdist(np.nanmean(betas_masked, axis=-1).T, metric='correlation')
+            for i, (video1, video2) in enumerate(combo_list):
+                results.append([roi, videos[video1], videos[video2], rdm[i]])
+        return pd.DataFrame(results, columns=['roi', 'video1', 'video2', 'distance'])
+
+
 def eeg_decoding_distance(df, channels, combo_list, n_groups=5):
     results = []
     time_groups = df.groupby('time')
@@ -138,6 +166,22 @@ def compute_eeg_fmri_rsa(fmri_rdms, eeg_rdms, rois):
             rho, _ = spearmanr(roi_rdm.distance, time_rdm.distance)
             rsa.append([roi, time, rho])
     rsa = pd.DataFrame(rsa, columns=['roi', 'time', 'Spearman rho'])
+    cat_type = pd.CategoricalDtype(categories=rois, ordered=True)
+    rsa['roi'] = rsa.roi.astype(cat_type)
+    return rsa
+
+
+def compute_feature_fmri_rsa(feature_rdms, fmri_rdms, features, rois):
+    feature_group = feature_rdms.groupby('feature')
+    neural_group = fmri_rdms.groupby('roi')
+    rsa = []
+    for feature, feature_rdm in tqdm(feature_group):
+        for time, time_rdm in neural_group:
+            rho, _ = spearmanr(feature_rdm.distance, time_rdm.distance)
+            rsa.append([feature, time, rho])
+    rsa = pd.DataFrame(rsa, columns=['feature', 'roi', 'Spearman rho'])
+    cat_type = pd.CategoricalDtype(categories=features, ordered=True)
+    rsa['feature'] = rsa.feature.astype(cat_type)
     cat_type = pd.CategoricalDtype(categories=rois, ordered=True)
     rsa['roi'] = rsa.roi.astype(cat_type)
     return rsa
