@@ -9,7 +9,10 @@ from src import rsa, plotting
 class PairwiseDecoding:
     def __init__(self, args):
         self.process = 'PairwiseDecoding'
-        self.sid = f'subj{str(args.sid).zfill(3)}'
+        if 'u' not in args.sid:
+            self.sid = f'subj{str(int(args.sid)).zfill(3)}'
+        else:
+            self.sid = args.sid
         self.n_groups = args.n_groups
         self.data_dir = args.data_dir
         self.figure_dir = args.figure_dir
@@ -39,7 +42,7 @@ class PairwiseDecoding:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=1)
+    parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--n_groups', type=int, default=5)
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,

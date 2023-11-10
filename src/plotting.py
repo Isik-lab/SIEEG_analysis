@@ -38,7 +38,8 @@ def plot_splithalf_reliability(results, out_file):
         ax.spines['bottom'].set_visible(False)
         ax.legend([])
     plt.tight_layout()
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)
 
 
 def plot_eeg_feature_rsa(rsa, feature_order, out_file):
@@ -73,7 +74,8 @@ def plot_eeg_feature_rsa(rsa, feature_order, out_file):
         ax.spines['bottom'].set_visible(False)
         ax.set_title(feature)
     plt.tight_layout()
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)
 
 
 def plot_eeg_fmri_rsa(rsa, out_file):
@@ -105,8 +107,8 @@ def plot_eeg_fmri_rsa(rsa, out_file):
         ax.spines['bottom'].set_visible(False)
         ax.set_title(roi)
     plt.tight_layout()
-    plt.savefig(out_file)
-    plt.close()
+    if out_file is not None:
+        plt.savefig(out_file)
 
 
 def plot_eeg_feature_decoding(out_file, results, features, hue=None):
@@ -146,10 +148,11 @@ def plot_eeg_feature_decoding(out_file, results, features, hue=None):
             else: 
                 ax.legend_.remove()
     plt.tight_layout()
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)
     
 
-def plot_pairwise_decoding(results, out_file):
+def plot_pairwise_decoding(results, out_file, baseline=0.5):
     results.rename(columns={'accuracy': 'distance'}, inplace=True)
     avg_results = results.groupby('time').mean(numeric_only=True)
     ymin, ymax = avg_results.distance.min(), avg_results.distance.max()
@@ -160,7 +163,7 @@ def plot_pairwise_decoding(results, out_file):
     ax.set_xlabel('Time (s)')
     ax.vlines(x=[0, 0.5], ymin=0, ymax=ymax,
         colors='gray', linestyles='dashed', zorder=0)
-    ax.hlines(y=.5, xmin=results.time.min(), xmax=results.time.max(),
+    ax.hlines(y=baseline, xmin=results.time.min(), xmax=results.time.max(),
         colors='gray', linestyles='solid', zorder=0)
     ax.set_xlim([results.time.min(), results.time.max()])
     ax.set_ylim([ymin, ymax])
@@ -168,7 +171,8 @@ def plot_pairwise_decoding(results, out_file):
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     plt.tight_layout()
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)
 
 
 def feature2color(key=None):
@@ -223,4 +227,5 @@ def plot_feature_fmri_rsa(results, features, out_file):
         ax.set_title(roi)
 
     plt.tight_layout()
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)

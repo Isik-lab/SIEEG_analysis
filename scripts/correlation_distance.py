@@ -9,7 +9,10 @@ from src import rsa
 class CorrelationDistance:
     def __init__(self, args):
         self.process = 'CorrelationDistance'
-        self.sid = f'subj{str(args.sid).zfill(3)}'
+        if 'u' not in args.sid:
+            self.sid = f'subj{str(int(args.sid)).zfill(3)}'
+        else:
+            self.sid = args.sid
         self.data_dir = args.data_dir
         self.regress_gaze = args.regress_gaze
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
@@ -35,7 +38,7 @@ class CorrelationDistance:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=1)
+    parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
