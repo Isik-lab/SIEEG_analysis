@@ -15,7 +15,7 @@ decoding=$2
 ml anaconda
 conda activate nibabel
 
-python fmri_rdms.py \
+python fmri_rsa.py \
  --sid "$subj" "$decoding" \
  --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data \
  --figure_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures  
