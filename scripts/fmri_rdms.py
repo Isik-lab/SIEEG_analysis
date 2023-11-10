@@ -85,7 +85,7 @@ class fMRIRDMs:
         feature_rdms = self.load_feature_rdms()
         results = rsa.compute_feature_fmri_rsa(feature_rdms, fmri_rdms, self.features, self.rois)
         self.save(results, self.out_rsa)
-        plot_feature_fmri_rsa(rsa, self.features, self.out_figure)
+        plot_feature_fmri_rsa(results, self.features, self.out_figure)
 
 
 def main():
