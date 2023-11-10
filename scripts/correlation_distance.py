@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from itertools import combinations
-from src import rsa, plotting
+from src import rsa
 
 
 class CorrelationDistance:
