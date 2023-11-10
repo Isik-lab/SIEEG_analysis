@@ -80,7 +80,7 @@ class fMRI_RSA:
 
         print('computing rdms...')
         if self.decoding:
-            fmri_rdms = rsa.mri_decoding_distance(betas, masks, nCk, videos, self.n_groups)
+            fmri_rdms = rsa.fmri_decoding_distance(betas, masks, nCk, videos, self.n_groups)
         else:
             fmri_rdms = rsa.fmri_correlation_distance(betas, masks, nCk, videos)
         self.save(fmri_rdms, self.out_rdm)
