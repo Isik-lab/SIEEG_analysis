@@ -26,7 +26,7 @@ class CorrelationDistance:
         videos = df.video_name.unique()
         videos_nCk = list(combinations(range(len(videos)), 2))
         all_cols = set(df.columns.to_list())
-        other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack_x', 'video_name',
+        other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack', 'offset_eyetrack_x', 'video_name',
                     'gaze_x', 'gaze_y', 'pupil_size', 'target_x', 'target_y',
                     'target_distance', 'offset_eyetrack_y', 'repetition', 'even', 'session'])
         channels = list(all_cols - other_cols)
