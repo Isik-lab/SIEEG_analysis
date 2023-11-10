@@ -11,9 +11,9 @@ from src.plotting import plot_feature_fmri_rsa
 import nibabel as nib
 
 
-class fMRIRDMs:
+class fMRI_RSA:
     def __init__(self, args):
-        self.process = 'fMRIRDMs'
+        self.process = 'fMRI_RSA'
         self.sid = f'sub-{str(args.sid).zfill(2)}'
         self.decoding = args.decoding
         self.data_dir = args.data_dir
@@ -103,7 +103,7 @@ def main():
     parser.add_argument('--figure_dir', '-figure', type=str,
                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/reports/figures')
     args = parser.parse_args()
-    fMRIRDMs(args).run()
+    fMRI_RSA(args).run()
 
 
 if __name__ == '__main__':
