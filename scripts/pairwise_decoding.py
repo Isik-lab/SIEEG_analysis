@@ -32,7 +32,7 @@ class PairwiseDecoding:
         all_cols = set(df.columns.to_list())
         other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack_x', 'video_name',
                     'gaze_x', 'gaze_y', 'pupil_size', 'target_x', 'target_y',
-                    'target_distance', 'offset_eyetrack_y', 'repetition', 'even'])
+                    'target_distance', 'offset_eyetrack_y', 'repetition', 'even', 'session'])
         channels = list(all_cols - other_cols)
 
         results = rsa.eeg_decoding_distance(df, channels, videos_nCk, self.n_groups)
