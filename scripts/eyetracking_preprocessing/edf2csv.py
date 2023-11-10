@@ -44,7 +44,7 @@ for edf_file in tqdm(glob(f'{in_path}/{subj}/edfs/*.edf')):
     df_samples['target_distance'] = df_samples['target_distance'].map(lambda x: x.rstrip(' .............'))
     df_samples.drop(columns=['empty'], inplace=True)
     gaze_inds = np.isclose(df_samples.pupil_size, 0) #Find the missing gaze points
-    gaze_inds += df_samples['gaze_x'].str.contains(' ') # Find missing gaze
+    gaze_inds += df_samples['gaze_x'].str.contains('   .') # Find missing gaze
     target_inds = df_samples['target_distance'].str.contains('[a-zA-Z]') # Find missing targets
     df_samples.loc[gaze_inds, ['gaze_x', 'gaze_y']] = '-7777' #Fill with a value to be replaced
     df_samples.loc[target_inds, ['target_x', 'target_y', 'target_distance']] = '-7777' #Fill with a value to be replaced

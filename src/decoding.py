@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from src import stats
 
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
@@ -34,3 +34,21 @@ def eeg_feature_decoding(neural_df, feature_df, features, channels):
     cat_type = pd.CategoricalDtype(categories=features, ordered=True)
     results['feature'] = results.feature.astype(cat_type)
     return results
+
+def gaze_feature_decoding(X, feature_df, features, videos):
+    # initialize pipe and kfold splitter
+    cv = KFold(n_splits=5, shuffle=True, random_state=0)
+    pipe = Pipeline([('scale', StandardScaler()), ('rr', Ridge())])
+    results = []
+    for feature in features: 
+        y = feature_df.loc[feature_df.video_name.isin(videos), feature].to_numpy()
+
+        y_pred = []
+        y_true = []
+        for train_index, test_index in cv.split(X):
+            pipe.fit(X[train_index], y[train_index])
+            y_pred.append(pipe.predict(X[test_index]))
+            y_true.append(y[test_index])
+        r = stats.corr(np.concatenate(y_pred), np.concatenate(y_true))
+        results.append([feature, r])
+    return pd.DataFrame(results, columns=['feature', 'r'])

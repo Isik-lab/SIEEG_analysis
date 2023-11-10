@@ -169,3 +169,22 @@ def plot_pairwise_decoding(results, out_file):
     ax.spines['bottom'].set_visible(False)
     plt.tight_layout()
     plt.savefig(out_file)
+
+
+def feature2color(key=None):
+    d = dict()
+    d['alexnet'] = np.array([0.5, 0.5, 0.5, 1])
+    d['moten'] = np.array([0.5, 0.5, 0.5, 1])
+    d['indoor'] = np.array([0.95703125, 0.86328125, 0.25, 0.8])
+    d['expanse'] = np.array([0.95703125, 0.86328125, 0.25, 0.8])
+    d['object_directedness'] = np.array([0.95703125, 0.86328125, 0.25, 0.8])
+    d['agent_distance'] = np.array([0.51953125, 0.34375, 0.953125, 0.8])
+    d['facingness'] = np.array([0.51953125, 0.34375, 0.953125, 0.8])
+    d['joint_action'] = np.array([0.44921875, 0.8203125, 0.87109375, 0.8])
+    d['communication'] = np.array([0.44921875, 0.8203125, 0.87109375, 0.8])
+    d['valence'] = np.array([0.8515625, 0.32421875, 0.35546875, 0.8])
+    d['arousal'] = np.array([0.8515625, 0.32421875, 0.35546875, 0.8])
+    if key is not None:
+        return d[key]
+    else:
+        return d
