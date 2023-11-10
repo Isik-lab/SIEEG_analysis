@@ -47,6 +47,7 @@ class fMRIRDMs:
         return sort_idx, videos
     
     def load_fmri(self, sort_idx):
+        print('loading betas...')
         betas = []
         for file in sorted(glob(self.preproc_files)):
             beta_img = nib.load(file)
@@ -54,6 +55,7 @@ class fMRIRDMs:
             if arr.shape[-1] > 10:
                 arr = arr.reshape(arr.shape[0], arr.shape[1], arr.shape[2] // 2, 2).mean(axis=3)
             betas.append(arr)
+        print('finished loading')
         return np.hstack(betas)[:, sort_idx,:]
     
     def load_feature_rdms(self):
@@ -75,6 +77,8 @@ class fMRIRDMs:
         betas = self.load_fmri(sort_idx)
         masks = self.roi_masks()
         nCk = list(combinations(range(betas.shape[1]), 2))
+
+        print('computing rdms...')
         if self.decoding:
             fmri_rdms = rsa.mri_decoding_distance(betas, masks, nCk, videos, self.n_groups)
         else:
@@ -82,10 +86,12 @@ class fMRIRDMs:
         self.save(fmri_rdms, self.out_rdm)
 
         #rsa
+        print('performing rsa and plotting...')
         feature_rdms = self.load_feature_rdms()
         results = rsa.compute_feature_fmri_rsa(feature_rdms, fmri_rdms, self.features, self.rois)
         self.save(results, self.out_rsa)
         plot_feature_fmri_rsa(results, self.features, self.out_figure)
+        print('Finished!')
 
 
 def main():
