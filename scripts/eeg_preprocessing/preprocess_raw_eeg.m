@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
 out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj003';
+subj_file = 'subj005';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -225,11 +225,12 @@ data_lp_filtered = ft_preprocessing(cfg, data_ica_preproc);
 %% Save data frame
 progressbar
 df = table();
+labels = cellfun(@(c)['channel_' c], data_lp_filtered.label, 'uni', false);
 for i=1:length(data_lp_filtered.trial)
     d = data_lp_filtered.trial{i}';
     time = data_lp_filtered.time{i};
     rows = cellstr(num2str(time(1:end)'));
-    cols = data_lp_filtered.label;
+    cols = labels;
     T = array2table(d(1:end, :), 'VariableNames', cols);
     T.time = rows;
     T.trial = ones(size(T,1),1)*(i-1);

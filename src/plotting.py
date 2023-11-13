@@ -42,13 +42,13 @@ def plot_splithalf_reliability(results, out_file):
         plt.savefig(out_file)
 
 
-def plot_eeg_feature_rsa(rsa, feature_order, out_file):
+def plot_eeg_feature_rsa(rsa, features, out_file):
     feature_group = rsa.groupby('feature')
-    _, axes = plt.subplots(int(np.ceil(len(feature_order)/3)), 3,
+    _, axes = plt.subplots(int(np.ceil(len(features)/3)), 3,
                         figsize=(10,8),
                         sharey=True, constrained_layout=True)
     axes = axes.flatten()
-    trim_axs(axes, len(feature_order))
+    trim_axs(axes, len(features))
     ymin, ymax = rsa['Spearman rho'].min(), rsa['Spearman rho'].max()
     for ax, (feature, time_corr) in zip(axes, feature_group):
         sns.lineplot(x='time', y='Spearman rho', data=time_corr, ax=ax)
@@ -78,10 +78,13 @@ def plot_eeg_feature_rsa(rsa, feature_order, out_file):
         plt.savefig(out_file)
 
 
-def plot_eeg_fmri_rsa(rsa, out_file):
+def plot_eeg_fmri_rsa(rsa, rois, out_file):
     roi_group = rsa.groupby('roi')
-    _, axes = plt.subplots(3, 3, sharey=True, sharex=True)
+    _, axes = plt.subplots(int(np.ceil(len(rois)/3)), 3,
+                        figsize=(10,8),
+                        sharey=True, constrained_layout=True)
     axes = axes.flatten()
+    trim_axs(axes, len(rois))
     ymin, ymax = rsa['Spearman rho'].min(), rsa['Spearman rho'].max()
     for ax, (roi, roi_corr) in zip(axes, roi_group):
         sns.lineplot(x='time', y='Spearman rho', data=roi_corr, ax=ax)
@@ -111,7 +114,7 @@ def plot_eeg_fmri_rsa(rsa, out_file):
         plt.savefig(out_file)
 
 
-def plot_eeg_feature_decoding(out_file, results, features, hue=None):
+def plot_eeg_feature_decoding(results, features, out_file, hue=None):
     feature_group = results.groupby('feature')
     _, axes = plt.subplots(int(np.ceil(len(features)/3)), 3,
                         figsize=(10,8),
