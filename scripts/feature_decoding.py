@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from src import temporal, plotting, decoding
-import numpy as np
+import os
 
 
 def preprocess_data(df, channels):
@@ -22,6 +22,7 @@ class FeatureDecoding:
         else:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze
+        self.overwrite = args.overwrite
         print(vars(self))
         self.data_dir = args.data_dir
         self.figure_dir = args.figure_dir
@@ -34,6 +35,11 @@ class FeatureDecoding:
                          'agent_distance', 'facingness',
                           'joint_action', 'communication',
                          'valence', 'arousal']
+        self.annotated_features = ['indoor', 'expanse', 'object_directedness',
+                                   'agent_distance', 'facingness',
+                                   'joint_action', 'communication',
+                                   'valence', 'arousal']
+        self.computed_features = ['alexnet', 'moten']
 
     def load_eeg(self):
         df_ = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
@@ -46,31 +52,40 @@ class FeatureDecoding:
     
     def load_features(self):
         df_ = pd.read_csv(f'{self.data_dir}/interim/FeatureRDMs/feature_annotations.csv')
-        features_ = df_.set_index('video_name').columns.to_list
+        features_ = df_.set_index('video_name').columns.to_list()
         return df_, features_
     
     def average_results(self, results_):
-        out = []
-        for feature in self.features:
-            cols = [col for col in results_.columns if feature in col]
-            results_[cols]
+        temp = results_.pivot(index='time', columns='feature', values='r')
+        out = temp[self.annotated_features].reset_index()
+        for feature in self.computed_features:
+            cols = [col for col in temp.columns if feature in col]
+            out[feature] = temp[cols].to_numpy().mean(axis=1)
+        out = pd.melt(out, id_vars='time', value_vars=self.features, value_name='r')
+        cat_type = pd.CategoricalDtype(categories=self.features, ordered=True)
+        out['feature'] = out.feature.astype(cat_type)
+        return out
     
     def run(self):
-        df, channels = self.load_eeg()
-        feature_df, predicting_features = self.load_features()
-        df_avg = preprocess_data(df, channels)
+        if os.path.exists(self.out_file) and not self.overwrite: 
+            results = pd.read_csv(self.out_file)
+        else:
+            df, channels = self.load_eeg()
+            feature_df, predicting_features = self.load_features()
+            df_avg = preprocess_data(df, channels)
 
-        results = decoding.eeg_feature_decoding(df_avg, feature_df,
-                                                predicting_features, channels)
-        self.average_results(results)
-        results.to_csv(self.out_file, index=False)
-        plotting.plot_eeg_feature_decoding(self.out_figure, results, self.features)
+            results = decoding.eeg_feature_decoding(df_avg, feature_df,
+                                                    predicting_features, channels)
+            results = self.average_results(results)
+            results.to_csv(self.out_file, index=False)
+        plotting.plot_eeg_feature_decoding(results, self.features, self.out_figure)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
     parser.add_argument('--figure_dir', '-figure', type=str,

@@ -124,7 +124,7 @@ def plot_eeg_feature_decoding(results, features, out_file, hue=None):
     ymin, ymax = results['r'].min(), results['r'].max()
     for ax, (feature, time_corr) in zip(axes, feature_group):
         sns.lineplot(x='time', y='r', data=time_corr, ax=ax, hue=hue)
-        if feature in ['indoor', 'agent_distance', 'communication']:
+        if feature in ['alexnet', 'expanse', 'facingness', 'valence']:
             ax.set_ylabel('Prediction (r)')
         else:
             ax.set_ylabel('')
