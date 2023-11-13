@@ -57,7 +57,7 @@ def eeg_feature_decoding(neural_df, feature_df,
     return results
 
 
-def gaze_feature_decoding(X, feature_df, features, videos):
+def gaze_feature_decoding(X, feature_df, features):
     # initialize pipe and kfold splitter
     cv = KFold(n_splits=5, shuffle=True, random_state=0)
     scorer = make_scorer(correlation_scorer, greater_is_better=True)
@@ -80,7 +80,7 @@ def gaze_feature_decoding(X, feature_df, features, videos):
         y_pred.append(pipe.predict(X[test_index]))
         y_true.append(y[test_index])
     rs = stats.corr2d(np.concatenate(y_pred), np.concatenate(y_true))
-    
+
     results = []
     for feature, r in zip(features, rs): 
         results.append([feature, r])
