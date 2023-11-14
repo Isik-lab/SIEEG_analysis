@@ -9,4 +9,4 @@ def gen_mask(files, rel_mask):
         roi.append(roi_hemi)
     roi_mask = np.sum(roi, axis=0)
     roi_mask += rel_mask
-    return roi_mask.astype('bool')
+    return roi_mask == 2

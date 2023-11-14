@@ -21,8 +21,8 @@ class ReorganziefMRI:
     def generate_benchmark(self):
         all_rois = []
         all_betas = []
-        for sub in tqdm(range(1,5)):
-            sub = str(sub).zfill(2)
+        for sub in tqdm(range(4)):
+            sub = str(sub+1).zfill(2)
             reliability_mask = np.load(f'{self.data_dir}/raw/reliability_mask/sub-{sub}_space-t1w_desc-test-fracridge_reliability-mask.npy').astype('bool')
 
             # Beta files
@@ -31,22 +31,23 @@ class ReorganziefMRI:
 
             # metadata
             beta_labels = betas_arr[:,:,:,0]
-            beta_labels = beta_labels.astype(str)
-            reliability_mask = reliability_mask.reshape(beta_labels.shape)
+            beta_labels[np.invert(np.isnan(beta_labels))] = 1
+            roi_labels = beta_labels.astype(str)
+            reliability_mask = reliability_mask.reshape(roi_labels.shape)
 
             # Add the roi labels
             for roi in self.rois:
                 files = sorted(glob(f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{roi}*.nii.gz'))
                 roi_mask = gen_mask(files, reliability_mask)
-                beta_labels[roi_mask] = roi
+                roi_labels[roi_mask] = roi
 
             # Only save the reliable voxels
             betas_arr = betas_arr[reliability_mask].reshape((-1, betas_arr.shape[-1]))
-            beta_labels = beta_labels[reliability_mask].flatten()
+            roi_labels = roi_labels[reliability_mask].flatten()
 
             # Add the subject data to list
             all_betas.append(betas_arr)
-            all_rois.append([(ind, roi, sub) for (ind, roi) in enumerate(beta_labels)])
+            all_rois.append([(ind, roi, sub) for (ind, roi) in enumerate(roi_labels)])
 
         # metadata
         metadata = []
@@ -55,6 +56,7 @@ class ReorganziefMRI:
         metadata = pd.concat(metadata, ignore_index=True)
         metadata = metadata[metadata.roi_name.isin(self.rois)]
         metadata.reset_index(drop=True, inplace=True)
+        print(metadata.roi_name.unique())
 
         # response data
         response_data = []
