@@ -3,5 +3,5 @@ references/
 reports/
 scripts/DeepJuiceDev/
 src/__pycache__/
-src.egg-info/
+*.egg-info/
 
