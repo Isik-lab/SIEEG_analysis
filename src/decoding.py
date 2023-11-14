@@ -82,7 +82,6 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
     cv = KFold(n_splits=n_splits, shuffle=True, random_state=0)
     alphas = [10.**power for power in np.arange(-5, 2)]
     score_func = make_scorer(correlation_scorer)
-    print(device)
     if 'cuda' in device.type:
         print('on cuda')
         from deepjuice.alignment import TorchRidgeCV, get_scorer
@@ -131,7 +130,7 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
         if 'cuda' in device.type:
             scores = score_func(np.concatenate(y_pred), np.concatenate(y_true))
         else:
-            scores = correlation_scorer(np.concatenate(y_pred), np.concatenate(y_true))
+            scores = stats.corr2d(np.concatenate(y_pred), np.concatenate(y_true))
         print(f'scores shape {scores.shape}')
 
         for region in benchmark.metadata.roi_name.unique():
