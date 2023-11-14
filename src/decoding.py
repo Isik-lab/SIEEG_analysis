@@ -123,8 +123,8 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
 
         for train_index, test_index in cv_iterator:
             pipe.fit(X[train_index], y[train_index])
-            y_pred.append(pipe.predict(X[test_index]))
-            y_true.append(y[test_index])
+            y_pred.append(pipe.predict(X[test_index]).cpu().detach().numpy())
+            y_true.append(y[test_index].cpu().detach().numpy())
         
         if 'cuda' in device.type:
             scores = score_func(np.concatenate(y_pred), np.concatenate(y_true))
