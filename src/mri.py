@@ -10,3 +10,36 @@ def gen_mask(files, rel_mask):
     roi_mask = np.sum(roi, axis=0)
     roi_mask += rel_mask
     return roi_mask == 2
+
+
+class Benchmark:
+    def __init__(self, metadata, stimulus_data, response_data):
+        self.metadata = metadata
+        self.stimulus_data = stimulus_data
+        self.response_data = response_data
+
+    def filter_rois(self, rois='none'):
+        if rois != 'none':
+            self.metadata = self.metadata.loc[self.metadata.roi_name.isin(rois)].reset_index()
+            voxel_id = self.metadata['voxel_id'].to_numpy()
+            self.response_data = self.response_data.iloc[voxel_id]
+        else:
+            self.metadata = self.metadata.loc[self.metadata.roi_name != 'none'].reset_index()
+            voxel_id = self.metadata['voxel_id'].to_numpy()
+            self.response_data = self.response_data.iloc[voxel_id]
+
+    def filter_streams(self, streams='none'):
+        if streams != 'none':
+            self.metadata = self.metadata.loc[self.metadata.stream_name.isin(streams)].reset_index()
+            voxel_id = self.metadata['voxel_id'].to_numpy()
+            self.response_data = self.response_data.iloc[voxel_id]
+        else:
+            self.metadata = self.metadata.loc[self.metadata.stream_name != 'none'].reset_index()
+            voxel_id = self.metadata['voxel_id'].to_numpy()
+            self.response_data = self.response_data.iloc[voxel_id]
+    
+    def filter_subjids(self, subj_ids):
+        self.metadata = self.metadata.loc[self.metadata.subj_id.isin(subj_ids)].reset_index()
+        voxel_id = self.metadata['voxel_id'].to_numpy()
+        self.response_data = self.response_data.iloc[voxel_id]
+

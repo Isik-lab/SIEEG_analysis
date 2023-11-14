@@ -17,6 +17,8 @@ class ReorganziefMRI:
         print(vars(self))
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
+        self.streams = ['EVC']
+        self.streams += [f'{level}_{stream}' for level in ['mid', 'high'] for stream in ['ventral', 'lateral', 'parietal']]
 
     def generate_benchmark(self):
         all_rois = []
@@ -33,6 +35,7 @@ class ReorganziefMRI:
             beta_labels = betas_arr[:,:,:,0]
             beta_labels[np.invert(np.isnan(beta_labels))] = 1
             roi_labels = beta_labels.astype(str)
+            stream_labels = beta_labels.astype(str)
             reliability_mask = reliability_mask.reshape(roi_labels.shape)
 
             # Add the roi labels
@@ -41,34 +44,36 @@ class ReorganziefMRI:
                 roi_mask = gen_mask(files, reliability_mask)
                 roi_labels[roi_mask] = roi
 
+            for stream in self.streams:
+                files = sorted(glob(f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{stream}*.nii.gz'))
+                stream_mask = gen_mask(files, reliability_mask)
+                stream_labels[stream_mask] = stream
+
             # Only save the reliable voxels
             betas_arr = betas_arr[reliability_mask].reshape((-1, betas_arr.shape[-1]))
             roi_labels = roi_labels[reliability_mask].flatten()
+            stream_labels = stream_labels[reliability_mask].flatten()
 
             # Add the subject data to list
             all_betas.append(betas_arr)
-            all_rois.append([(ind, roi, sub) for (ind, roi) in enumerate(roi_labels)])
+            for roi, stream in zip(roi_labels, stream_labels):
+                all_rois.append({'roi_name': roi, 'stream_name': stream, 'subj_id': sub})
 
         # metadata
-        metadata = []
-        for i in range(4):
-            metadata.append(pd.DataFrame(all_rois[i], columns=['voxel_id', 'roi_name', 'subj_id']))
-        metadata = pd.concat(metadata, ignore_index=True)
-        metadata = metadata[metadata.roi_name.isin(self.rois)]
-        metadata.reset_index(drop=True, inplace=True)
+        metadata = pd.DataFrame(all_rois)
+        metadata.loc[metadata.stream_name == '1.0'] = 'none'
+        metadata.loc[metadata.roi_name == '1.0'] = 'none'
+        metadata = metadata.reset_index().rename(columns={'index': 'voxel_id'})
         print(metadata.roi_name.unique())
+        print(metadata.stream_name.unique())
 
         # response data
         response_data = []
         for i in range(4):
-            sub = str(i+1).zfill(2)
-            voxels = metadata.loc[metadata['subj_id']==sub, 'voxel_id'].to_numpy()
-            df = pd.DataFrame(all_betas[i][voxels,:])
-            response_data.append(df)
+            response_data.append(pd.DataFrame(all_betas[i]))
         response_data = pd.concat(response_data, ignore_index=True)
 
         # Make the voxel ids unique so that there are no repeats across subjects
-        metadata = metadata.drop(columns='voxel_id').reset_index().rename(columns={'index': 'voxel_id'})
         return metadata, response_data
     
     def run(self):
