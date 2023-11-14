@@ -117,12 +117,7 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
         y_pred = []
         y_true = []
 
-        if verbose:
-            cv_iterator = tqdm(cv.split(X), desc='CV fold', total=n_splits)
-        else:
-            cv_iterator = cv.split(X)
-
-        for train_index, test_index in cv_iterator:
+        for train_index, test_index in cv.split(X):
             pipe.fit(X[train_index], y[train_index])
             y_pred.append(pipe.predict(X[test_index]))
             y_true.append(y[test_index])

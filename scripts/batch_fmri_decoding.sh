@@ -12,10 +12,6 @@
 
 subj=$1
 
-ml gcc/9.3.0
-ml gcc/13.1.0
-ml helpers/0.1.1
-ml cuda/12.1.0
 ml anaconda
 
 conda activate nibabel
