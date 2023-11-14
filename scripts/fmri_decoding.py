@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 from src import temporal, decoding
 import os
-from src.decoding import Benchmark
+from src.mri import Benchmark
 import torch
 
 

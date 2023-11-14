@@ -15,24 +15,6 @@ def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
-class Benchmark:
-    def __init__(self, metadata, stimulus_data, response_data):
-        self.metadata = metadata
-        self.stimulus_data = stimulus_data
-        self.response_data = response_data
-
-    def filter_rois(self, rois):
-        self.metadata = self.metadata.loc[self.metadata.roi_name.isin(rois)].reset_index()
-        voxel_id = self.metadata['voxel_id'].to_numpy()
-        self.response_data = self.response_data.iloc[voxel_id]
-    
-    def filter_subjids(self, subj_ids):
-        self.metadata = self.metadata.loc[self.metadata.subj_id.isin(subj_ids)].reset_index()
-        voxel_id = self.metadata['voxel_id'].to_numpy()
-        self.response_data = self.response_data.iloc[voxel_id]
-
-
-
 def eeg_feature_decoding(neural_df, feature_df,
                           features, channels, verbose=True):
     # initialize pipe and kfold splitter
