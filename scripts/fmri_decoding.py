@@ -62,7 +62,6 @@ class fMRIDecoding:
         else:
             df, channels = self.load_eeg()
             benchmark = self.load_fmri()
-            benchmark.filter_rois()
             df_avg = preprocess_data(df, channels, benchmark.stimulus_data)
 
             results = decoding.eeg_fmri_decoding(df_avg, benchmark, channels, self.device)
