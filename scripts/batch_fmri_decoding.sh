@@ -20,4 +20,6 @@ ml anaconda
 
 conda activate nibabel
 
-python fmri_decoding.py --sid $subj
+python fmri_decoding.py --sid $subj \
+ --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data \
+ --figure_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures
