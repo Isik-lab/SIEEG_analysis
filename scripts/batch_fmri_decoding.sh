@@ -1,14 +1,14 @@
 #!/bin/bash -l
 
 #SBATCH
-#SBATCH --job-name=pairwise-decoding
-#SBATCH --time=2:00
+#SBATCH --job-name=glmsingle
+#SBATCH --time=02:00:00
 #SBATCH --partition=a100
+#SBATCH -A lisik3_gpu
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=6
 #SBATCH --mail-type=end
-#SBATCH --mail-user=emcmaho7@jhu.edu
+#SBATCH --mail-user=emcmaho7@jh.edu
 
 subj=$1
 
