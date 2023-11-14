@@ -112,8 +112,6 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
         if 'cuda' in device.type:
             X = X.to(torch.float32).to(device)
             y = y.T.to(torch.float32).to(device)
-        else:
-            y = y[:, :20]
 
         y_pred = []
         y_true = []

@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import temporal, plotting, decoding
+from src import temporal, decoding
 import os
 from src.decoding import Benchmark
 import torch
