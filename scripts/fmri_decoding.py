@@ -35,7 +35,7 @@ class fMRIDecoding:
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.csv'
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
-        print(torch.cuda.is_available())
+        print(f'cuda is available {torch.cuda.is_available()}')
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
