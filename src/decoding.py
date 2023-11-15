@@ -110,7 +110,8 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
             y_true.append(y[test_index])
         
         if 'cuda' in device.type:
-            scores = score_func(np.concatenate(y_pred), np.concatenate(y_true)).cpu().detach().numpy()
+            scores = score_func(torch.cat(y_pred), torch.cat(y_true))
+            scores = scores.cpu().detach().numpy() #send to CPU
         else:
             scores = stats.corr2d(np.concatenate(y_pred), np.concatenate(y_true))
         print(f'scores shape {scores.shape}')
