@@ -60,10 +60,12 @@ class fMRIDecoding:
         if os.path.exists(self.out_file) and not self.overwrite: 
             results = pd.read_csv(self.out_file)
         else:
+            print('loading data...')
             df, channels = self.load_eeg()
             benchmark = self.load_fmri()
             df_avg = preprocess_data(df, channels, benchmark.stimulus_data)
-
+            
+            print('beginning decoding...')
             results = decoding.eeg_fmri_decoding(df_avg, benchmark, channels, self.device)
             results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_csv(self.out_file, index=False)

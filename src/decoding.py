@@ -64,9 +64,10 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
     cv = KFold(n_splits=n_splits, shuffle=True, random_state=0)
     alphas = [10.**power for power in np.arange(-5, 2)]
     if 'cuda' in device.type:
-        from deepjuice.alignment import TorchRidgeCV, get_scorer
+        from deepjuice.alignment import TorchRidgeGCV, get_scorer
         score_func = get_scorer('pearsonr')
-        pipe = TorchRidgeCV(alphas=alphas, device=device, scale_X=True,)
+        pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
+                              device=device, scale_X=True,)
     else:
         score_func = make_scorer(correlation_scorer)
         pipe = Pipeline([
