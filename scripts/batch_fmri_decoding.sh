@@ -4,6 +4,7 @@
 #SBATCH --job-name=glmsingle
 #SBATCH --time=02:00:00
 #SBATCH --partition=a100
+#SBATCH --account=lisik3_gpu
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=12
 #SBATCH --gres=gpu:2
