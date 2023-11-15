@@ -3,9 +3,10 @@
 #SBATCH
 #SBATCH --job-name=glmsingle
 #SBATCH --time=02:00:00
-#SBATCH --partition=defq
+#SBATCH --partition=a100
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=12
+#SBATCH --gres=gpu:2
 #SBATCH --mail-type=end
 #SBATCH --mail-user=emcmaho7@jh.edu
 
