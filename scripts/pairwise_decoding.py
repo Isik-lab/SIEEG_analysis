@@ -27,7 +27,7 @@ class PairwiseDecoding:
     def run(self):
         print('loading data...')
         df = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
-        df = df.loc[df['stimulus_set'] == set.stimulus_set].reset_index()
+        df = df.loc[df['stimulus_set'] == self.stimulus_set].reset_index()
         df.sort_values(['time', 'video_name'], inplace=True)
         videos = df.video_name.unique()
         videos_nCk = list(combinations(videos, 2))
