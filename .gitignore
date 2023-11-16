@@ -1,6 +1,7 @@
 data/
 references/
-reports/
+reports/writing/*
+reports/presentations/*
 scripts/DeepJuiceDev/
 */__pycache__/
 *.egg-info/
