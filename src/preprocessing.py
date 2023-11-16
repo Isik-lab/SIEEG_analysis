@@ -67,7 +67,8 @@ def regress_out_gaze(df, channels):
                 'trial': trial,
                 'video_name': trial_df.iloc[idx].video_name,
                 'condition': trial_df.iloc[idx].condition,
-                'response': trial_df.iloc[idx].response
+                'response': trial_df.iloc[idx].response,
+                'stimulus_set': trial_df.iloc[idx].stimulus_set
             }
             # Now add the EEG data for this time point
             data_dict.update({channel: eeg_data for channel, eeg_data in zip(channels, eeg_corrected[:, idx])})

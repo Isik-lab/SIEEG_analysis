@@ -40,7 +40,7 @@ class PairwiseDecoding:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=str, default='1')
+    parser.add_argument('--sid', type=str, default='11')
     parser.add_argument('--n_groups', type=int, default=5)
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--stimulus_set', type=str, default='test')
