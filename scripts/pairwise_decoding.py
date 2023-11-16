@@ -17,23 +17,21 @@ class PairwiseDecoding:
         self.data_dir = args.data_dir
         self.figure_dir = args.figure_dir
         self.regress_gaze = args.regress_gaze
+        self.stimulus_set = args.stimulus_set
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
-        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz'
-        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}.png'
+        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_stimulus-set-{self.stimulus_set}_reg-gaze-{self.regress_gaze}.csv.gz'
+        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_stimulus-set-{self.stimulus_set}_reg-gaze-{self.regress_gaze}.png'
         print(vars(self))
 
     def run(self):
         print('loading data...')
         df = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
+        df = df.loc[df['stimulus_set'] == set.stimulus_set].reset_index()
         df.sort_values(['time', 'video_name'], inplace=True)
         videos = df.video_name.unique()
         videos_nCk = list(combinations(videos, 2))
-        all_cols = set(df.columns.to_list())
-        other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack', 'offset_eyetrack_x', 'video_name',
-                    'gaze_x', 'gaze_y', 'pupil_size', 'target_x', 'target_y',
-                    'target_distance', 'offset_eyetrack_y', 'repetition', 'even', 'session'])
-        channels = list(all_cols - other_cols)
+        channels = [col for col in df.columns if 'channel' in col]
 
         results = rsa.eeg_decoding_distance(df, channels, videos_nCk, self.n_groups)
         results.to_csv(self.out_file, index=False, compression='gzip')
@@ -45,6 +43,7 @@ def main():
     parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--n_groups', type=int, default=5)
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--stimulus_set', type=str, default='test')
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
     parser.add_argument('--figure_dir', '-figure', type=str,

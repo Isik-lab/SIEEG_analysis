@@ -2,14 +2,19 @@ import nibabel as nib
 import numpy as np
 
 
-def gen_mask(files, rel_mask):
+def gen_mask(files, rel_mask=None):
+    #Combine the two hemispheres
     roi = []
     for f in files:
         roi_hemi = nib.load(f).get_fdata().astype('bool')
         roi.append(roi_hemi)
     roi_mask = np.sum(roi, axis=0)
-    roi_mask += rel_mask
-    return roi_mask == 2
+    #add the rel_mask if defined
+    if rel_mask is not None:
+        roi_mask += rel_mask
+        return roi_mask > 1 #Equivalent to roi_mask and rel_mask
+    else:
+        return roi_mask.astype('bool')
 
 
 class Benchmark:

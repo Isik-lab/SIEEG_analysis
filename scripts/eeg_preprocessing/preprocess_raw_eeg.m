@@ -3,8 +3,8 @@ addpath /Applications/fieldtrip-20230926/
 addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG_pilot/';
-out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj005';
+out_path = '../../data/interim/SIdyads_EEuG_pilot/';
+subj_file = 'subj012';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 

@@ -23,7 +23,7 @@ def downsample_and_filter(df, resample_rate, start_time, end_time):
 
 
 def combine_data(eeg, trials, eyetracking):
-    out = pd.merge(eeg, trials[['trial', 'video_name', 'condition', 'response']], on='trial', how='left')
+    out = pd.merge(eeg, trials[['trial', 'video_name', 'condition', 'response', 'stimulus_set']], on='trial', how='left')
     if eyetracking is not None:
         out = out.merge(eyetracking, on=['trial', 'time'])
     return out

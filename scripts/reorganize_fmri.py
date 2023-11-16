@@ -41,12 +41,12 @@ class ReorganziefMRI:
             # Add the roi labels
             for roi in self.rois:
                 files = sorted(glob(f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{roi}*.nii.gz'))
-                roi_mask = gen_mask(files, reliability_mask)
+                roi_mask = gen_mask(files)
                 roi_labels[roi_mask] = roi
 
             for stream in self.streams:
                 files = sorted(glob(f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{stream}*.nii.gz'))
-                stream_mask = gen_mask(files, reliability_mask)
+                stream_mask = gen_mask(files)
                 stream_labels[stream_mask] = stream
 
             # Only save the reliable voxels
@@ -63,6 +63,7 @@ class ReorganziefMRI:
         metadata = pd.DataFrame(all_rois)
         metadata.loc[metadata.stream_name == '1.0'] = 'none'
         metadata.loc[metadata.roi_name == '1.0'] = 'none'
+        # this makes a unique voxel_id for every voxel across all subjects
         metadata = metadata.reset_index().rename(columns={'index': 'voxel_id'})
         print(metadata.roi_name.unique())
         print(metadata.stream_name.unique())

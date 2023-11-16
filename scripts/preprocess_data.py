@@ -26,7 +26,7 @@ class PreprocessData:
     def load_eeg(self):
         print('loading eeg...')
         df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_trials.csv.gz')
-        self.channels = df.drop(columns=['time','trial', 'offset']).columns
+        self.channels = [col for col in df.columns if 'channel' in col]
         df['offset_eyetrack'] = (df.offset / self.eeg_fps)
         return df 
 
@@ -38,6 +38,8 @@ class PreprocessData:
 
     def load_trials(self):
         trial_files = f'{self.data_dir}/raw/SIdyads_trials_pilot/{self.sid}/timingfiles/*.csv'
+        test_videos = pd.read_csv(f'{self.data_dir}/raw/annotations/test.csv')['video_name'].to_list()
+
         trials = []
         for run, tf in enumerate(sorted(glob(trial_files))):
             t = pd.read_csv(tf)
@@ -47,6 +49,10 @@ class PreprocessData:
         trials = pd.concat(trials).reset_index(drop=True)
         trials.reset_index(inplace=True)
         trials.rename(columns={'index': 'trial'}, inplace=True)
+        
+        # Add information about the training and test split
+        trials['stimulus_set'] = 'train'
+        trials.loc[trials.video_name.isin(test_videos), 'stimulus_set'] = 'test'
         return trials
     
     def load_eyetracking(self):
@@ -86,12 +92,14 @@ class PreprocessData:
 
         combined = preprocessing.filter_catch_trials(combined)
         combined = preprocessing.label_repetitions(combined)
+        print(combined.head())
+        print(combined.columns)
         self.save(combined)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=9)
+    parser.add_argument('--sid', type=int, default=12)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)
