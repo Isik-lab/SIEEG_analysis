@@ -99,11 +99,11 @@ class PreprocessData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=11)
+    parser.add_argument('--sid', type=int, default=14)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)
-    parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
     args = parser.parse_args()
