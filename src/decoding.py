@@ -10,15 +10,13 @@ from sklearn.model_selection import KFold
 from sklearn.metrics import make_scorer
 import torch 
 
-
 def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
 def eeg_feature_decoding(neural_df, feature_df,
-                          features, channels, verbose=True):
+                          features, channels):
     # initialize pipe and kfold splitter
-    cv = KFold(n_splits=5, shuffle=True, random_state=0)
     scorer = make_scorer(correlation_scorer, greater_is_better=True)
     pipe = Pipeline([
         ('scale', StandardScaler()),
@@ -33,26 +31,19 @@ def eeg_feature_decoding(neural_df, feature_df,
     results = []
     time_groups = neural_df.groupby('time')
 
-    if verbose:
-        iterator = tqdm(time_groups, desc='Time')
-    else:
-        iterator = time_groups
-
+    iterator = tqdm(time_groups, desc='Time')
     for time, time_df in iterator:
-        X = time_df[channels].to_numpy()
-        y = feature_df[features].to_numpy()
+        X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
+             'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
+        y = {'train': feature_df.loc[feature_df.stimulus_set == 'train', features].to_numpy(),
+             'test': feature_df.loc[feature_df.stimulus_set == 'test', features].to_numpy()}
 
-        y_pred = []
-        y_true = []
-        for train_index, test_index in cv.split(X):
-            pipe.fit(X[train_index], y[train_index])
-            y_pred.append(pipe.predict(X[test_index]))
-            y_true.append(y[test_index])
-        rs = stats.corr2d(np.concatenate(y_pred), np.concatenate(y_true))
-        for feature, r in zip(features, rs): 
-            results.append([time, feature, r])
+        pipe.fit(X['train'], y['train'])
+        rs, ps, _ = stats.perm(pipe.predict(X['test']), y['test'])
+        for feature, (r, p) in zip(features, zip(rs, ps)): 
+            results.append([time, feature, r, p])
 
-    results = pd.DataFrame(results, columns=['time', 'feature', 'r'])
+    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p'])
     cat_type = pd.CategoricalDtype(categories=features, ordered=True)
     results['feature'] = results.feature.astype(cat_type)
     return results

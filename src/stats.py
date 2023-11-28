@@ -98,7 +98,7 @@ def bootstrap_unique_variance(a, b, c, n_perm=int(5e3)):
     return r2_var
 
 
-def perm(a, b, n_perm=int(5e3), H0='greater'):
+def perm(a, b, n_perm=int(5e3), H0='greater', verbose=False):
     if a.ndim == 3:
         a_not_shuffle = a.reshape(a.shape[0] * a.shape[1], a.shape[-1])
         b = b.reshape(b.shape[0] * b.shape[1], b.shape[-1])
@@ -106,8 +106,13 @@ def perm(a, b, n_perm=int(5e3), H0='greater'):
     else:
         r = corr2d(a, b)
 
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
     r_null = np.zeros((n_perm, a.shape[-1]))
-    for i in tqdm(range(n_perm), total=n_perm):
+    for i in iterator:
         inds = np.random.default_rng(i).permutation(a.shape[0])
         if a.ndim == 3:
             a_shuffle = a[inds, :, :].reshape(a.shape[0] * a.shape[1], a.shape[-1])

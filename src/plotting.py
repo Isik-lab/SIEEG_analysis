@@ -51,7 +51,8 @@ def plot_eeg_feature_rsa(rsa, features, out_file):
     trim_axs(axes, len(features))
     ymin, ymax = rsa['Spearman rho'].min(), rsa['Spearman rho'].max()
     for ax, (feature, time_corr) in zip(axes, feature_group):
-        sns.lineplot(x='time', y='Spearman rho', data=time_corr, ax=ax)
+        sns.lineplot(x='time', y='Spearman rho', data=time_corr,
+                      ax=ax, legend=False)
         if feature in ['alexnet', 'expanse', 'facingness', 'valence']:
             ax.set_ylabel('Spearman rho')
         else:
@@ -139,6 +140,9 @@ def plot_eeg_feature_decoding(results, features, out_file, hue=None):
                 colors='gray', linestyles='dashed', zorder=0)
         ax.hlines(y=0, xmin=time_corr.time.min(), xmax=time_corr.time.max(),
                 colors='gray', linestyles='solid', zorder=0)
+        sig_time = time_corr.loc[time_corr.p < 0.05, 'time'].to_numpy()
+        if len(sig_time) > 0:
+            ax.scatter(sig_time, np.ones_like(sig_time)*-.3)
         ax.set_xlim([time_corr.time.min(), time_corr.time.max()])
         ax.set_ylim([ymin, ymax])
         ax.spines['top'].set_visible(False)
