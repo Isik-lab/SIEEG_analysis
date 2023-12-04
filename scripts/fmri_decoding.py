@@ -7,16 +7,6 @@ import os
 from src.mri import Benchmark
 import torch
 
-
-def preprocess_data(df, channels, stimulus_data):
-    df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True).reset_index()
-    cols_to_drop = set(df.columns.to_list()) - set(['time', 'video_name'] + channels)
-    df_.drop(columns=cols_to_drop, inplace=True)
-    df_ = df_.loc[df_.video_name.isin(stimulus_data.video_name)]
-    df_.sort_values(['time', 'video_name'], inplace=True)
-    return temporal.smoothing(df_, 'video_name')
-
-
 class fMRIDecoding:
     def __init__(self, args):
         self.process = 'fMRIDecoding'
@@ -50,6 +40,21 @@ class fMRIDecoding:
         stimulus_data_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/stimulus_data.csv')
         return Benchmark(metadata_, stimulus_data_, response_data_)
     
+    def assign_stimulus_set(self, df_):
+        df_['stimulus_set'] = 'train'
+        test_videos = pd.read_csv(f'{self.data_dir}/raw/annotations/test.csv')['video_name'].to_list()
+        df_.loc[df_.video_name.isin(test_videos), 'stimulus_set'] = 'test'
+        return df_
+    
+    def preprocess_data(self, df, stimulus_data):
+        df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True).reset_index()
+        cols_to_drop = set(df.columns.to_list()) - set(['time', 'video_name'] + self.channels)
+        df_.drop(columns=cols_to_drop, inplace=True)
+        df_ = df_.loc[df_.video_name.isin(stimulus_data.video_name)]
+        df_.sort_values(['time', 'video_name'], inplace=True)
+        df_smoothed = temporal.smoothing(df_, 'video_name')
+        return self.assign_stimulus_set(df_smoothed)
+
     def run(self):
         if os.path.exists(self.out_file) and not self.overwrite: 
             results = pd.read_csv(self.out_file)
@@ -57,7 +62,7 @@ class fMRIDecoding:
             print('loading data...')
             df = self.load_eeg()
             benchmark = self.load_fmri()
-            df_avg = preprocess_data(df, self.channels, benchmark.stimulus_data)
+            df_avg = self.preprocess_data(df, benchmark.stimulus_data)
             
             print('beginning decoding...')
             results = decoding.eeg_fmri_decoding(df_avg, benchmark,
