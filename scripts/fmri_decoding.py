@@ -37,23 +37,17 @@ class fMRIDecoding:
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
         print(f'cuda is available {torch.cuda.is_available()}')
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+        self.channels = None
 
     def load_eeg(self):
         df_ = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
-        all_cols = set(df_.columns.to_list())
-        other_cols = set(['trial', 'time', 'offset', 'offset_eyetrack_x', 'video_name',
-                    'gaze_x', 'gaze_y', 'pupil_size', 'target_x', 'target_y',
-                    'target_distance', 'offset_eyetrack_y', 'repetition', 'even', 'session'])
-        channels = list(all_cols - other_cols)
-        return df_, channels
+        self.channels = [col for col in df_.columns if 'channel' in col]
+        return df_
     
     def load_fmri(self):
         metadata_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/metadata.csv')
         response_data_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/response_data.csv.gz')
-        stimulus_data_ = pd.read_csv(f'{self.data_dir}/raw/annotations/annotations.csv')
-        stimulus_data_ = stimulus_data_.merge(pd.read_csv(f'{self.data_dir}/raw/annotations/train.csv'), on='video_name').reset_index()
-        stimulus_data_.sort_values(by='video_name', inplace=True)
+        stimulus_data_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/stimulus_data.csv.gz')
         return Benchmark(metadata_, stimulus_data_, response_data_)
     
     def run(self):
@@ -61,12 +55,13 @@ class fMRIDecoding:
             results = pd.read_csv(self.out_file)
         else:
             print('loading data...')
-            df, channels = self.load_eeg()
+            df = self.load_eeg()
             benchmark = self.load_fmri()
-            df_avg = preprocess_data(df, channels, benchmark.stimulus_data)
+            df_avg = preprocess_data(df, self.channels, benchmark.stimulus_data)
             
             print('beginning decoding...')
-            results = decoding.eeg_fmri_decoding(df_avg, benchmark, channels, self.device)
+            results = decoding.eeg_fmri_decoding(df_avg, benchmark,
+                                                  self.channels, self.device)
             results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_csv(self.out_file, index=False)
 

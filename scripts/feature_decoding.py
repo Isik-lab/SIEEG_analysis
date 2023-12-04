@@ -75,6 +75,7 @@ class FeatureDecoding:
         return out
     
     def run(self):
+        results = None
         if os.path.exists(self.out_file) and not self.overwrite: 
             results = pd.read_csv(self.out_file)
             cat_type = pd.CategoricalDtype(categories=self.features, ordered=True)
@@ -84,11 +85,16 @@ class FeatureDecoding:
             feature_df, predicting_features = self.load_features()
             df_avg = self.preprocess_data(df)
 
-            results = decoding.eeg_feature_decoding(df_avg, feature_df,
-                                                    predicting_features, self.channels)
-            results = self.average_results(results)
-            results.to_csv(self.out_file, index=False)
-        plotting.plot_eeg_feature_decoding(results, self.features, self.out_figure)
+            if 'train' in df_avg['stimulus_set'].unique():
+                results = decoding.eeg_feature_decoding(df_avg, feature_df,
+                                                        predicting_features, self.channels)
+                results = self.average_results(results)
+                results.to_csv(self.out_file, index=False)
+            else:
+                print('encoding not performed, no training set')
+
+        if results is not None: 
+            plotting.plot_eeg_feature_decoding(results, self.features, self.out_figure)
 
 
 def main():

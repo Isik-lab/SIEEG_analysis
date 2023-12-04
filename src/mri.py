@@ -1,5 +1,6 @@
 import nibabel as nib
 import numpy as np
+import pandas as pd
 
 
 def gen_mask(files, rel_mask=None):
@@ -19,9 +20,24 @@ def gen_mask(files, rel_mask=None):
 
 class Benchmark:
     def __init__(self, metadata, stimulus_data, response_data):
-        self.metadata = metadata
-        self.stimulus_data = stimulus_data
-        self.response_data = response_data
+        if type(metadata) is str:
+            self.metadata = pd.read_csv(metadata)
+        else:
+            self.metadata = metadata
+
+        if type(stimulus_data) is str:
+            self.stimulus_data = pd.read_csv(stimulus_data)
+        else:
+            self.stimulus_data = stimulus_data
+
+        if type(response_data) is str:
+            self.response_data = pd.read_csv(response_data)
+        else:
+            self.response_data = response_data
+
+    def add_image_path(self, data_dir):
+        self.stimulus_data['image_path'] = data_dir + self.stimulus_data.video_name.str.replace('mp4', 'png')
+        print(self.stimulus_data.head())
 
     def filter_rois(self, rois='none'):
         if rois != 'none':
@@ -48,3 +64,12 @@ class Benchmark:
         voxel_id = self.metadata['voxel_id'].to_numpy()
         self.response_data = self.response_data.iloc[voxel_id]
 
+    def filter_stimulus(self, stimulus_set='train', inplace=False):
+        if inplace:
+            self.stimulus_data = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
+            stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
+            self.response_data = self.response_data[stim_idx]
+        else:
+            stimulus_data = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
+            stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
+            return stimulus_data, self.response_data[stim_idx]

@@ -27,6 +27,12 @@ class PreprocessData:
         print('loading eeg...')
         df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_trials.csv.gz')
         self.channels = [col for col in df.columns if 'channel' in col]
+        if len(self.channels) == 0:
+            channel_rename = {s: 'channel_'+s for s in df.columns if 2 <= len(s) <= 4 and s[0].isupper()}
+            print('original columns: ', df.columns)
+            df.rename(columns=channel_rename, inplace=True)
+            print('revised columns: ', df.columns)
+            self.channels = [col for col in df.columns if 'channel' in col]
         df['offset_eyetrack'] = (df.offset / self.eeg_fps)
         return df 
 
@@ -99,7 +105,7 @@ class PreprocessData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=14)
+    parser.add_argument('--sid', type=int, default=2)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)

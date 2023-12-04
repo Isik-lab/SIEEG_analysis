@@ -9,6 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from sklearn.metrics import make_scorer
 import torch 
+from deepjuice.alignment import TorchRidgeGCV, get_scorer
+
 
 def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
@@ -49,27 +51,13 @@ def eeg_feature_decoding(neural_df, feature_df,
     return results
 
 
-def eeg_fmri_decoding(feature_map, benchmark, channels, device,
-                      verbose=True, n_splits=4):
+def eeg_fmri_decoding(feature_map, benchmark,
+                       channels, device,
+                      verbose=True):
     # initialize pipe and kfold splitter
-    cv = KFold(n_splits=n_splits, shuffle=True, random_state=0)
     alphas = [10.**power for power in np.arange(-5, 2)]
-    if 'cuda' in device.type:
-        from deepjuice.alignment import TorchRidgeGCV, get_scorer
-        score_func = get_scorer('pearsonr')
-        pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
-                              device=device, scale_X=True,)
-    else:
-        score_func = make_scorer(correlation_scorer)
-        pipe = Pipeline([
-            ('scale', StandardScaler()),
-            ('rcv', RidgeCV(
-                fit_intercept=False,
-                alphas=alphas,
-                alpha_per_target=True,
-                scoring=score_func
-            ))
-        ])
+    pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
+                            device=device, scale_X=True,)
 
     results = []
     time_groups = feature_map.groupby('time')
@@ -81,40 +69,24 @@ def eeg_fmri_decoding(feature_map, benchmark, channels, device,
 
     results = []
     for time, time_df in time_iterator:
-        X = time_df[channels].to_numpy()
-        y = benchmark.response_data.to_numpy().T
-        if 'cuda' in device.type:
-            X = torch.from_numpy(X).to(torch.float32).to(device)
-            y = torch.from_numpy(y).to(torch.float32).to(device)
-
-        y_pred = []
-        y_true = []
-
-        if verbose:
-            cv_iterator = tqdm(cv.split(X), desc='CV', total=n_splits)
-        else:
-            cv_iterator = cv.split(X)
-
-        for train_index, test_index in cv_iterator:
-            pipe.fit(X[train_index], y[train_index])
-            y_pred.append(pipe.predict(X[test_index]))
-            y_true.append(y[test_index])
+        X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
+             'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
+        y = {'train': benchmark.response_data.loc[benchmark.stimulus_data['stimulus_set'] == 'train'].to_numpy().T,
+             'test': benchmark.response_data.loc[benchmark.stimulus_data['stimulus_set'] == 'test'].to_numpy().T}
         
-        if 'cuda' in device.type:
-            scores = score_func(torch.cat(y_pred), torch.cat(y_true))
-            scores = scores.cpu().detach().numpy() #send to CPU
-        else:
-            scores = stats.corr2d(np.concatenate(y_pred), np.concatenate(y_true))
-        print(f'scores shape {scores.shape}')
+        X = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in X.items()}
+        y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
+
+        pipe.fit(X['train'], y['train'])
+        scores, null_scores = stats.perm_gpu(pipe.predict(X['test']), y['test'])
 
         for region in benchmark.metadata.roi_name.unique():
-            for subj_id in benchmark.metadata.subj_id.unique():
-                voxel_id = benchmark.metadata.loc[(benchmark.metadata.subj_id == subj_id) &
-                                                   (benchmark.metadata.roi_name == region), 'voxel_id'].to_numpy()
-                results.append({'time': time,
-                                'roi_name': region,
-                                'subj_id': subj_id,
-                                'score': np.mean(scores[voxel_id])})
+            voxel_id = benchmark.metadata.loc[(benchmark.metadata.roi_name == region), 'voxel_id'].to_numpy()
+            results.append({'time': time, 
+                            'roi_name': region,
+                            'score': torch.mean(scores[voxel_id]).cpu().detach().numpy(),
+                            'score_null': torch.mean(null_scores[:, voxel_id], dim=1).cpu().detach().numpy(),
+                            'method': 'ridge'})
     return pd.DataFrame(results)
 
 

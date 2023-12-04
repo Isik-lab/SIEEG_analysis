@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
-
+import torch
 
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
     rs_out = rs.copy()
@@ -147,3 +147,30 @@ def perm_unique_variance(a, b, c, n_perm=int(5e3), H0='greater'):
     p = calculate_p(r2_null, r2, n_perm, H0)
     return r2, p, r2_null
 
+
+def corr2d_gpu(x, y):
+    x_m = x - torch.nanmean(x, dim=0)
+    y_m = y - torch.nanmean(y, dim=0)
+
+    numer = torch.nansum((x_m * y_m), dim=0)
+    denom = torch.sqrt(torch.nansum((x_m * x_m), dim=0) * torch.nansum((y_m * y_m), dim=0))
+    denom[denom == 0] = float('nan')
+    return numer / denom
+
+
+def perm_gpu(a, b, n_perm=int(5e3), verbose=False):
+    g = torch.Generator()
+    r = corr2d_gpu(a, b)
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
+    r_null = torch.zeros((n_perm, a.shape[-1]))
+    for i in iterator:
+        g.manual_seed(i)
+        inds = torch.randperm(a.shape[0], generator=g)
+        a_shuffle = a[inds]
+        r_null[i, :] = corr2d_gpu(a_shuffle, b)
+    return r, r_null
