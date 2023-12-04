@@ -101,7 +101,7 @@ class ReorganziefMRI:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', '-data', type=str,
-                         default='/Users/emcmaho7/Dropbox/projects/SI_fmri/SIfMRI_modeling/data')
+                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
     args = parser.parse_args()
     ReorganziefMRI(args).run()
 
