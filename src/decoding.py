@@ -58,6 +58,13 @@ def eeg_fmri_decoding(feature_map, benchmark,
     alphas = [10.**power for power in np.arange(-5, 2)]
     pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
                             device=device, scale_X=True,)
+    
+    # get fmri in right format and then send to the gpu
+    train_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'train'].to_list()
+    test_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'test'].to_list()
+    y = {'train': benchmark.response_data.to_numpy().T[train_idx],
+            'test': benchmark.response_data.to_numpy().T[test_idx]}
+    y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
 
     results = []
     time_groups = feature_map.groupby('time')
@@ -71,13 +78,7 @@ def eeg_fmri_decoding(feature_map, benchmark,
     for time, time_df in time_iterator:
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
-        train_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'train'].to_list()
-        test_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'test'].to_list()
-        y = {'train': benchmark.response_data.to_numpy().T[train_idx],
-             'test': benchmark.response_data.to_numpy().T[test_idx]}
-        
         X = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in X.items()}
-        y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
 
         pipe.fit(X['train'], y['train'])
         scores, null_scores = stats.perm_gpu(pipe.predict(X['test']), y['test'], verbose=True)
