@@ -78,7 +78,7 @@ def eeg_fmri_decoding(feature_map, benchmark,
         y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
 
         pipe.fit(X['train'], y['train'])
-        scores, null_scores = stats.perm_gpu(pipe.predict(X['test']), y['test'])
+        scores, null_scores = stats.perm_gpu(pipe.predict(X['test']), y['test'], verbose=True)
 
         for region in benchmark.metadata.roi_name.unique():
             voxel_id = benchmark.metadata.loc[(benchmark.metadata.roi_name == region), 'voxel_id'].to_numpy()
