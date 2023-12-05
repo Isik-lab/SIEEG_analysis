@@ -116,7 +116,7 @@ def plot_eeg_fmri_rsa(rsa, rois, out_file):
 
 
 def plot_eeg_fmri_decoding(results, rois, out_file=None, hue=None):
-    feature_group = results.groupby('roi')
+    feature_group = results.groupby('roi_name')
     _, axes = plt.subplots(int(np.ceil(len(rois)/3)), 3,
                         figsize=(10,8),
                         sharey=True, constrained_layout=True)
