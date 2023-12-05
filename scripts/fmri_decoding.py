@@ -2,10 +2,10 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import temporal#, decoding
+from src import temporal, decoding
 import os
 from src.mri import Benchmark
-# import torch
+import torch
 
 class fMRIDecoding:
     def __init__(self, args):
@@ -25,8 +25,7 @@ class fMRIDecoding:
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
-        # print(f'cuda is available {torch.cuda.is_available()}')
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f'cuda is available {torch.cuda.is_available()}')
         self.channels = None
 
     def load_eeg(self):
@@ -65,11 +64,13 @@ class fMRIDecoding:
             df = self.load_eeg()
             benchmark = self.load_fmri()
             df_avg = self.preprocess_data(df, benchmark.stimulus_data)
-            # print('beginning decoding...')
-            # results = decoding.eeg_fmri_decoding(df_avg, benchmark,
-            #                                       self.channels, self.device)
-            # results = results.groupby(['time', 'roi_name']).mean().reset_index()
-            # results.to_pickle(self.out_file)
+
+            print('beginning decoding...')
+            results = decoding.eeg_fmri_decoding(df_avg, benchmark,
+                                                  self.channels, self.device)
+            results = results.groupby(['time', 'roi_name']).mean().reset_index()
+            results.to_pickle(self.out_file)
+            print('Finished!')
 
 def main():
     parser = argparse.ArgumentParser()
