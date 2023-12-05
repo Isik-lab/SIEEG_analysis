@@ -26,6 +26,7 @@ class fMRIDecoding:
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
         print(f'cuda is available {torch.cuda.is_available()}')
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
     def load_eeg(self):
