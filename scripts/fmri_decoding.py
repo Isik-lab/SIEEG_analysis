@@ -2,10 +2,11 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import temporal, decoding
+from src import temporal, decoding, plotting
 import os
 from src.mri import Benchmark
 import torch
+
 
 class fMRIDecoding:
     def __init__(self, args):
@@ -59,7 +60,7 @@ class fMRIDecoding:
 
     def run(self):
         if os.path.exists(self.out_file) and not self.overwrite: 
-            results = pd.read_csv(self.out_file)
+            results = pd.read_pickle(self.out_file)
         else:
             print('loading data...')
             df = self.load_eeg()
@@ -72,6 +73,8 @@ class fMRIDecoding:
             results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_pickle(self.out_file)
             print('Finished!')
+        plotting.plot_eeg_fmri_decoding(results, self.rois,
+                                        out_file=self.out_figure)
 
 def main():
     parser = argparse.ArgumentParser()
