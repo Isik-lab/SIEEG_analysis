@@ -52,7 +52,7 @@ class fMRIDecoding:
         df_.drop(columns=cols_to_drop, inplace=True)
         df_ = df_.loc[df_.video_name.isin(stimulus_data.video_name)]
         df_.sort_values(['time', 'video_name'], inplace=True)
-        df_smoothed = temporal.smoothing(df_, 'video_name')
+        df_smoothed = temporal.smoothing(df_, self.channels, grouping='video_name')
         return self.assign_stimulus_set(df_smoothed)
 
     def run(self):
