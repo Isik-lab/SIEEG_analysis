@@ -11,7 +11,8 @@
 #SBATCH --mail-type=end
 #SBATCH --mail-user=emcmaho7@jh.edu
 
-subj=$1
+subj=${1:-11}
+echo "subj: $subj"
 
 ml anaconda
 conda activate eeg_gpu
