@@ -48,7 +48,7 @@ class fMRIDecoding:
     
     def preprocess_data(self, df, stimulus_data):
         df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True).reset_index()
-        cols_to_drop = set(df.columns.to_list()) - set(['time', 'video_name'] + self.channels)
+        cols_to_drop = set(df_.columns.to_list()) - set(['time', 'video_name'] + self.channels)
         df_.drop(columns=cols_to_drop, inplace=True)
         df_ = df_.loc[df_.video_name.isin(stimulus_data.video_name)]
         df_.sort_values(['time', 'video_name'], inplace=True)
