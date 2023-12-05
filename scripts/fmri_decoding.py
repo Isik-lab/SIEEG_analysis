@@ -2,10 +2,10 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import temporal, decoding
+from src import temporal#, decoding
 import os
 from src.mri import Benchmark
-import torch
+# import torch
 
 class fMRIDecoding:
     def __init__(self, args):
@@ -22,11 +22,11 @@ class fMRIDecoding:
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
-        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.csv'
+        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
-        print(f'cuda is available {torch.cuda.is_available()}')
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # print(f'cuda is available {torch.cuda.is_available()}')
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
     def load_eeg(self):
@@ -38,7 +38,9 @@ class fMRIDecoding:
         metadata_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/metadata.csv')
         response_data_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/response_data.csv.gz')
         stimulus_data_ = pd.read_csv(f'{self.data_dir}/interim/ReorganziefMRI/stimulus_data.csv')
-        return Benchmark(metadata_, stimulus_data_, response_data_)
+        return Benchmark(metadata=metadata_,
+                        stimulus_data=stimulus_data_,
+                        response_data=response_data_)
     
     def assign_stimulus_set(self, df_):
         df_['stimulus_set'] = 'train'
@@ -63,12 +65,11 @@ class fMRIDecoding:
             df = self.load_eeg()
             benchmark = self.load_fmri()
             df_avg = self.preprocess_data(df, benchmark.stimulus_data)
-            
-            print('beginning decoding...')
-            results = decoding.eeg_fmri_decoding(df_avg, benchmark,
-                                                  self.channels, self.device)
-            results = results.groupby(['time', 'roi_name']).mean().reset_index()
-            results.to_csv(self.out_file, index=False)
+            # print('beginning decoding...')
+            # results = decoding.eeg_fmri_decoding(df_avg, benchmark,
+            #                                       self.channels, self.device)
+            # results = results.groupby(['time', 'roi_name']).mean().reset_index()
+            # results.to_pickle(self.out_file)
 
 def main():
     parser = argparse.ArgumentParser()

@@ -19,21 +19,27 @@ def gen_mask(files, rel_mask=None):
 
 
 class Benchmark:
-    def __init__(self, metadata, stimulus_data, response_data):
-        if type(metadata) is str:
+    def __init__(self, metadata=None, stimulus_data=None, response_data=None):
+        if type(metadata) is str and metadata is not None:
             self.metadata = pd.read_csv(metadata)
-        else:
+        elif metadata is not None:
             self.metadata = metadata
-
-        if type(stimulus_data) is str:
-            self.stimulus_data = pd.read_csv(stimulus_data)
         else:
+            self.metadata = None
+
+        if type(stimulus_data) is str and stimulus_data is not None:
+            self.metadata = pd.read_csv(stimulus_data)
+        elif stimulus_data is not None:
             self.stimulus_data = stimulus_data
-
-        if type(response_data) is str:
-            self.response_data = pd.read_csv(response_data)
         else:
+            self.stimulus_data = None
+
+        if type(response_data) is str and response_data is not None:
+            self.response_data = pd.read_csv(response_data)
+        elif response_data is not None:
             self.response_data = response_data
+        else:
+            self.response_data = None
 
     def add_image_path(self, data_dir):
         self.stimulus_data['image_path'] = data_dir + self.stimulus_data.video_name.str.replace('mp4', 'png')

@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from sklearn.metrics import make_scorer
 import torch 
-from deepjuice.alignment import TorchRidgeGCV, get_scorer
+from deepjuice.alignment import TorchRidgeGCV
 
 
 def correlation_scorer(y_true, y_pred):
@@ -71,8 +71,10 @@ def eeg_fmri_decoding(feature_map, benchmark,
     for time, time_df in time_iterator:
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
-        y = {'train': benchmark.response_data.loc[benchmark.stimulus_data['stimulus_set'] == 'train'].to_numpy().T,
-             'test': benchmark.response_data.loc[benchmark.stimulus_data['stimulus_set'] == 'test'].to_numpy().T}
+        train_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'train'].to_list()
+        test_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'test'].to_list()
+        y = {'train': benchmark.response_data.to_numpy().T[train_idx],
+             'test': benchmark.response_data.to_numpy().T[test_idx]}
         
         X = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in X.items()}
         y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}

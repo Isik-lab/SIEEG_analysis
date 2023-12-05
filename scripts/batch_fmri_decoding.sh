@@ -14,8 +14,7 @@
 subj=$1
 
 ml anaconda
-
-conda activate nibabel
+conda activate fmri_modeling
 
 python fmri_decoding.py --sid $subj \
  --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data \
