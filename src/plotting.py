@@ -121,40 +121,41 @@ def plot_eeg_fmri_decoding(results, rois, out_file=None, hue=None):
                         figsize=(10,8),
                         sharey=True, constrained_layout=True)
     axes = axes.flatten()
-    trim_axs(axes, len(rois))
-    ymin, ymax = results['r'].min(), results['r'].max()
+    ymin, ymax = results['score'].min(), results['score'].max()
     for ax, (roi, time_corr) in zip(axes, feature_group):
-        sns.lineplot(x='time', y='r', data=time_corr, ax=ax, hue=hue)
-        if roi in ['EVC', 'LOC', 'pSTS']:
-            ax.set_ylabel('Prediction (r)')
-        else:
-            ax.set_ylabel('')
+        if roi != 'none':
+            sns.lineplot(x='time', y='score', data=time_corr, ax=ax, hue=hue)
+            if roi in ['EVC', 'LOC', 'pSTS']:
+                ax.set_ylabel('Prediction (r)')
+            else:
+                ax.set_ylabel('')
 
-        if roi in ['pSTS', 'face-pSTS', 'aSTS']:
-            ax.set_xlabel('Time (s)')
-        else:
-            ax.set_xlabel('')
-            ax.set_xticklabels([])
-            ax.tick_params(axis='x', which='both', length=0)
-        ax.vlines(x=[0, 0.5], ymin=0, ymax=ymax,
-                colors='gray', linestyles='dashed', zorder=0)
-        ax.hlines(y=0, xmin=time_corr.time.min(), xmax=time_corr.time.max(),
-                colors='gray', linestyles='solid', zorder=0)
-        sig_time = time_corr.loc[time_corr.p < 0.05, 'time'].to_numpy()
-        if len(sig_time) > 0:
-            ax.scatter(sig_time, np.ones_like(sig_time)*-.3)
-        ax.set_xlim([time_corr.time.min(), time_corr.time.max()])
-        ax.set_ylim([ymin, ymax])
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_visible(False)
-        if hue is not None:
-            if roi == 'aSTS':
-                ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-            else: 
-                ax.legend_.remove()
-    plt.tight_layout()
+            if roi in ['pSTS', 'face-pSTS', 'aSTS']:
+                ax.set_xlabel('Time (s)')
+            else:
+                ax.set_xlabel('')
+                ax.set_xticklabels([])
+                ax.tick_params(axis='x', which='both', length=0)
+            ax.vlines(x=[0, 0.5], ymin=0, ymax=ymax,
+                    colors='gray', linestyles='dashed', zorder=0)
+            ax.hlines(y=0, xmin=time_corr.time.min(), xmax=time_corr.time.max(),
+                    colors='gray', linestyles='solid', zorder=0)
+            sig_time = time_corr.loc[time_corr.p < 0.05, 'time'].to_numpy()
+            if len(sig_time) > 0:
+                ax.scatter(sig_time, np.ones_like(sig_time)*-.1)
+            ax.set_xlim([time_corr.time.min(), time_corr.time.max()])
+            ax.set_ylim([ymin, ymax])
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.set_title(roi)
+            if hue is not None:
+                if roi == 'aSTS':
+                    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+                else: 
+                    ax.legend_.remove()
     if out_file is not None:
+        plt.tight_layout()
         plt.savefig(out_file)
 
 
@@ -197,9 +198,10 @@ def plot_eeg_feature_decoding(results, features, out_file, hue=None):
                 ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
             else: 
                 ax.legend_.remove()
-    plt.tight_layout()
     if out_file is not None:
+        plt.tight_layout()
         plt.savefig(out_file)
+        plt.close()
     
 
 def plot_pairwise_decoding(results, out_file, baseline=0.5):

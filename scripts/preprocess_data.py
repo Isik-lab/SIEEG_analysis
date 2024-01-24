@@ -12,7 +12,7 @@ class PreprocessData:
     def __init__(self, args):
         self.process = 'PreprocessData'
         self.data_dir = args.data_dir
-        self.sid = f'subj{str(args.sid).zfill(3)}'
+        self.sid = f'sub-{str(args.sid).zfill(2)}'
         self.channels = []
         self.resample_rate = args.resample_rate
         self.start_time = args.start_time
@@ -25,7 +25,7 @@ class PreprocessData:
 
     def load_eeg(self):
         print('loading eeg...')
-        df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_trials.csv.gz')
+        df = pd.read_csv(f'{self.data_dir}/interim/SIdyads_EEG/{self.sid}/{self.sid}_trials.csv.gz')
         self.channels = [col for col in df.columns if 'channel' in col]
         if len(self.channels) == 0:
             channel_rename = {s: 'channel_'+s for s in df.columns if 2 <= len(s) <= 4 and s[0].isupper()}
@@ -38,12 +38,12 @@ class PreprocessData:
 
     def load_artifact(self):
         # Load the trials that were removed in preprocessing
-        preproc_file = f'{self.data_dir}/interim/SIdyads_EEG_pilot/{self.sid}/{self.sid}_preproc.mat'
+        preproc_file = f'{self.data_dir}/interim/SIdyads_EEG/{self.sid}/{self.sid}_preproc.mat'
         preproc = loadmat(preproc_file)
         return preproc['idx_badtrial'].squeeze().astype('bool')
 
     def load_trials(self):
-        trial_files = f'{self.data_dir}/raw/SIdyads_trials_pilot/{self.sid}/timingfiles/*.csv'
+        trial_files = f'{self.data_dir}/raw/SIdyads_trials/{self.sid}/timingfiles/*.csv'
         test_videos = pd.read_csv(f'{self.data_dir}/raw/annotations/test.csv')['video_name'].to_list()
 
         trials = []
@@ -62,7 +62,7 @@ class PreprocessData:
         return trials
     
     def load_eyetracking(self):
-        file = f'{self.data_dir}/interim/SIdyads_eyetracking_pilot/{self.sid}_eyetracking.csv.gz'
+        file = f'{self.data_dir}/interim/SIdyads_eyetracking/{self.sid}_eyetracking.csv.gz'
         if os.path.exists(file):
             print('loading and processing eyetracking...')
             df = pd.read_csv(file)
@@ -105,7 +105,7 @@ class PreprocessData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=2)
+    parser.add_argument('--sid', type=int, default=1)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)

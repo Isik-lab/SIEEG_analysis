@@ -5,7 +5,6 @@ import numpy as np
 from tqdm import tqdm
 from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
-import torch
 
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
     rs_out = rs.copy()
@@ -149,6 +148,7 @@ def perm_unique_variance(a, b, c, n_perm=int(5e3), H0='greater'):
 
 
 def corr2d_gpu(x, y):
+    import torch
     x_m = x - torch.nanmean(x, dim=0)
     y_m = y - torch.nanmean(y, dim=0)
 
@@ -159,6 +159,7 @@ def corr2d_gpu(x, y):
 
 
 def perm_gpu(a, b, n_perm=int(5e3), verbose=False):
+    import torch
     g = torch.Generator()
     r = corr2d_gpu(a, b)
 

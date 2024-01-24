@@ -9,7 +9,7 @@ class Reliability:
     def __init__(self, args):
         self.process = 'Reliability'
         if 'u' not in args.sid:
-            self.sid = f'subj{str(int(args.sid)).zfill(3)}'
+            self.sid = f'sub-{str(int(args.sid)).zfill(2)}'
         else:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze

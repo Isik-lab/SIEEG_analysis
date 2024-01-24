@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from sklearn.metrics import make_scorer
 import torch 
-from deepjuice.alignment import TorchRidgeGCV
 
 
 def correlation_scorer(y_true, y_pred):
@@ -54,6 +53,8 @@ def eeg_feature_decoding(neural_df, feature_df,
 def eeg_fmri_decoding(feature_map, benchmark,
                        channels, device,
                       verbose=True):
+    from deepjuice.alignment import TorchRidgeGCV
+
     # initialize pipe and kfold splitter
     alphas = [10.**power for power in np.arange(-5, 2)]
     pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,

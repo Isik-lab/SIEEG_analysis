@@ -2,9 +2,9 @@
 addpath /Applications/fieldtrip-20230926/
 addpath progressbar/
 
-input_path = '../../data/raw/SIdyads_EEG_pilot/';
-out_path = '../../data/interim/SIdyads_EEG_pilot/';
-subj_file = 'subj001';
+input_path = '../../data/raw/SIdyads_EEG/';
+out_path = '../../data/interim/SIdyads_EEG/';
+subj_file = 'sub-01';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -28,8 +28,10 @@ end
 
 %Mark trials for removal. These trials should only be removed
 %because the run was aborted or the participant was asleep
-if contains(subj_file, 'subj005')
+if contains(subj_file, 'subj005') 
     trials_to_remove = 661:661+52; 
+elseif contains(subj_file, 'sub-01')
+    trials_to_remove = 881; %Aborted run
 else
     trials_to_remove = []; 
 end 

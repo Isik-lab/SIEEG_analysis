@@ -9,10 +9,10 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 pd.set_option('mode.chained_assignment',  None)
 
-subj = 'subj014'
+subj = 'sub-01'
 top_path = '/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data'
-in_path = f'{top_path}/raw/SIdyads_trials_pilot'
-out_path = f'{top_path}/interim/SIdyads_eyetracking_pilot'
+in_path = f'{top_path}/raw/SIdyads_trials'
+out_path = f'{top_path}/interim/SIdyads_eyetracking'
 Path(f'{in_path}/{subj}/asc').mkdir(exist_ok=True, parents=True)
 Path(out_path).mkdir(exist_ok=True, parents=True)
 

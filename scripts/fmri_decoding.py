@@ -2,17 +2,15 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import temporal, decoding, plotting
+from src import plotting
 import os
-from src.mri import Benchmark
-import torch
 
 
 class fMRIDecoding:
     def __init__(self, args):
         self.process = 'fMRIDecoding'
         if 'u' not in args.sid:
-            self.sid = f'subj{str(int(args.sid)).zfill(3)}'
+            self.sid = f'sub-{str(int(args.sid)).zfill(2)}'
         else:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze
@@ -26,8 +24,13 @@ class fMRIDecoding:
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
-        print(f'cuda is available {torch.cuda.is_available()}')
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if not os.path.exists(self.out_file) or self.overwrite: 
+            print('computations performed on gpu')
+            from src import temporal, decoding
+            from src.mri import Benchmark
+            import torch
+            print(f'cuda is available {torch.cuda.is_available()}')
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
     def load_eeg(self):
@@ -61,6 +64,8 @@ class fMRIDecoding:
     def run(self):
         if os.path.exists(self.out_file) and not self.overwrite: 
             results = pd.read_pickle(self.out_file)
+            cat_type = pd.CategoricalDtype(categories=self.rois, ordered=True)
+            results['roi_name'] = results['roi_name'].astype(cat_type)
         else:
             print('loading data...')
             df = self.load_eeg()
@@ -73,12 +78,17 @@ class fMRIDecoding:
             results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_pickle(self.out_file)
             print('Finished!')
+        if 'p' not in results.columns:
+            from src.stats import calculate_p
+            results['p'] = results.apply(lambda row: calculate_p(row['score_null'],
+                                                                  row['score'], n_perm_=5000,
+                                                                    H0_='greater'), axis=1)
         plotting.plot_eeg_fmri_decoding(results, self.rois,
                                         out_file=self.out_figure)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=str, default='1')
+    parser.add_argument('--sid', type=str, default='11')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,

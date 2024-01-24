@@ -10,7 +10,7 @@ class GazeDecoding:
     def __init__(self, args):
         self.process = 'GazeDecoding'
         if 'u' not in args.sid:
-            self.sid = f'subj{str(int(args.sid)).zfill(3)}'
+            self.sid = f'sub-{str(int(args.sid)).zfill(2)}'
         else:
             self.sid = args.sid
         print(vars(self))
