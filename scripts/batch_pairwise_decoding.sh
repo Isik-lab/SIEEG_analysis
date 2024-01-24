@@ -3,7 +3,7 @@
 #SBATCH
 #SBATCH --job-name=pairwise-decoding
 #SBATCH --time=30:00
-#SBATCH --partition=defq
+#SBATCH --partition=shared
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mail-type=end
