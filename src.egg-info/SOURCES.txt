@@ -13,6 +13,10 @@ notebooks/.ipynb_checkpoints/RSA-checkpoint.ipynb
 notebooks/.ipynb_checkpoints/cv-checkpoint.py
 notebooks/.ipynb_checkpoints/reorganize_data-checkpoint.ipynb
 notebooks/__pycache__/cv.cpython-310.pyc
+reports/.DS_Store
+reports/figures/.DS_Store
+reports/figures/Reliability/.DS_Store
+reports/figures/Reliability/sub-01_stimulus-set-test_reg-gaze-False_reliability.png
 scripts/.DS_Store
 scripts/batch_fmri_decoding.sh
 scripts/batch_fmri_rsa.sh
