@@ -45,7 +45,7 @@ class Reliability:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=str, default='1')
+    parser.add_argument('--sid', type=str, default='3')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--stimulus_set', type=str, default='test')
     parser.add_argument('--data_dir', '-data', type=str,

@@ -105,7 +105,7 @@ class PreprocessData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=1)
+    parser.add_argument('--sid', type=int, default=3)
     parser.add_argument('--resample_rate', type=str, default='4ms')
     parser.add_argument('--start_time', type=float, default=-0.2)
     parser.add_argument('--end_time', type=float, default=1)
