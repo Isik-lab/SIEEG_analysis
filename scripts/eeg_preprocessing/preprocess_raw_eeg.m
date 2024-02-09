@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG/';
 out_path = '../../data/interim/SIdyads_EEG/';
-subj_file = 'sub-05';
+subj_file = 'sub-10';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
@@ -26,7 +26,7 @@ elseif contains(subj_file, 'subj002')
     down = 0;
 end
 
-%Mark trials for removal. These trials should only be removed
+%Mark trials for removal. These trials shshould only be removed
 %because the run was aborted or the participant was asleep
 if contains(subj_file, 'subj005') 
     trials_to_remove = 661:661+52; 
