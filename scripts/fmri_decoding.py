@@ -78,13 +78,6 @@ class fMRIDecoding:
             results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_pickle(self.out_file)
             print('Finished!')
-        if 'p' not in results.columns:
-            from src.stats import calculate_p
-            results['p'] = results.apply(lambda row: calculate_p(row['score_null'],
-                                                                  row['score'], n_perm_=5000,
-                                                                    H0_='greater'), axis=1)
-        plotting.plot_eeg_fmri_decoding(results, self.rois,
-                                        out_file=self.out_figure)
 
 def main():
     parser = argparse.ArgumentParser()

@@ -1,4 +1,4 @@
-#/Applications/anaconda3/envs/nibabel/bin/python
+#/home/emcmaho7/.conda/envs/eeg/bin/python
 from pathlib import Path
 import argparse
 import pandas as pd
@@ -21,7 +21,7 @@ class FeatureDecoding:
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
-        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.csv'
+        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
         self.features = ['alexnet', 'moten',
                          'indoor', 'expanse', 'object_directedness', 
                          'agent_distance', 'facingness',
@@ -35,7 +35,9 @@ class FeatureDecoding:
         self.channels = None
 
     def load_eeg(self):
-        df_ = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
+        eeg_data_file = f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz'
+        print(f'{eeg_data_file=}')
+        df_ = pd.read_csv(eeg_data_file)
         self.channels = [col for col in df_.columns if 'channel' in col]
         return df_
     
@@ -56,23 +58,6 @@ class FeatureDecoding:
         df_ = pd.read_csv(f'{self.data_dir}/interim/FeatureRDMs/feature_annotations.csv')
         features_ = df_.set_index('video_name').columns.to_list()
         return self.assign_stimulus_set(df_), features_
-
-    def average_results(self, results_):
-        out = None
-        for value in ['r', 'p']:
-            temp = results_.pivot(index='time', columns='feature', values=value)
-            cur = temp[self.annotated_features].reset_index()
-            for feature in self.computed_features:
-                cols = [col for col in temp.columns if feature in col]
-                cur[feature] = temp[cols].to_numpy().mean(axis=1)
-            cur = pd.melt(cur, id_vars='time', value_vars=self.features, value_name=value)
-            cat_type = pd.CategoricalDtype(categories=self.features, ordered=True)
-            cur['feature'] = cur.feature.astype(cat_type)
-            if out is None:
-                out = cur
-            else:
-                out = out.merge(cur, on=['time', 'feature'])
-        return out
     
     def run(self):
         results = None
@@ -88,13 +73,12 @@ class FeatureDecoding:
             if 'train' in df_avg['stimulus_set'].unique():
                 results = decoding.eeg_feature_decoding(df_avg, feature_df,
                                                         predicting_features, self.channels)
-                results = self.average_results(results)
-                results.to_csv(self.out_file, index=False)
+                print(f'{results.head()=}')
+                print(f'{results.iloc[0]['r_null'].shape=}')
+                print(f'{results.iloc[0]['r_var'].shape=}')
+                results.to_pickle(self.out_file)
             else:
                 print('encoding not performed, no training set')
-
-        if results is not None: 
-            plotting.plot_eeg_feature_decoding(results, self.features, self.out_figure)
 
 
 def main():

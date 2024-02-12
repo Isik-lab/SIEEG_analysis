@@ -17,6 +17,17 @@ def correlation_scorer(y_true, y_pred):
 
 def eeg_feature_decoding(neural_df, feature_df,
                           features, channels):
+    """
+        inputs:
+            neural_df: pd.DataFrame of the EEG data in long format
+            feature_df: pd.DataFrame of videos by the annotated features
+            features: list of the features to predict in desired categorical order
+            channels: a list of channels present in the EEG data.
+                This can vary between participants depending on preprocessing. 
+        output:
+            results: pd.DataFrame containing the Ridge results for each feature at each time point
+
+    """
     # initialize pipe and kfold splitter
     scorer = make_scorer(correlation_scorer, greater_is_better=True)
     pipe = Pipeline([
@@ -34,17 +45,26 @@ def eeg_feature_decoding(neural_df, feature_df,
 
     iterator = tqdm(time_groups, desc='Time')
     for time, time_df in iterator:
+        # Split the data into train and test sets
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
         y = {'train': feature_df.loc[feature_df.stimulus_set == 'train', features].to_numpy(),
              'test': feature_df.loc[feature_df.stimulus_set == 'test', features].to_numpy()}
 
+        # Perform the regression
         pipe.fit(X['train'], y['train'])
-        rs, ps, _ = stats.perm(pipe.predict(X['test']), y['test'])
-        for feature, (r, p) in zip(features, zip(rs, ps)): 
-            results.append([time, feature, r, p])
+        y_hat = pipe.predict(X['test'])
 
-    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p'])
+        # Compute significance and variance
+        rs, ps, rs_null = stats.perm(y_hat, y['test'], verbose=False)
+        rs_var = stats.bootstrap(y_hat, y['test'], verbose=False)
+
+        # Append to the results
+        for feature, r, p, r_null, r_var in zip(features, rs, ps, rs_null.T, rs_var.T): 
+            results.append([time, feature, r, p, r_null, r_var])
+
+    # Turn list into dataframe with feature data as categorical
+    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p', 'r_null', 'r_var'])
     cat_type = pd.CategoricalDtype(categories=features, ordered=True)
     results['feature'] = results.feature.astype(cat_type)
     return results
