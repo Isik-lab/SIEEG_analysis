@@ -2,8 +2,10 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import plotting
+from src import plotting, temporal, decoding
+from src.mri import Benchmark
 import os
+import torch
 
 
 class fMRIDecoding:
@@ -22,15 +24,7 @@ class fMRIDecoding:
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
         self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
-        self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
-                     'PPA', 'pSTS', 'face-pSTS', 'aSTS']
-        if not os.path.exists(self.out_file) or self.overwrite: 
-            print('computations performed on gpu')
-            from src import temporal, decoding
-            from src.mri import Benchmark
-            import torch
-            print(f'cuda is available {torch.cuda.is_available()}')
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
     def load_eeg(self):
@@ -52,20 +46,16 @@ class fMRIDecoding:
         df_.loc[df_.video_name.isin(test_videos), 'stimulus_set'] = 'test'
         return df_
     
-    def preprocess_data(self, df, stimulus_data):
-        df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True).reset_index()
-        cols_to_drop = set(df_.columns.to_list()) - set(['time', 'video_name'] + self.channels)
-        df_.drop(columns=cols_to_drop, inplace=True)
-        df_ = df_.loc[df_.video_name.isin(stimulus_data.video_name)]
+    def preprocess_data(self, df):
+        df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True)
+        df_ = df_[self.channels].reset_index()
         df_.sort_values(['time', 'video_name'], inplace=True)
-        df_smoothed = temporal.smoothing(df_, self.channels, grouping='video_name')
+        df_smoothed = temporal.smoothing(df_, self.channels, grouping=['video_name'])
         return self.assign_stimulus_set(df_smoothed)
 
     def run(self):
         if os.path.exists(self.out_file) and not self.overwrite: 
-            results = pd.read_pickle(self.out_file)
-            cat_type = pd.CategoricalDtype(categories=self.rois, ordered=True)
-            results['roi_name'] = results['roi_name'].astype(cat_type)
+            print('encoding already completed for sub-01')
         else:
             print('loading data...')
             df = self.load_eeg()
@@ -75,7 +65,6 @@ class fMRIDecoding:
             print('beginning decoding...')
             results = decoding.eeg_fmri_decoding(df_avg, benchmark,
                                                   self.channels, self.device)
-            results = results.groupby(['time', 'roi_name']).mean().reset_index()
             results.to_pickle(self.out_file)
             print('Finished!')
 

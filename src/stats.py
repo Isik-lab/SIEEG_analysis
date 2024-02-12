@@ -219,6 +219,25 @@ def perm_gpu(a, b, n_perm=int(5e3), verbose=False):
     return r, r_null
 
 
+def bootstrap_gpu(a, b, n_perm=int(5e3), verbose=False):
+    import torch
+    g = torch.Generator()
+    r = corr2d_gpu(a, b)
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
+    r_null = torch.zeros((n_perm, a.shape[-1]))
+    for i in iterator:
+        g.manual_seed(i)
+        inds = torch.randint(a.shape[0], generator=g)
+        a_sample, b_sample = a[inds], b[inds]
+        r_null[i, :] = corr2d_gpu(a_sample, b_sample )
+    return r, r_null
+
+
 def compute_null_clusters(nulls, alpha=0.05, desc=None):
     """
         inputs:

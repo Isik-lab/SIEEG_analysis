@@ -69,7 +69,6 @@ def eeg_feature_decoding(neural_df, feature_df,
     results['feature'] = results.feature.astype(cat_type)
     return results
 
-
 def eeg_fmri_decoding(feature_map, benchmark,
                        channels, device,
                       verbose=True):
@@ -81,10 +80,10 @@ def eeg_fmri_decoding(feature_map, benchmark,
                             device=device, scale_X=True,)
     
     # get fmri in right format and then send to the gpu
-    train_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'train'].to_list()
-    test_idx = benchmark.stimulus_data.index[benchmark.stimulus_data['stimulus_set'] == 'test'].to_list()
-    y = {'train': benchmark.response_data.to_numpy().T[train_idx],
-            'test': benchmark.response_data.to_numpy().T[test_idx]}
+    train_response_data, _ = benchmark.filter_stimulus(stimulus_set='train')
+    test_response_data, _ = benchmark.filter_stimulus(stimulus_set='test')
+    y = {'train': train_response_data.to_numpy().T,
+         'test': test_response_data.to_numpy().T}
     y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
 
     results = []
@@ -102,15 +101,19 @@ def eeg_fmri_decoding(feature_map, benchmark,
         X = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in X.items()}
 
         pipe.fit(X['train'], y['train'])
-        scores, null_scores = stats.perm_gpu(pipe.predict(X['test']), y['test'])
+        y_hat = pipe.predict(X['test'])
+        rs, rs_null = stats.perm_gpu(y_hat, y['test'])
+        rs_var = stats.bootstrap_gpu(y_hat, y['test'])
 
-        for region in benchmark.metadata.roi_name.unique():
-            voxel_id = benchmark.metadata.loc[(benchmark.metadata.roi_name == region), 'voxel_id'].to_numpy()
-            results.append({'time': time, 
-                            'roi_name': region,
-                            'score': torch.mean(scores[voxel_id]).cpu().detach().numpy(),
-                            'score_null': torch.mean(null_scores[:, voxel_id], dim=1).cpu().detach().numpy(),
-                            'method': 'ridge'})
+        rs, rs_null = rs.cpu().detach().numpy(), rs_null.cpu().detach().numpy()
+        rs_var = rs_var.cpu().detach().numpy()
+        for (i, row), (r, r_null, r_var) in zip(benchmark.metadata.iterrows(), zip(rs, rs_null.T, rs_var.T)): 
+            row['r'] = r[i]
+            row['r_null'] = r_null[i]
+            row['r_var'] = r_var[i]
+            row['time'] = time
+            results.append(row)
+
     return pd.DataFrame(results)
 
 
