@@ -5,6 +5,8 @@ import numpy as np
 from tqdm import tqdm
 from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
+from scipy import ndimage
+
 
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
     rs_out = rs.copy()
