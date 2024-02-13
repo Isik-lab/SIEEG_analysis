@@ -1,7 +1,6 @@
 #!/bin/bash -l
 
 #SBATCH
-#SBATCH --job-name=glmsingle
 #SBATCH --time=30:00
 #SBATCH --partition=shared
 #SBATCH --account=lisik33

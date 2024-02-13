@@ -60,7 +60,7 @@ class fMRIDecoding:
             print('loading data...')
             df = self.load_eeg()
             benchmark = self.load_fmri()
-            df_avg = self.preprocess_data(df, benchmark.stimulus_data)
+            df_avg = self.preprocess_data(df)
 
             print('beginning decoding...')
             results = decoding.eeg_fmri_decoding(df_avg, benchmark,

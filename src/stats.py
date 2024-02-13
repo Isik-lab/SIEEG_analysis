@@ -232,7 +232,8 @@ def bootstrap_gpu(a, b, n_perm=int(5e3), verbose=False):
     r_null = torch.zeros((n_perm, a.shape[-1]))
     for i in iterator:
         g.manual_seed(i)
-        inds = torch.randint(a.shape[0], generator=g)
+        inds = torch.squeeze(torch.randint(high=a.shape[0], size=(a.shape[0],1), generator=g))
+        print(f'{inds=}')
         a_sample, b_sample = a[inds], b[inds]
         r_null[i, :] = corr2d_gpu(a_sample, b_sample )
     return r, r_null
