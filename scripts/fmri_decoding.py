@@ -20,10 +20,10 @@ class fMRIDecoding:
         print(vars(self))
         self.data_dir = args.data_dir
         self.figure_dir = args.figure_dir
-        Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
+        Path(f'{self.data_dir}/interim/{self.process}/{self.sid}').mkdir(parents=True, exist_ok=True)
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
-        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
-        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
+        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
+        self.out_file_prefix = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}'
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
@@ -54,19 +54,16 @@ class fMRIDecoding:
         return self.assign_stimulus_set(df_smoothed)
 
     def run(self):
-        if os.path.exists(self.out_file) and not self.overwrite: 
-            print('encoding already completed for sub-01')
-        else:
-            print('loading data...')
-            df = self.load_eeg()
-            benchmark = self.load_fmri()
-            df_avg = self.preprocess_data(df)
+        print('loading data...')
+        df = self.load_eeg()
+        benchmark = self.load_fmri()
+        df_avg = self.preprocess_data(df)
 
-            print('beginning decoding...')
-            results = decoding.eeg_fmri_decoding(df_avg, benchmark,
-                                                  self.channels, self.device)
-            results.to_pickle(self.out_file)
-            print('Finished!')
+        print('beginning decoding...')
+        decoding.eeg_fmri_decoding(df_avg, benchmark,
+                                    self.channels, self.device,
+                                    self.out_file_prefix)
+        print('Finished!')
 
 def main():
     parser = argparse.ArgumentParser()

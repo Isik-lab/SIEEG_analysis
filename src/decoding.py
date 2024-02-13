@@ -70,7 +70,7 @@ def eeg_feature_decoding(neural_df, feature_df,
     return results
 
 def eeg_fmri_decoding(feature_map, benchmark,
-                       channels, device,
+                       channels, device, out_file_prefix,
                       verbose=True):
     from deepjuice.alignment import TorchRidgeGCV
 
@@ -86,7 +86,6 @@ def eeg_fmri_decoding(feature_map, benchmark,
          'test': test_response_data.to_numpy().T}
     y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
 
-    results = []
     time_groups = feature_map.groupby('time')
 
     if verbose:
@@ -94,7 +93,6 @@ def eeg_fmri_decoding(feature_map, benchmark,
     else:
         time_iterator = time_groups
 
-    results = []
     for time, time_df in time_iterator:
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
@@ -105,16 +103,27 @@ def eeg_fmri_decoding(feature_map, benchmark,
         rs, rs_null = stats.perm_gpu(y_hat, y['test'])
         rs_var = stats.bootstrap_gpu(y_hat, y['test'])
 
-        rs, rs_null = rs.cpu().detach().numpy(), rs_null.cpu().detach().numpy()
-        rs_var = rs_var.cpu().detach().numpy()
-        for (i, row), (r, r_null, r_var) in zip(benchmark.metadata.iterrows(), zip(rs, rs_null.T, rs_var.T)): 
-            row['r'] = r[i]
-            row['r_null'] = r_null[i]
-            row['r_var'] = r_var[i]
+        # move from torch to numpy
+        rs_cpu = rs.cpu().detach().numpy()
+        rs_null_cpu = rs_null.cpu().detach().numpy().T
+        rs_var_cpu = rs_var.cpu().detach().numpy().T
+
+        # free up gpu memory
+        del rs, rs_null, rs_var, X
+        torch.cuda.empty_cache()
+
+        # put the results in a data frame
+        results = []
+        for (i, row), (r, r_null, r_var) in zip(benchmark.metadata.iterrows(),
+                                                zip(rs_cpu, rs_null_cpu, rs_var_cpu)): 
+            print(f'{r_null.shape}')
+            row['r'] = r
+            row['r_null'] = r_null
+            row['r_var'] = r_var
             row['time'] = time
             results.append(row)
-
-    return pd.DataFrame(results)
+        results = pd.DataFrame(results)
+        results.to_pickle(f'{out_file_prefix}_time-{time}_decoding.pkl.gz')
 
 
 def gaze_feature_decoding(X, feature_df, features):
