@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH
-#SBATCH --time=30:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=shared
 #SBATCH --account=lisik33
 #SBATCH --nodes=1
@@ -14,6 +14,4 @@ echo "subj: $subj"
 ml anaconda
 conda activate eeg
 
-python feature_decoding.py --sid $subj \
- --data_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data \
- --figure_dir /home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures
+python feature_decoding.py --sid $subj 

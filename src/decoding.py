@@ -9,7 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from sklearn.metrics import make_scorer
 import torch 
-
+from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import SelectKBest, f_regression
 
 def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
@@ -32,42 +33,55 @@ def eeg_feature_decoding(neural_df, feature_df,
     scorer = make_scorer(correlation_scorer, greater_is_better=True)
     pipe = Pipeline([
         ('scale', StandardScaler()),
-        ('rcv', RidgeCV(
+        ('select', SelectKBest(score_func=f_regression)),
+        ('ridge', RidgeCV(
             fit_intercept=False,
             alphas=[10.**power for power in np.arange(-5, 2)],
-            alpha_per_target=True,
             scoring=scorer
         ))
     ])
+    # Set up the grid search with cross-validation
+    param_grid = {'select__k': np.arange(1, len(channels) + 1)}
+    grid_search = GridSearchCV(pipe, param_grid, scoring=scorer, cv=4, n_jobs=-1)
 
     results = []
     time_groups = neural_df.groupby('time')
-
-    iterator = tqdm(time_groups, desc='Time')
-    for time, time_df in iterator:
+    for time, time_df in tqdm(time_groups, desc='Time'):
         # Split the data into train and test sets
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
-        y = {'train': feature_df.loc[feature_df.stimulus_set == 'train', features].to_numpy(),
-             'test': feature_df.loc[feature_df.stimulus_set == 'test', features].to_numpy()}
 
-        # Perform the regression
-        pipe.fit(X['train'], y['train'])
-        y_hat = pipe.predict(X['test'])
+        for feature in features: 
+            y = {'train': feature_df.loc[feature_df.stimulus_set == 'train', feature].to_numpy(),
+                'test': feature_df.loc[feature_df.stimulus_set == 'test', feature].to_numpy()}
 
-        # Compute significance and variance
-        rs, ps, rs_null = stats.perm(y_hat, y['test'], verbose=False)
-        rs_var = stats.bootstrap(y_hat, y['test'], verbose=False)
+            # Fit the grid search to the data
+            grid_search.fit(X['train'], y['train'])
 
-        # Append to the results
-        for feature, r, p, r_null, r_var in zip(features, rs, ps, rs_null.T, rs_var.T): 
-            results.append([time, feature, r, p, r_null, r_var])
+            # Evaluate the best model found on the test set
+            best_model = grid_search.best_estimator_
+            y_hat = best_model.predict(X['test'])
+
+            # save the best channels and number of channels
+            channel_indices = np.where(best_model.named_steps['select'].get_support())[0]
+            best_channels = np.array(channels)[channel_indices]
+            best_k = grid_search.best_params_['select__k']
+
+            # Compute significance and variance
+            r, p, r_null = stats.perm(y_hat, y['test'], verbose=False, square=False)
+            r_var = stats.bootstrap(y_hat, y['test'], verbose=False, square=False)
+
+            # append to results
+            results.append([time, feature, r, p, 
+                            r_null.squeeze(), r_var.squeeze(), 
+                            best_k, best_channels])
 
     # Turn list into dataframe with feature data as categorical
-    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p', 'r_null', 'r_var'])
+    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p', 'r_null', 'r_var', 'best_k', 'best_channels'])
     cat_type = pd.CategoricalDtype(categories=features, ordered=True)
     results['feature'] = results.feature.astype(cat_type)
     return results
+
 
 def eeg_fmri_decoding(feature_map, benchmark,
                        channels, device, out_file_prefix,
