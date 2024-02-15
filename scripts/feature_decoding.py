@@ -62,9 +62,7 @@ class FeatureDecoding:
     def run(self):
         results = None
         if os.path.exists(self.out_file) and not self.overwrite: 
-            results = pd.read_csv(self.out_file)
-            cat_type = pd.CategoricalDtype(categories=self.features, ordered=True)
-            results['feature'] = results.feature.astype(cat_type)
+            print('Data already saved. Run --overwrite to compute again.')
         else:
             df = self.load_eeg()
             feature_df, predicting_features = self.load_features()
@@ -79,13 +77,13 @@ class FeatureDecoding:
                 results.to_pickle(self.out_file)
             else:
                 print('encoding not performed, no training set')
-
+        print('Finished')
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--top_dir', '-t', type=str,
                          default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis')
     args = parser.parse_args()

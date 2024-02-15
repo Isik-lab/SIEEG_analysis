@@ -14,4 +14,4 @@ echo "subj: $subj"
 ml anaconda
 conda activate eeg
 
-python feature_decoding.py --sid $subj 
+python feature_decoding.py --sid $subj --overwrite
