@@ -15,13 +15,11 @@ class FeatureDecoding:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze
         self.overwrite = args.overwrite
+        self.channel_selection = args.channel_selection
         print(vars(self))
         self.data_dir = f'{args.top_dir}/data'
-        self.figure_dir =f'{args.top_dir}/reports/'
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
-        Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
-        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
-        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.pkl'
+        self.out_file = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}_channel-selection-{self.regress_gaze}_decoding.pkl'
         self.features = ['alexnet', 'moten',
                          'indoor', 'expanse', 'object_directedness', 
                          'agent_distance', 'facingness',
@@ -68,15 +66,18 @@ class FeatureDecoding:
             feature_df, predicting_features = self.load_features()
             df_avg = self.preprocess_data(df)
 
-            if 'train' in df_avg['stimulus_set'].unique():
+            if self.channel_selection:
+                results = decoding.eeg_channel_selection_feature_decoding(
+                                                                          df_avg, feature_df,
+                                                                          predicting_features, self.channels
+                                                                         )
+            else:
                 results = decoding.eeg_feature_decoding(df_avg, feature_df,
                                                         predicting_features, self.channels)
-                print(f'{results.head()=}')
-                print(f'{results.iloc[0]["r_null"].shape=}')
-                print(f'{results.iloc[0]["r_var"].shape=}')
-                results.to_pickle(self.out_file)
-            else:
-                print('encoding not performed, no training set')
+            print(f'{results.head()=}')
+            print(f'{results.iloc[0]["r_null"].shape=}')
+            print(f'{results.iloc[0]["r_var"].shape=}')
+            results.to_pickle(self.out_file)
         print('Finished')
 
 def main():
@@ -84,6 +85,7 @@ def main():
     parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--channel_selection', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--top_dir', '-t', type=str,
                          default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis')
     args = parser.parse_args()
