@@ -4,7 +4,7 @@ addpath progressbar/
 
 input_path = '../../data/raw/SIdyads_EEG/';
 out_path = '../../data/interim/SIdyads_EEG/';
-subj_file = 'sub-18';
+subj_file = 'sub-21';
 hdrfile = [input_path, subj_file, '/', [subj_file, '.vhdr']];
 eegfile = [input_path, subj_file, '/', [subj_file, '.eeg']];
 
