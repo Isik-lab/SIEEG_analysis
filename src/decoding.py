@@ -2,7 +2,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from src import stats
-
+import gc
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -11,6 +11,7 @@ from sklearn.metrics import make_scorer
 import torch 
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
+from deepjuice.alignment import TorchRidgeGCV
 
 
 def correlation_scorer(y_true, y_pred):
@@ -141,13 +142,12 @@ def eeg_channel_selection_feature_decoding(neural_df, feature_df,
 def eeg_fmri_decoding(feature_map, benchmark, sid, 
                       channels, device, out_file_prefix,
                       verbose=True, scale_y=True,
-                      save_whole_brain=False):
-    from deepjuice.alignment import TorchRidgeGCV
+                      save_whole_brain=False,
+                      alphas=[10.**power for power in np.arange(-5, 2)]):
 
     # initialize pipe and kfold splitter
-    alphas = [10.**power for power in np.arange(-5, 2)]
     pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
-                            device=device, scale_X=True,)
+                         device=device)
     
     # get fmri in right format and then send to the gpu
     y = {'train': torch.from_numpy(benchmark.response_data.to_numpy().T[50:]).to(torch.float32).to(device)} 
@@ -204,6 +204,8 @@ def eeg_fmri_decoding(feature_map, benchmark, sid,
 
         # free up gpu memory
         del rs, rs_null, rs_var, X
+        del pipe
+        gc.collect()
         torch.cuda.empty_cache()
     pd.DataFrame(roi_results).to_pickle(f'{out_file_prefix}_roi-decoding.pkl.gz')
 

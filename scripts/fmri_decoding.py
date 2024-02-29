@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import plotting, temporal, decoding
+from src import plotting, temporal#, decoding
 from src.mri import Benchmark
 import os
 import torch
@@ -58,6 +58,7 @@ class fMRIDecoding:
     def preprocess_data(self, df):
         df_ = df.groupby(['time', 'video_name']).mean(numeric_only=True)
         df_ = df_[self.channels].reset_index()
+        print(df_.head())
         df_.sort_values(['time', 'video_name'], inplace=True)
         df_smoothed = temporal.smoothing(df_, self.channels, grouping=['video_name'])
         return self.assign_stimulus_set(df_smoothed)
@@ -65,21 +66,21 @@ class fMRIDecoding:
     def run(self):
         print('loading data...')
         df = self.load_eeg()
-        benchmark = self.load_fmri()
-        benchmark.sort_stimulus_values(col='stimulus_set')
+        # benchmark = self.load_fmri()
+        # benchmark.sort_stimulus_values(col=['stimulus_set','video_name'])
         df_avg = self.preprocess_data(df)
 
-        # Filter so that stimuli in EEG and benchmark class are the same
-        # Print sizes when done 
-        check_videos(df_avg, benchmark)
-        print(f'{df_avg.loc[df_avg.time == 0].shape=}')
-        print(f'{benchmark.stimulus_data.shape=}')
+        # # Filter so that stimuli in EEG and benchmark class are the same
+        # # Print sizes when done 
+        # check_videos(df_avg, benchmark)
+        # print(f'{df_avg.loc[df_avg.time == 0].shape=}')
+        # print(f'{benchmark.stimulus_data.shape=}')
 
-        print('beginning decoding...')
-        decoding.eeg_fmri_decoding(df_avg, benchmark, self.sid, 
-                                    self.channels, self.device,
-                                    self.out_file_prefix,
-                                    save_whole_brain=self.save_whole_brain)
+        # print('beginning decoding...')
+        # decoding.eeg_fmri_decoding(df_avg, benchmark, self.sid, 
+        #                             self.channels, self.device,
+        #                             self.out_file_prefix,
+        #                             save_whole_brain=self.save_whole_brain)
         print('Finished!')
 
 def main():
