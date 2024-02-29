@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH
-#SBATCH --time=10:00
+#SBATCH --time=20:00
 #SBATCH --partition=shared
 #SBATCH --account=lisik33
 #SBATCH --nodes=1
@@ -14,4 +14,4 @@ echo "subj: $subj"
 ml anaconda
 conda activate eeg
 
-python feature_decoding.py --sid $subj --overwrite
+python fmri_whole_brain.py --top_dir
