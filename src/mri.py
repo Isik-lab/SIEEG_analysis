@@ -17,20 +17,9 @@ def gen_mask(files, rel_mask=None):
     else:
         return roi_mask.astype('bool')
 
-def filter_stimulus(self, stimulus_set='train', inplace=False):
-    if inplace:
-        self.stimulus_data = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
-        stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
-        self.response_data = self.response_data[stim_idx]
-    else:
-        stimulus_data = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
-        stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
-        return stimulus_data, self.response_data[stim_idx]
-
-
 
 class Benchmark:
-    def __init__(self, metadata, stimulus_data, response_data):
+    def __init__(self, metadata=None, stimulus_data=None, response_data=None):
         if type(metadata) is str:
             self.metadata = pd.read_csv(metadata)
         else:
@@ -47,10 +36,10 @@ class Benchmark:
             self.response_data = response_data
 
     def add_stimulus_path(self, data_dir, extension='png'):
-        self.stimulus_data['stimulus_path'] = data_dir + self.stimulus_data.video_name
         if extension != 'mp4': 
-            self.stimulus_data['stimulus_path'] = self.stimulus_data.video_name.str.replace('mp4', 'png')
-        print(self.stimulus_data.head())
+            self.stimulus_data['stimulus_path'] = data_dir + self.stimulus_data.video_name.str.replace('mp4', 'png')
+        else:
+            self.stimulus_data['stimulus_path'] = data_dir + self.stimulus_data.video_name
 
     def filter_rois(self, rois='none'):
         if rois != 'none':
@@ -82,16 +71,21 @@ class Benchmark:
         self.stimulus_data.drop(columns='index', inplace=True)
         self.response_data = self.response_data.iloc[voxel_id]
 
-    def filter_stimulus(self, stimulus_set='train', inplace=False):
-        if inplace: 
-            self.stimulus_data = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
-            stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
-            self.stimulus_data.drop(columns='index', inplace=True)
+    def filter_stimulus(self, stimulus_set='train', col='stimulus_set'):
+        if type(stimulus_set) == str: 
+            stimulus_set = [stimulus_set]
+        self.stimulus_data = self.stimulus_data[self.stimulus_data[col].isin(stimulus_set)].reset_index()
+        stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
+        self.stimulus_data.drop(columns='index', inplace=True)
+        if self.response_data is not None:
             self.response_data = self.response_data[stim_idx]
-        else:
-            stimulus_data_out = self.stimulus_data[self.stimulus_data['stimulus_set'] == stimulus_set].reset_index()
-            stim_idx = list(stimulus_data_out['index'].to_numpy().astype('str'))
-        return self.response_data[stim_idx], stimulus_data_out.drop(columns='index', inplace=True)
+
+    def sort_stimulus_values(self, col='stimulus_set'):
+        self.stimulus_data = self.stimulus_data.sort_values(by=col).reset_index()
+        stim_idx = list(self.stimulus_data['index'].to_numpy().astype('str'))
+        self.stimulus_data.drop(columns='index', inplace=True)
+        if self.response_data is not None: 
+            self.response_data = self.response_data[stim_idx].reset_index(drop=True)
 
     def update(self, iterable):
         """

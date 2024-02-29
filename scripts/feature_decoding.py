@@ -6,6 +6,16 @@ from src import temporal, plotting, decoding
 import os
 
 
+def check_videos(df_, feature_df_):
+    """
+        Filter the videos in the feature DataFrame based on those that are present in the EEG data. 
+        Data may be missing from a particular video following data cleaning. 
+    """
+    eeg_videos = df_.video_name.unique()
+    filtered_features = feature_df_[feature_df_['video_name'].isin(eeg_videos)].reset_index(drop=True)
+    return filtered_features
+
+
 class FeatureDecoding:
     def __init__(self, args):
         self.process = 'FeatureDecoding'
@@ -65,6 +75,9 @@ class FeatureDecoding:
             df = self.load_eeg()
             feature_df, predicting_features = self.load_features()
             df_avg = self.preprocess_data(df)
+            feature_df = check_videos(df_avg, feature_df)
+            print(f'{len(feature_df.video_name.unique())=}')
+            print(f'{len(df_avg.video_name.unique())=}')
 
             if self.channel_selection:
                 results = decoding.eeg_channel_selection_feature_decoding(

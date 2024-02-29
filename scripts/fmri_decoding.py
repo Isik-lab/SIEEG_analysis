@@ -8,6 +8,15 @@ import os
 import torch
 
 
+def check_videos(df_, benchmark):
+    """
+        Filter the videos in the benchmark class based on those that are present in the EEG data. 
+        Data may be missing from a particular video following data cleaning. 
+    """
+    eeg_videos = df_.video_name.unique()
+    benchmark.filter_stimulus(stimulus_set=eeg_videos, col='video_name')
+
+
 class fMRIDecoding:
     def __init__(self, args):
         self.process = 'fMRIDecoding'
@@ -17,14 +26,14 @@ class fMRIDecoding:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze
         self.overwrite = args.overwrite
+        self.save_whole_brain = args.save_whole_brain
+        self.device = 'cuda:0'
         print(vars(self))
         self.data_dir = args.data_dir
         self.figure_dir = args.figure_dir
-        Path(f'{self.data_dir}/interim/{self.process}/{self.sid}').mkdir(parents=True, exist_ok=True)
+        Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
-        self.out_figure = f'{self.figure_dir}/{self.process}/{self.sid}/{self.sid}_reg-gaze-{self.regress_gaze}_decoding.png'
         self.out_file_prefix = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}'
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.channels = None
 
     def load_eeg(self):
@@ -57,23 +66,32 @@ class fMRIDecoding:
         print('loading data...')
         df = self.load_eeg()
         benchmark = self.load_fmri()
+        benchmark.sort_stimulus_values(col='stimulus_set')
         df_avg = self.preprocess_data(df)
 
+        # Filter so that stimuli in EEG and benchmark class are the same
+        # Print sizes when done 
+        check_videos(df_avg, benchmark)
+        print(f'{df_avg.loc[df_avg.time == 0].shape=}')
+        print(f'{benchmark.stimulus_data.shape=}')
+
         print('beginning decoding...')
-        decoding.eeg_fmri_decoding(df_avg, benchmark,
+        decoding.eeg_fmri_decoding(df_avg, benchmark, self.sid, 
                                     self.channels, self.device,
-                                    self.out_file_prefix)
+                                    self.out_file_prefix,
+                                    save_whole_brain=self.save_whole_brain)
         print('Finished!')
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=str, default='11')
+    parser.add_argument('--sid', type=str, default='1')
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--save_whole_brain', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
-                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
+                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
     parser.add_argument('--figure_dir', '-figure', type=str,
-                        default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/reports/figures')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures')
     args = parser.parse_args()
     fMRIDecoding(args).run()
 

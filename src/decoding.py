@@ -12,8 +12,15 @@ import torch
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
 
+
 def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
+
+
+def feature_scaler(train, test):
+    mean_ = torch.mean(train)
+    std_ = torch.std(train)
+    return (train-mean_)/std_, (test-mean_)/std_
 
 
 def eeg_feature_decoding(neural_df, feature_df,
@@ -131,9 +138,10 @@ def eeg_channel_selection_feature_decoding(neural_df, feature_df,
     return results
 
 
-def eeg_fmri_decoding(feature_map, benchmark,
-                       channels, device, out_file_prefix,
-                      verbose=True):
+def eeg_fmri_decoding(feature_map, benchmark, sid, 
+                      channels, device, out_file_prefix,
+                      verbose=True, scale_y=True,
+                      save_whole_brain=False):
     from deepjuice.alignment import TorchRidgeGCV
 
     # initialize pipe and kfold splitter
@@ -142,50 +150,62 @@ def eeg_fmri_decoding(feature_map, benchmark,
                             device=device, scale_X=True,)
     
     # get fmri in right format and then send to the gpu
-    train_response_data, _ = benchmark.filter_stimulus(stimulus_set='train')
-    test_response_data, _ = benchmark.filter_stimulus(stimulus_set='test')
-    y = {'train': train_response_data.to_numpy().T,
-         'test': test_response_data.to_numpy().T}
-    y = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in y.items()}
+    y = {'train': torch.from_numpy(benchmark.response_data.to_numpy().T[50:]).to(torch.float32).to(device)} 
+    y['test'] = torch.from_numpy(benchmark.response_data.to_numpy().T[:50]).to(torch.float32).to(device)
+    if scale_y: 
+        y['train'], y['test'] = feature_scaler(y['train'], y['test'])
 
+    # loop through time points
+    roi_results = []
     time_groups = feature_map.groupby('time')
-
     if verbose:
         time_iterator = tqdm(time_groups, desc='Time')
     else:
         time_iterator = time_groups
-
-    for time, time_df in time_iterator:
+    for i, (time, time_df) in enumerate(time_iterator):
+        time_ind = str(i).zfill(3)
         X = {'train': time_df.loc[time_df.stimulus_set == 'train', channels].to_numpy(),
              'test': time_df.loc[time_df.stimulus_set == 'test', channels].to_numpy()}
         X = {key: torch.from_numpy(val).to(torch.float32).to(device) for key, val in X.items()}
+        X['train'], X['test'] = feature_scaler(X['train'], X['test'])
 
         pipe.fit(X['train'], y['train'])
         y_hat = pipe.predict(X['test'])
-        rs, rs_null = stats.perm_gpu(y_hat, y['test'])
-        rs_var = stats.bootstrap_gpu(y_hat, y['test'])
+        rs = stats.corr2d_gpu(y_hat, y['test']).cpu().detach().numpy()
+        
+        if save_whole_brain: 
+            # Put the results in each voxel in a dataframe
+            whole_brain_results = benchmark.metadata.copy()
+            whole_brain_results['time'] = time
+            whole_brain_results['eeg_sid'] = sid
+            whole_brain_results['r'] = rs
+            pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_whole-brain-decoding.csv.gz', index=False)
 
-        # move from torch to numpy
-        rs_cpu = rs.cpu().detach().numpy()
-        rs_null_cpu = rs_null.cpu().detach().numpy().T
-        rs_var_cpu = rs_var.cpu().detach().numpy().T
+        # Get the roi names
+        rois = benchmark.metadata.roi_name.unique()
+        rois = list(rois[rois != 'none'])
+
+        # filter the data to only the voxels in the rois
+        metadata_filtered = benchmark.metadata.loc[benchmark.metadata.roi_name.isin(rois)].reset_index()
+        voxel_ids = metadata_filtered['voxel_id'].tolist()
+        metadata_filtered.drop(columns='index', inplace=True)
+        y_hat_filtered = y_hat[:, voxel_ids]
+        y_test_filtered = y['test'][:, voxel_ids]
+        rs_filtered = rs[voxel_ids]
+
+        # compute the null and bootstrapped distributions in the filtered data
+        rs_null = stats.perm_gpu(y_hat_filtered, y_test_filtered).cpu().detach().numpy().T
+        rs_var = stats.bootstrap_gpu(y_hat_filtered, y_test_filtered).cpu().detach().numpy().T
+        for roi in rois: 
+            roi_ids = metadata_filtered.loc[metadata_filtered.roi_name == roi].reset_index()['index'].tolist()
+            roi_results.append({'roi': roi, 'r_null': rs_null[roi_ids].mean(axis=0),
+                                'r_var': rs_var[roi_ids].mean(axis=0), 'r': rs_filtered[roi_ids].mean(),
+                                'sid': sid, 'time': time})
 
         # free up gpu memory
         del rs, rs_null, rs_var, X
         torch.cuda.empty_cache()
-
-        # put the results in a data frame
-        results = []
-        for (i, row), (r, r_null, r_var) in zip(benchmark.metadata.iterrows(),
-                                                zip(rs_cpu, rs_null_cpu, rs_var_cpu)): 
-            print(f'{r_null.shape}')
-            row['r'] = r
-            row['r_null'] = r_null
-            row['r_var'] = r_var
-            row['time'] = time
-            results.append(row)
-        results = pd.DataFrame(results)
-        results.to_pickle(f'{out_file_prefix}_time-{time}_decoding.pkl.gz')
+    pd.DataFrame(roi_results).to_pickle(f'{out_file_prefix}_roi-decoding.pkl.gz')
 
 
 def gaze_feature_decoding(X, feature_df, features):
