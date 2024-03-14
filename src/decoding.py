@@ -140,84 +140,152 @@ def eeg_channel_selection_feature_decoding(neural_df, feature_df,
 
 
 def eeg_fmri_decoding(neural_df, benchmark, sid, 
-                      channels, device, out_file_prefix,
+                      channels, feature_categories,
+                      device, out_file_prefix,
                       verbose=True, scale_y=True,
                       save_whole_brain=False,
                       alphas=[10.**power for power in np.arange(-5, 2)]):
     
     # get fmri in right format and then send to the gpu
-    train_inds = benchmark.stimulus_data.loc[benchmark.stimulus_data.stimulus_set == 'train'].reset_index()['index']
-    test_inds = benchmark.stimulus_data.loc[benchmark.stimulus_data.stimulus_set == 'test'].reset_index()['index']
-    video_list = {'train': benchmark.stimulus_data.loc[train_inds, 'video_name'].tolist(),
-                  'test': benchmark.stimulus_data.loc[test_inds, 'video_name'].tolist()}
-    y = {'train': torch.from_numpy(benchmark.response_data.to_numpy().T[train_inds]).to(torch.float32).to(device),
-         'test': torch.from_numpy(benchmark.response_data.to_numpy().T[test_inds]).to(torch.float32).to(device)}
+    inds = {'train': benchmark.stimulus_data.loc[benchmark.stimulus_data.stimulus_set == 'train'].reset_index()['index'], 
+            'test': benchmark.stimulus_data.loc[benchmark.stimulus_data.stimulus_set == 'test'].reset_index()['index']}
+    video_list = {'train': benchmark.stimulus_data.loc[inds['train'], 'video_name'].tolist(),
+                  'test': benchmark.stimulus_data.loc[inds['test'], 'video_name'].tolist()}
+    y = {'train': torch.from_numpy(benchmark.response_data.to_numpy().T[inds['train']]).to(torch.float32).to(device),
+         'test': torch.from_numpy(benchmark.response_data.to_numpy().T[inds['test']]).to(torch.float32).to(device)}
     if scale_y: 
         y['train'], y['test'] = feature_scaler(y['train'], y['test'])
 
-    # loop through time points
-    roi_results = []
+    # get the voxel indices just belonging to ROIs
+    rois = benchmark.metadata.roi_name.unique() # Get the roi names
+    rois = list(rois[rois != 'none']) # Remove 'none' from the ROI list
+    metadata_filtered = benchmark.metadata.loc[benchmark.metadata.roi_name.isin(rois)].reset_index()
+    voxel_ids = metadata_filtered['index'].tolist()
+    metadata_filtered.drop(columns='index', inplace=True)
+    y_test_filtered = y['test'][:, voxel_ids] # filter y_test just to the reliable voxels
+
+    # loop through feature categories and time
+    out = []
     time_groups = neural_df.groupby('time')
     if verbose:
+        feature_iterator = tqdm(enumerate(feature_categories.items()), total=len(feature_categories), desc='Categories', leave=True)
         time_iterator = tqdm(time_groups, desc='Time')
     else:
+        feature_iterator = feature_categories
         time_iterator = time_groups
-    for i, (time, time_df) in enumerate(time_iterator):
-        # initialize pipe and kfold splitter
-        pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
-                            device=device)
-        time_ind = str(i).zfill(3)
 
-        # Devide EEG time point into train and test, organize by fMRI, 
-        # and send to the GPU
-        X = {}
+    # Feature category loop
+    for i_cat, (category, feature_list) in feature_iterator:
+        X = {'features': {}}
         for stim_set in ['train', 'test']: 
-            set_df = time_df.loc[time_df.stimulus_set == stim_set, channels+['video_name']]
-            set_df['video_name'] = pd.Categorical(set_df['video_name'], categories=video_list[stim_set], ordered=True)
-            set_df = set_df.sort_values(by='video_name').set_index('video_name')
-            X[stim_set] = torch.from_numpy(set_df.to_numpy()).to(torch.float32).to(device)
-        X['train'], X['test'] = feature_scaler(X['train'], X['test'])
+            arr = benchmark.stimulus_data.iloc[inds[stim_set]][feature_list].to_numpy()
+            X['features'][stim_set] = torch.from_numpy(arr).to(torch.float32).to(device)
+        X['features']['train'], X['features']['test'] = feature_scaler(X['features']['train'], X['features']['test'])
 
-        pipe.fit(X['train'], y['train'])
-        y_hat = pipe.predict(X['test'])
-        rs = stats.corr2d_gpu(y_hat, y['test']).cpu().detach().numpy()
+        # Compute the regression for the features
+        pipe = TorchRidgeGCV(alphas=alphas, alpha_per_target=True,
+                    device=device, scale_X=False)
+        pipe.fit(X['features']['train'], y['train'])
 
-        if save_whole_brain: 
-            # Put the results in each voxel in a dataframe
-            whole_brain_results = benchmark.metadata.copy()
-            whole_brain_results['time'] = time
-            whole_brain_results['eeg_sid'] = sid
-            whole_brain_results['r'] = rs
-            pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_whole-brain-decoding.csv.gz', index=False)
+        # Make the prediction and store in a dict 
+        y_hat = {'features': pipe.predict(X['features']['test'])}
 
-        # Get the roi names
-        rois = benchmark.metadata.roi_name.unique()
-        rois = list(rois[rois != 'none'])
+        # Score the prediction and store in a dict
+        statistics = {'r2': {}, 'r2_filtered': {}, 'r2_null': {}, 'r2_var': {}}
+        statistics['r2']['features'] = stats.corr2d_gpu(y_hat['features'], y['test']).cpu().detach().numpy() ** 2
+        statistics['r2_filtered']['features'] = statistics['r2']['features'][voxel_ids]
+        
+        # Time loop
+        for i_time, (time, time_df) in enumerate(time_iterator):
+            # initialize pipe and kfold splitter
+            time_ind = str(i_time).zfill(3)
 
-        # filter the data to only the voxels in the rois
-        metadata_filtered = benchmark.metadata.loc[benchmark.metadata.roi_name.isin(rois)].reset_index()
-        voxel_ids = metadata_filtered['index'].tolist()
-        metadata_filtered.drop(columns='index', inplace=True)
-        y_hat_filtered = y_hat[:, voxel_ids]
-        y_test_filtered = y['test'][:, voxel_ids]
-        rs_filtered = rs[voxel_ids]
+            # Devide EEG time point into train and test, organize by fMRI, and send to the GPU
+            X['eeg'] = {}
+            for stim_set in ['train', 'test']: 
+                set_df = time_df.loc[time_df.stimulus_set == stim_set, channels+['video_name']]
+                set_df['video_name'] = pd.Categorical(set_df['video_name'], categories=video_list[stim_set], ordered=True)
+                set_df = set_df.sort_values(by='video_name').set_index('video_name')
+                X['eeg'][stim_set] = torch.from_numpy(set_df.to_numpy()).to(torch.float32).to(device)
+            X['eeg']['train'], X['eeg']['test'] = feature_scaler(X['eeg']['train'], X['eeg']['test'])
 
-        # compute the null and bootstrapped distributions in the filtered data
-        rs_null = stats.perm_gpu(y_hat_filtered, y_test_filtered).cpu().detach().numpy().T
-        rs_var = stats.bootstrap_gpu(y_hat_filtered, y_test_filtered).cpu().detach().numpy().T
-        for fmri_sid in metadata_filtered.subj_id.unique(): 
-            for roi in rois: 
-                inds = metadata_filtered.loc[(metadata_filtered.roi_name == roi) & (metadata_filtered.subj_id == fmri_sid)].reset_index()['index'].tolist()
-                roi_results.append({'roi': roi, 'r_null': rs_null[inds].mean(axis=0),
-                                    'r_var': rs_var[inds].mean(axis=0), 'r': rs_filtered[inds].mean(),
-                                    'eeg_sid': sid, 'time': time, 'fmri_sid': fmri_sid})
+            # Create also the values for the combination of the EEG and feature data
+            X['full'] = {}
+            for stim_set in ['train', 'test']: 
+                X['full'][stim_set] = torch.cat([X['eeg'][stim_set], X['features'][stim_set]], dim=1)
+
+            # Fit the regression for EEG and full model
+            for regression_type in ['eeg', 'full']: 
+                pipe.fit(X[regression_type]['train'], y['train']) 
+                y_hat[regression_type] = pipe.predict(X[regression_type]['test'])
+                r2 = stats.corr2d_gpu(y_hat[regression_type], y['test']) ** 2
+                statistics['r2'][regression_type] = r2.cpu().detach().numpy()
+
+            # Calculate the shared variance between EEG, fMRI, and the features
+            statistics['r2']['shared'] = statistics['r2']['eeg'] + statistics['r2']['features'] - statistics['r2']['full']
+
+            if save_whole_brain and (time < .25) and (time > -.1):
+                # Put the results in each voxel in a dataframe
+                whole_brain_results = benchmark.metadata.copy()
+                whole_brain_results['time'] = time
+                whole_brain_results['eeg_sid'] = sid
+                whole_brain_results['feature_category'] = category
+                if i_cat == 0: 
+                    whole_brain_results['r2'] = statistics['r2']['eeg']
+                    pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_whole-brain-decoding.csv.gz', index=False)
+
+                whole_brain_results['r2'] = statistics['r2']['shared']
+                pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_category-{category}_whole-brain-decoding.csv.gz', index=False)
+
+            # perform the significance testing in the eeg data only on the first category loop
+            if i_cat == 0: 
+                statistics['r2_filtered']['eeg'] = statistics['r2']['eeg'][voxel_ids]
+                statistics['r2_null']['eeg'] = stats.perm_gpu(y_hat['eeg'][:, voxel_ids], y_test_filtered).cpu().detach().numpy().T
+                statistics['r2_var']['eeg'] = stats.bootstrap_gpu(y_hat['eeg'][:, voxel_ids], y_test_filtered).cpu().detach().numpy().T
+                for fmri_sid in metadata_filtered.subj_id.unique(): 
+                    for roi in rois: 
+                        bool_idx = (metadata_filtered.roi_name == roi) & (metadata_filtered.subj_id == fmri_sid)
+                        roi_inds = metadata_filtered.loc[bool_idx].reset_index()['index'].tolist()
+                        out.append({'roi': roi, 'regression_type': 'eeg', 'category': 'none',
+                                    'r2_null': statistics['r2_null']['eeg'][roi_inds].mean(axis=0),
+                                    'r2_var': statistics['r2_var']['eeg'][roi_inds].mean(axis=0),
+                                    'r2': statistics['r2_filtered']['eeg'][roi_inds].mean(),
+                                    'fmri_sid': fmri_sid, 'eeg_sid': sid, 'time': time})
+
+            # perform the significance testing for the shared variance
+            statistics['r2_filtered']['shared'] = statistics['r2']['shared'][voxel_ids]
+            statistics['r2_null']['shared'] = stats.perm_shared_variance_gpu(y_hat['eeg'][:, voxel_ids],
+                                                                             y_hat['features'][:, voxel_ids],
+                                                                             y_hat['full'][:, voxel_ids],
+                                                                             y_test_filtered).cpu().detach().numpy().T
+            statistics['r2_var']['shared'] = stats.bootstrap_shared_variance_gpu(y_hat['eeg'][:, voxel_ids],
+                                                                                 y_hat['features'][:, voxel_ids],
+                                                                                 y_hat['full'][:, voxel_ids],
+                                                                                 y_test_filtered).cpu().detach().numpy().T
+            for fmri_sid in metadata_filtered.subj_id.unique(): 
+                for roi in rois: 
+                    bool_idx = (metadata_filtered.roi_name == roi) & (metadata_filtered.subj_id == fmri_sid)
+                    roi_inds = metadata_filtered.loc[bool_idx].reset_index()['index'].tolist()
+                    out.append({'roi': roi, 'regression_type': 'shared', 'category': category,
+                                'r2_null': statistics['r2_null']['shared'][roi_inds].mean(axis=0),
+                                'r2_var': statistics['r2_var']['shared'][roi_inds].mean(axis=0),
+                                'r2': statistics['r2_filtered']['shared'][roi_inds].mean(),
+                                'fmri_sid': fmri_sid, 'eeg_sid': sid, 'time': time})
+
+            # free up gpu memory
+            del statistics['r2']['eeg'], statistics['r2']['full'], statistics['r2']['shared']
+            del statistics['r2_filtered']['shared'], statistics['r2_null']['shared'], statistics['r2_var']['shared']
+            del X['eeg'], X['full']
+            if i_cat == 0:
+                del statistics['r2_filtered']['eeg'], statistics['r2_null']['eeg'], statistics['r2_var']['eeg']
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # free up gpu memory
-        del rs, rs_null, rs_var, X
-        del pipe
+        del statistics, X, pipe
         gc.collect()
         torch.cuda.empty_cache()
-    pd.DataFrame(roi_results).to_pickle(f'{out_file_prefix}_roi-decoding.pkl.gz')
+    pd.DataFrame(out).to_pickle(f'{out_file_prefix}_roi-decoding.pkl.gz')
 
 
 def gaze_feature_decoding(X, feature_df, features):

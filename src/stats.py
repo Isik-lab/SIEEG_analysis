@@ -202,39 +202,99 @@ def corr2d_gpu(x, y):
     return numer / denom
 
 
-def perm_gpu(a, b, n_perm=int(5e3), verbose=False):
+def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
+    dim = y_hat.shape
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
     else:
         iterator = range(n_perm)
 
-    r_null = torch.zeros((n_perm, a.shape[-1]))
+    r_null = torch.zeros((n_perm, dim[-1]))
     for i in iterator:
-        g.manual_seed(i)
-        inds = torch.randperm(a.shape[0], generator=g)
-        a_shuffle = a[inds]
-        r_null[i, :] = corr2d_gpu(a_shuffle, b)
+        g.manual_seed(i) # Set the random seed
+
+        # Permute the indices
+        inds = torch.randperm(dim[0], generator=g)
+        
+        # Compute the correlation
+        r_null[i, :] = corr2d_gpu(y_hat, y_true[inds]) ** 2
     return r_null
 
 
-def bootstrap_gpu(a, b, n_perm=int(5e3), verbose=False):
+def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
+    dim = y_hat.shape
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
     else:
         iterator = range(n_perm)
 
-    r_var = torch.zeros((n_perm, a.shape[-1]))
+    r_var = torch.zeros((n_perm, dim[-1]))
     for i in iterator:
-        g.manual_seed(i)
-        inds = torch.squeeze(torch.randint(high=a.shape[0], size=(a.shape[0],1), generator=g))
-        a_sample, b_sample = a[inds], b[inds]
-        r_var[i, :] = corr2d_gpu(a_sample, b_sample)
+        g.manual_seed(i) # Set the random seed
+
+        # Generate a random sample of indices
+        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
+
+        # Compute the correlation
+        r_var[i, :] = corr2d_gpu(y_hat[inds], y_true[inds]) ** 2
+    return r_var
+
+
+def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
+                             n_perm=int(5e3), verbose=False):
+    import torch
+    g = torch.Generator()
+    dim = y_hat_a.shape
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
+    r_null = torch.zeros((n_perm, dim[-1]))
+    for i in iterator:
+        g.manual_seed(i) # Set the random seed
+
+        # Permute the indices
+        inds = torch.randperm(dim[0], generator=g)
+
+        # Compute the correlations
+        r2_a = corr2d_gpu(y_hat_a, y_true[inds])**2
+        r2_b = corr2d_gpu(y_hat_b, y_true[inds])**2
+        r2_ab = corr2d_gpu(y_hat_ab, y_true[inds])**2
+        r_null[i, :] = r2_a + r2_b - r2_ab
+    return r_null
+
+
+def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
+                                  n_perm=int(5e3), verbose=False):
+    import torch
+    g = torch.Generator()
+    dim = y_hat_a.shape
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
+    r_var = torch.zeros((n_perm, dim[-1]))
+    for i in iterator:
+        g.manual_seed(i) # Set the random seed
+
+        # Generate a random sample of indices
+        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
+
+        # Compute the correlations
+        r2_a = corr2d_gpu(y_hat_a[inds], y_true[inds])**2
+        r2_b = corr2d_gpu(y_hat_b[inds], y_true[inds])**2
+        r2_ab = corr2d_gpu(y_hat_ab[inds], y_true[inds])**2
+        r_var[i, :] = r2_a + r2_b - r2_ab
     return r_var
 
 

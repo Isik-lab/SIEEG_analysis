@@ -35,6 +35,10 @@ class fMRIDecoding:
         Path(f'{self.figure_dir}/{self.process}').mkdir(parents=True, exist_ok=True)
         self.out_file_prefix = f'{self.data_dir}/interim/{self.process}/{self.sid}_reg-gaze-{self.regress_gaze}'
         self.channels = None
+        self.feature_categories = {'scene_object': ['rating-indoor', 'rating-expanse', 'rating-object'],
+                                   'social_primitive': ['rating-agent_distance', 'rating-facingness'],
+                                   'social': ['rating-joint_action', 'rating-communication'],
+                                   'affective': ['rating-valence', 'rating-arousal']}
 
     def load_eeg(self):
         df_ = pd.read_csv(f'{self.data_dir}/interim/PreprocessData/{self.sid}_reg-gaze-{self.regress_gaze}.csv.gz')
@@ -76,8 +80,8 @@ class fMRIDecoding:
 
         print('beginning decoding...')
         decoding.eeg_fmri_decoding(df_avg, benchmark, self.sid, 
-                                    self.channels, self.device,
-                                    self.out_file_prefix,
+                                    self.channels, self.feature_categories,
+                                    self.device, self.out_file_prefix,
                                     save_whole_brain=self.save_whole_brain)
         print('Finished!')
 
