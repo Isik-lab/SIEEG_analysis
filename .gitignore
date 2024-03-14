@@ -2,6 +2,8 @@ data/
 references/
 reports/writing/*
 reports/presentations/*
+reports/figures/Group_Analysis/*mp4
+reports/figures/Group_Analysis/brain_plots/*
 scripts/DeepJuiceDev/
 */__pycache__/
 *.egg-info/

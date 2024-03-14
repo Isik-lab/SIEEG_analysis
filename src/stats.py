@@ -202,6 +202,10 @@ def corr2d_gpu(x, y):
     return numer / denom
 
 
+def sign_square(a):
+    return np.sign(a) * (a ** 2)
+
+
 def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
@@ -220,7 +224,7 @@ def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = corr2d_gpu(y_hat, y_true[inds]) ** 2
+        r_null[i, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
     return r_null
 
 
@@ -242,7 +246,7 @@ def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = corr2d_gpu(y_hat[inds], y_true[inds]) ** 2
+        r_var[i, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
     return r_var
 
 
@@ -265,9 +269,9 @@ def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         inds = torch.randperm(dim[0], generator=g)
 
         # Compute the correlations
-        r2_a = corr2d_gpu(y_hat_a, y_true[inds])**2
-        r2_b = corr2d_gpu(y_hat_b, y_true[inds])**2
-        r2_ab = corr2d_gpu(y_hat_ab, y_true[inds])**2
+        r2_a = sign_square(corr2d_gpu(y_hat_a, y_true[inds]))
+        r2_b = sign_square(corr2d_gpu(y_hat_b, y_true[inds]))
+        r2_ab = sign_square(corr2d_gpu(y_hat_ab, y_true[inds]))
         r_null[i, :] = r2_a + r2_b - r2_ab
     return r_null
 
@@ -291,9 +295,9 @@ def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
 
         # Compute the correlations
-        r2_a = corr2d_gpu(y_hat_a[inds], y_true[inds])**2
-        r2_b = corr2d_gpu(y_hat_b[inds], y_true[inds])**2
-        r2_ab = corr2d_gpu(y_hat_ab[inds], y_true[inds])**2
+        r2_a = sign_square(corr2d_gpu(y_hat_a[inds], y_true[inds]))
+        r2_b = sign_square(corr2d_gpu(y_hat_b[inds], y_true[inds]))
+        r2_ab = sign_square(corr2d_gpu(y_hat_ab[inds], y_true[inds]))
         r_var[i, :] = r2_a + r2_b - r2_ab
     return r_var
 
