@@ -224,7 +224,7 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
             # Calculate the shared variance between EEG, fMRI, and the features
             statistics['r2']['shared'] = statistics['r2']['eeg'] + statistics['r2']['features'] - statistics['r2']['full']
 
-            if save_whole_brain and (time < .25) and (time > -.1):
+            if save_whole_brain and (-.1 < time) and (time < .25):
                 # Put the results in each voxel in a dataframe
                 whole_brain_results = benchmark.metadata.copy()
                 whole_brain_results['time'] = time

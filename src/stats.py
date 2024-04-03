@@ -6,6 +6,7 @@ from tqdm import tqdm
 from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
 from scipy import ndimage
+import torch
 
 
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
@@ -203,7 +204,14 @@ def corr2d_gpu(x, y):
 
 
 def sign_square(a):
-    return np.sign(a) * (a ** 2)
+    if isinstance(a, np.ndarray):
+        # Use np.sign if a is a NumPy array
+        return np.sign(a) * (a ** 2)
+    elif torch.is_tensor(a):
+        # Use torch.sign if a is a PyTorch tensor
+        return torch.sign(a) * (a ** 2)
+    else:
+        raise ValueError("Input must be a NumPy array or a PyTorch tensor.")
 
 
 def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
@@ -272,7 +280,7 @@ def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         r2_a = sign_square(corr2d_gpu(y_hat_a, y_true[inds]))
         r2_b = sign_square(corr2d_gpu(y_hat_b, y_true[inds]))
         r2_ab = sign_square(corr2d_gpu(y_hat_ab, y_true[inds]))
-        r_null[i, :] = r2_a + r2_b - r2_ab
+        r_null[i, :] = (r2_a + r2_b) - r2_ab
     return r_null
 
 
@@ -298,7 +306,7 @@ def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         r2_a = sign_square(corr2d_gpu(y_hat_a[inds], y_true[inds]))
         r2_b = sign_square(corr2d_gpu(y_hat_b[inds], y_true[inds]))
         r2_ab = sign_square(corr2d_gpu(y_hat_ab[inds], y_true[inds]))
-        r_var[i, :] = r2_a + r2_b - r2_ab
+        r_var[i, :] = (r2_a + r2_b) - r2_ab
     return r_var
 
 
