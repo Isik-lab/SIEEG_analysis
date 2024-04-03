@@ -7,4 +7,5 @@ reports/figures/Group_Analysis/brain_plots/*
 scripts/DeepJuiceDev/
 */__pycache__/
 *.egg-info/
+*/slurm*out
 

@@ -99,6 +99,7 @@ def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=True):
             r2_var[i] = r
     return r2_var
 
+
 def bootstrap_unique_variance(a, b, c, n_perm=int(5e3)):
     # Randomly sample and recompute r^2 n_perm times
     r2_var = np.zeros((n_perm, a.shape[-1]))
@@ -192,13 +193,13 @@ def perm_unique_variance(a, b, c, n_perm=int(5e3), H0='greater'):
     return r2, p, r2_null
 
 
-def corr2d_gpu(x, y):
+def corr2d_gpu(x, y, dim=0):
     import torch
-    x_m = x - torch.nanmean(x, dim=0)
-    y_m = y - torch.nanmean(y, dim=0)
+    x_m = x - torch.nanmean(x, dim=dim)
+    y_m = y - torch.nanmean(y, dim=dim)
 
-    numer = torch.nansum((x_m * y_m), dim=0)
-    denom = torch.sqrt(torch.nansum((x_m * x_m), dim=0) * torch.nansum((y_m * y_m), dim=0))
+    numer = torch.nansum((x_m * y_m), dim=dim)
+    denom = torch.sqrt(torch.nansum((x_m * x_m), dim=dim) * torch.nansum((y_m * y_m), dim=dim))
     denom[denom == 0] = float('nan')
     return numer / denom
 
@@ -242,7 +243,7 @@ def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
     dim = y_hat.shape
 
     if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
     else:
         iterator = range(n_perm)
 
@@ -265,7 +266,7 @@ def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
     dim = y_hat_a.shape
 
     if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance permutation testing')
     else:
         iterator = range(n_perm)
 
@@ -291,7 +292,7 @@ def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
     dim = y_hat_a.shape
 
     if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance bootstrapping')
     else:
         iterator = range(n_perm)
 
