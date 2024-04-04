@@ -169,7 +169,7 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
         feature_iterator = tqdm(enumerate(feature_categories.items()),
                                           total=len(feature_categories),
                                           desc='Categories', leave=True)
-        time_iterator = tqdm(time_groups, desc='Time')
+        time_iterator = tqdm(time_groups, desc='Time', leave=True)
     else:
         feature_iterator = feature_categories
         time_iterator = time_groups
@@ -245,10 +245,10 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
                     # only compute the distributions in the voxels in an ROI
                     statistics['r2_null']['eeg'][roi_bool_idx] = stats.perm_gpu(y_hat['eeg'][:, roi_bool_idx],
                                                                                 y['test'][:, roi_bool_idx],
-                                                                                verbose=True).cpu().detach().numpy().T
+                                                                                verbose=False).cpu().detach().numpy().T
                     statistics['r2_var']['eeg'][roi_bool_idx] = stats.bootstrap_gpu(y_hat['eeg'][:, roi_bool_idx],
                                                                                     y['test'][:, roi_bool_idx],
-                                                                                verbose=True).cpu().detach().numpy().T
+                                                                                verbose=False).cpu().detach().numpy().T
 
                     for fmri_sid in benchmark.metadata.subj_id.unique(): 
                         for roi in rois: 
@@ -266,12 +266,12 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
                                                                                                y_hat_b=y_hat['features'][:, roi_bool_idx],
                                                                                                y_hat_ab=y_hat['full'][:, roi_bool_idx],
                                                                                                y_true=y['test'][:, roi_bool_idx],
-                                                                                               verbose=True).cpu().detach().numpy().T
+                                                                                               verbose=False).cpu().detach().numpy().T
                 statistics['r2_var']['shared'][roi_bool_idx] = stats.bootstrap_shared_variance_gpu(y_hat_a=y_hat['eeg'][:, roi_bool_idx],
                                                                                                   y_hat_b=y_hat['features'][:, roi_bool_idx],
                                                                                                   y_hat_ab=y_hat['full'][:, roi_bool_idx],
                                                                                                   y_true=y['test'][:, roi_bool_idx],
-                                                                                                  verbose=True).cpu().detach().numpy().T
+                                                                                                  verbose=False).cpu().detach().numpy().T
                 for fmri_sid in benchmark.metadata.subj_id.unique(): 
                     for roi in rois:
                         bool_idx = (benchmark.metadata.roi_name == roi) & (benchmark.metadata.subj_id == fmri_sid)
