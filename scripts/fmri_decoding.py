@@ -26,6 +26,7 @@ class fMRIDecoding:
             self.sid = args.sid
         self.regress_gaze = args.regress_gaze
         self.overwrite = args.overwrite
+        self.shared_variance = args.shared_variance
         self.save_whole_brain = args.save_whole_brain
         self.device = 'cuda:0'
         print(vars(self))
@@ -82,7 +83,8 @@ class fMRIDecoding:
         decoding.eeg_fmri_decoding(df_avg, benchmark, self.sid, 
                                     self.channels, self.feature_categories,
                                     self.device, self.out_file_prefix,
-                                    save_whole_brain=self.save_whole_brain)
+                                    save_whole_brain=self.save_whole_brain,
+                                    run_shared_variance=self.shared_variance)
         print('Finished!')
 
 def main():
@@ -91,6 +93,7 @@ def main():
     parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--save_whole_brain', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument('--shared_variance', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
     parser.add_argument('--figure_dir', '-figure', type=str,

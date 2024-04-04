@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH
-#SBATCH --time=6:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=a100
 #SBATCH --account=lisik3_gpu
 #SBATCH --nodes=1
@@ -14,4 +14,4 @@
 # sbatch --array=1-21%5 --export=ALL batch_eeg_fmri.sh
 
 # Call your encoding script, passing the SLURM_ARRAY_TASK_ID
-source batch_fmri_decoding.sh $SLURM_ARRAY_TASK_ID
+source batch_fmri_decoding.sh $SLURM_ARRAY_TASK_ID --save_whole_brain
