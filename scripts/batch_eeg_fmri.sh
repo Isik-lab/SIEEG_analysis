@@ -11,7 +11,7 @@
 #SBATCH --output=slurm-sub-%j.out
 
 # TO RUN
-# sbatch --array=1-21%5 --export=ALL batch_eeg_fmri.sh
+# sbatch --array=1-21%4 --export=ALL batch_eeg_fmri.sh
 
 # Call your encoding script, passing the SLURM_ARRAY_TASK_ID
 source batch_fmri_decoding.sh $SLURM_ARRAY_TASK_ID --save_whole_brain

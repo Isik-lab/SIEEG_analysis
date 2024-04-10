@@ -80,7 +80,6 @@ class fMRI_GroupAnalysis:
     def run(self):
         df, subjs = load_files(glob(self.input_pattern),
                             cat='roi', cat_order=self.rois)
-        df.drop(columns=['r2_null', 'r2_var'], inplace=True)
         print(sorted(subjs))
         stats = True if 'r2_null' in df.columns.tolist() else False
         

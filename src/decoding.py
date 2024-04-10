@@ -172,6 +172,7 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
     else:
         time_iterator = neural_df.groupby('time')
     # Time loop
+    category = 'none'
     out = []
     for i_time, (time, time_df) in enumerate(time_iterator):
         time_df = time_df[channels+['video_name']].set_index('video_name')
@@ -196,7 +197,7 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
             whole_brain_results['eeg_sid'] = sid
             whole_brain_results['feature_category'] = category
             whole_brain_results['r2'] = statistics['r2']
-            pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_whole-brain-decoding.csv.gz', index=False)
+            pd.DataFrame(whole_brain_results).to_csv(f'{out_file_prefix}_time-{time_ind}_category-{category}_whole-brain-decoding.csv.gz', index=False)
 
         # perform the significance testing in the eeg data only on the first category loop
         if perform_sig_testing: 
@@ -214,7 +215,7 @@ def eeg_fmri_decoding(neural_df, benchmark, sid,
                 bool_idx = (benchmark.metadata.roi_name == roi) & (benchmark.metadata.subj_id == fmri_sid)
                 cur = {'fmri_sid': fmri_sid, 'time': time, 
                         'roi': roi, 'regression_type': 'eeg',
-                        'category': 'none',
+                        'category': category,
                         'r2': statistics['r2'][bool_idx].mean()}
                 if perform_sig_testing:
                     cur['r2_null'] = statistics['r2_null'][bool_idx].mean(axis=0)
