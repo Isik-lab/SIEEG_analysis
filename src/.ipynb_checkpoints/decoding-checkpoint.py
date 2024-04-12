@@ -60,14 +60,13 @@ def eeg_feature_decoding(neural_df, feature_df,
         pipe.fit(X['train'], y['train'])
         y_hat = pipe.predict(X['test'])
         # Compute significance and variance
-        r2s = stats.sign_square(stats.corr2d(y_hat, y['test']))
-        r2s_null = stats.perm(y_hat, y['test'], verbose=False)
-        r2s_var = stats.bootstrap(y_hat, y['test'], verbose=False)
+        rs, ps, rs_null = stats.perm(y_hat, y['test'], verbose=False)
+        rs_var = stats.bootstrap(y_hat, y['test'], verbose=False)
         # Append to the results
-        for feature, r2, r2_null, r2_var in zip(features, r2s, r2s_null.T, r2s_var.T): 
-            results.append([time, feature, r2, r2_null, r2_var])
+        for feature, r, p, r_null, r_var in zip(features, rs, ps, rs_null.T, rs_var.T): 
+            results.append([time, feature, r, p, r_null, r_var])
     # Turn list into dataframe with feature data as categorical
-    results = pd.DataFrame(results, columns=['time', 'feature', 'r2', 'r2_null', 'r2_var'])
+    results = pd.DataFrame(results, columns=['time', 'feature', 'r', 'p', 'r_null', 'r_var'])
     cat_type = pd.CategoricalDtype(categories=features, ordered=True)
     results['feature'] = results.feature.astype(cat_type)
     return results

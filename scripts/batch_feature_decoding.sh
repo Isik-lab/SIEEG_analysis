@@ -14,4 +14,4 @@ echo "subj: $subj"
 ml anaconda
 conda activate eeg
 
-python fmri_whole_brain.py --top_dir
+python feature_decoding.py --sid $subj --overwrite

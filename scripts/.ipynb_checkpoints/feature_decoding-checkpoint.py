@@ -88,8 +88,8 @@ class FeatureDecoding:
                 results = decoding.eeg_feature_decoding(df_avg, feature_df,
                                                         predicting_features, self.channels)
             print(f'{results.head()=}')
-            print(f'{results.iloc[0]["r2_null"].shape=}')
-            print(f'{results.iloc[0]["r2_var"].shape=}')
+            print(f'{results.iloc[0]["r_null"].shape=}')
+            print(f'{results.iloc[0]["r_var"].shape=}')
             results.to_pickle(self.out_file)
         print('Finished')
 

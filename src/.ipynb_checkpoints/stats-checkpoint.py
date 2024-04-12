@@ -66,7 +66,7 @@ def calculate_p(r_null_, r_true_, n_perm_, H0_):
     return p_
 
 
-def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=False):
+def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=True):
     # Randomly sample and recompute r^2 n_perm times
     if verbose:
         iter_loop = tqdm(range(n_perm), total=n_perm)
@@ -85,14 +85,18 @@ def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=False):
                 a_sample = a[inds, :]
                 b_sample = b[inds, :]
             r = corr2d(a_sample, b_sample)
-            r2_var[i, :] = sign_square(r) if square else r 
+            if square:
+                r = np.sign(r)*(r**2)
+            r2_var[i, :] = r
     else:
         r2_var = np.zeros((n_perm,))
         for i in iter_loop:
             inds = np.random.default_rng(i).choice(np.arange(a.shape[0]),
                                                    size=a.shape[0])
             r = corr(a[inds], b[inds])
-            r2_var[i] = sign_square(r) if square else r 
+            if square:
+                r = np.sign(r)*(r**2)
+            r2_var[i] = r
     return r2_var
 
 
@@ -114,14 +118,23 @@ def bootstrap_unique_variance(a, b, c, n_perm=int(5e3)):
     return r2_var
 
 
-def perm(a, b, n_perm=int(5e3), square=True, verbose=False):
+def perm(a, b, n_perm=int(5e3), H0='greater', square=True, verbose=True):
     if a.ndim > 1:
         r2_null = np.zeros((n_perm, a.shape[-1]))
         if a.ndim == 3:
             a_not_shuffle = a.reshape(a.shape[0] * a.shape[1], a.shape[-1])
             b = b.reshape(b.shape[0] * b.shape[1], b.shape[-1])
+            r = corr2d(a_not_shuffle, b)
+        else: #a.ndim == 2:
+            r = corr2d(a, b)
     else: #a.ndim == 1:
+        r = corr(a, b)
         r2_null = np.zeros((n_perm,))
+
+    if square:
+        r_out = (r**2) * np.sign(r)
+    else:
+        r_out = r.copy()
 
     if verbose:
         iter_loop = tqdm(range(n_perm), total=n_perm)
@@ -142,11 +155,19 @@ def perm(a, b, n_perm=int(5e3), square=True, verbose=False):
         else:
             r = corr(a_shuffle, b)
 
-        if a.ndim > 1:
-            r2_null[i, :] = sign_square(r) if square else r 
+        if square:
+            r2 = (r**2) * np.sign(r)
         else:
-            r2_null[i] = sign_square(r) if square else r 
-    return r2_null
+            r2 = r.copy()
+
+        if a.ndim > 1:
+            r2_null[i, :] = r2
+        else:
+            r2_null[i] = r2
+
+    # Get the p-value depending on the type of test
+    p = calculate_p(r2_null, r_out, n_perm, H0)
+    return r_out, p, r2_null
 
 
 def perm_unique_variance(a, b, c, n_perm=int(5e3), H0='greater'):
