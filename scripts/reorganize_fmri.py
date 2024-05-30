@@ -9,9 +9,9 @@ from src.mri import gen_mask
 from glob import glob
 
 
-class ReorganziefMRI:
+class ReorganizefMRI:
     def __init__(self, args):
-        self.process = 'ReorganziefMRI'
+        self.process = 'ReorganizefMRI'
         self.data_dir = args.data_dir
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         print(vars(self))

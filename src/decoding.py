@@ -15,13 +15,34 @@ from deepjuice.alignment import TorchRidgeGCV
 
 
 def correlation_scorer(y_true, y_pred):
+    """correlation_scorer
+
+    Args:
+        y_true (numpy.ndarray): 1d np vector from the actual data
+        y_pred (numpy.ndarray): 1d np vector of predicted values
+
+    Returns:
+        numpy.ndarray: Pearson correlation between y_true and y_pred
+    """
     return stats.corr(y_true, y_pred)
 
 
 def feature_scaler(train, test, dim=0):
-    mean_ = torch.mean(train, dim=dim, keepdim=True)
-    std_ = torch.std(train, dim=dim, keepdim=True)
-    return (train-mean_)/std_, (test-mean_)/std_
+    """feature_scaler
+
+    Args:
+        train (numpy.ndarray): 2D np array of samples x features (or reversed)
+        test (numpy.ndarray): 2D np array of samples x features (or reversed)
+        dim (int, optional): . Defaults to 0.
+
+    Returns:
+        train_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
+        test_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
+    """
+    train_mean = torch.mean(train, dim=dim, keepdim=True)
+    train_std = torch.std(train, dim=dim, keepdim=True)
+    return (train-train_mean)/train_std,
+           (test-train_mean)/train_std
 
 
 def eeg_feature_decoding(neural_df, feature_df,
