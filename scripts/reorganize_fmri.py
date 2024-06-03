@@ -14,14 +14,14 @@ class ReorganizefMRI:
     def __init__(self, args):
         self.process = 'ReorganizefMRI'
         tools.neptune_init(self.process)
-
         self.data_dir = f'{args.project_dir}/data'
+        tools.neptune_params(vars(self))
+        
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
         self.streams = ['EVC']
         self.streams += [f'{level}_{stream}' for level in ['mid', 'high'] for stream in ['ventral', 'lateral', 'parietal']]
-        tools.neptune_params(vars(self))
 
     def generate_benchmark(self, sort_idx):
         all_rois = []
