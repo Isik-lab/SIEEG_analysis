@@ -11,7 +11,8 @@ def neptune_init(name):
     """
     # Get git hash
     global neptune_run
-    neptune_run = neptune.init_run(project="emaliemcmahon/SIEEG-analysis")
+    neptune_run = neptune.init_run(project="emaliemcmahon/SIEEG-analysis",
+                                   name=name)
 
 
 def neptune_params(params):

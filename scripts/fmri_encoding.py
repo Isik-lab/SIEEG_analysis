@@ -40,7 +40,7 @@ class fmriEncoding:
 
     def run(self):
         [X_train, X_test, y_train, y_test] = self.load_split_norm()
-        y_hat = regression.regress_and_predict(X_train, X_test, X_test,
+        y_hat = regression.regress_and_predict(X_train, y_train, X_test,
                                             alpha_start=self.alpha_start,
                                             alpha_stop=self.alpha_stop,
                                             scoring=self.scoring,
