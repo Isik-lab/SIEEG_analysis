@@ -35,7 +35,8 @@ class fmriEncoding:
         pd.DataFrame(scores).to_csv(self.out_file, index=False)
 
     def viz_results(self, scores):
-        fig = plt.hist(scores)
+        fig, ax = plt.subplots()
+        ax.hist(scores)
         logging.neptune_results(fig)
 
     def run(self):
