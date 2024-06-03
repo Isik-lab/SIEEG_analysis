@@ -7,3 +7,6 @@ reports/figures/Group_Analysis/brain_plots/*
 */__pycache__/
 *.egg-info/
 */*out
+*out
+.neptune/
+*/.neptune

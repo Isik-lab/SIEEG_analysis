@@ -1,44 +1,16 @@
-import neptune
-
-neptune_run = None
-
-def neptune_init(name):
-    """Init logging the run variables 
-
-    Args:
-        name (str): name of the python script
-    """
-    global neptune_run
-    neptune_run = neptune.init_run(
-        project="emaliemcmahon/SIEEG-analysis",
-        name=name
-    )
+import torch
+import numpy as np
 
 
-def neptune_params(params):
-    """log the initial parameters for the run
-
-    Args:
-        params (dict): parameters used in running the code
-    """
-    global neptune_run
-    for key, val in params.items():
-        neptune_run[key] = val
+def to_torch(arrays, device):
+    if isinstance(arrays, list):
+        return [to_torch(array) for array in arrays]
+    else:
+        return torch.from_numpy(arrray).to(device)
 
 
-def neptune_results(results):
-    """save the results file
-
-    Args:
-        results (str): a path to an output results image
-    """
-    global neptune_run
-    neptune_run["results"].upload(results)
-
-
-def neptune_stop():
-    """
-    stop the neptune process
-    """
-    global neptune_run
-    neptune_run.stop()
+def to_numpy(tensors):
+    if isinstance(tensors, list):
+        return [to_numpy(tensor) for tensor in tensors]
+    else:
+        return tensors.cpu().detach().numpy()
