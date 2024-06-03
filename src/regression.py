@@ -92,7 +92,7 @@ def regress_and_predict(X_train, y_train, X_test,
     """
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                             alpha_per_target=True,
-                            device=self.device,
+                            device=device,
                             scale_X=False,
                             fit_intercept=False,
                             scoring=scoring)
