@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from src import logging, loading, regression, tools
+from src import logging, loading, regression, tools, stats
 import torch
 
 
