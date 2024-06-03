@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from src import logging, loading, regression
+from src import logging, loading, regression, tools
 import torch
 
 
@@ -26,9 +26,10 @@ class fmriEncoding:
         annotations = loading.load_annotations(self.annotations_file)
         fmri, _ = loading.load_fmri(self.fmri_dir)
         X_train, X_test, y_train, y_test = regression.split_data(annotations, fmri)
+        [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
+                                                            device=self.device)
         regression.preprocess(X_train, X_test, y_train, y_test)
-        return tools.to_torch([X_train, X_test, y_train, y_test],
-                              device=self.device)
+        return X_train, X_test, y_train, y_test
 
     def save_results(self, scores):
         pd.DataFrame(scores).to_csv(self.out_file, index=False)
@@ -40,15 +41,15 @@ class fmriEncoding:
     def run(self):
         [X_train, X_test, y_train, y_test] = self.load_split_norm()
         y_hat = regression.regress_and_predict(X_train, X_test, y_train,
-                                               alpha_start=self.alpha_start,
-                                               alpha_stop=self.alpha_stop,
-                                               scoring=self.scoring,
-                                               device=self.device)
+                                            alpha_start=self.alpha_start,
+                                            alpha_stop=self.alpha_stop,
+                                            scoring=self.scoring,
+                                            device=self.device)
         scores = score_results(y_hat, y_test)
         self.save_results(scores)
         self.viz_results(scores)
         logging.neptune_stop()
-        
+
 
 def main():
     parser = argparse.ArgumentParser(description='Predict fMRI responses using the features')

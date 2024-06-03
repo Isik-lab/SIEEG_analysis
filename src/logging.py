@@ -1,8 +1,21 @@
 import neptune
-import git
-
+import subprocess
 
 neptune_run = None
+
+def get_short_git_hash():
+    try:
+        # Run the git command and capture the output
+        result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Decode the output and strip any surrounding whitespace
+        short_hash = result.stdout.decode('utf-8').strip()
+        
+        return short_hash
+    except subprocess.CalledProcessError as e:
+        print(f"An error occurred while trying to get the short git hash: {e.stderr.decode('utf-8').strip()}")
+        return None
+
 
 def neptune_init(name):
     """Init logging the run variables 
@@ -11,13 +24,12 @@ def neptune_init(name):
         name (str): name of the python script
     """
     # Get git hash
-    repo = git.Repo(search_parent_directories=True)
-    sha = repo.head.object.hexsha
+    git_hash = get_short_git_hash()
 
     global neptune_run
     neptune_run = neptune.init_run(
         project="emaliemcmahon/SIEEG-analysis",
-        custom_run_id=f'{name}-{sha}',
+        custom_run_id=f'{name}-{git_hash}',
         name=name
     )
 
