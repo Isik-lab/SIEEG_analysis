@@ -20,6 +20,7 @@ $(fmri_scores): create_dirs
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
+export NEPTUNE_CUSTOM_RUN_ID=fmri_encoding\n\
 python $(project_folder)/scripts/fmri_encoding.py \
 -a $(project_folder)/data/interim/ReorganizefMRI \
 -f $(project_folder)/data/interim/ReorganizefMRI \
