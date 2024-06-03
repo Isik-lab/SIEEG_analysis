@@ -4,7 +4,7 @@ import numpy as np
 
 def to_torch(arrays, device):
     if isinstance(arrays, list):
-        return [to_torch(array) for array in arrays]
+        return [to_torch(array, device) for array in arrays]
     else:
         return torch.from_numpy(arrray).to(device)
 

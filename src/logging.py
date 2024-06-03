@@ -28,10 +28,8 @@ def neptune_init(name):
 
     global neptune_run
     neptune_run = neptune.init_run(
-        project="emaliemcmahon/SIEEG-analysis",
-        custom_run_id=f'{name}-{git_hash}',
-        name=name
-    )
+                custom_run_id=f'{name}-{git_hash}',
+                project="emaliemcmahon/SIEEG-analysis")
 
 
 def neptune_params(params):
