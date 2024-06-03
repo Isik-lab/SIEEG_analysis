@@ -45,7 +45,7 @@ class fmriEncoding:
                                             alpha_stop=self.alpha_stop,
                                             scoring=self.scoring,
                                             device=self.device)
-        scores = score_results(y_hat, y_test)
+        scores = self.score_results(y_hat, y_test)
         self.save_results(scores)
         self.viz_results(scores)
         logging.neptune_stop()
