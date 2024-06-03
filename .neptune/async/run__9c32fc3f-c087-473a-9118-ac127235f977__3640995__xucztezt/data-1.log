@@ -1,0 +1,12 @@
+{"obj": {"type": "AssignString", "path": ["sys", "name"], "value": "test"}, "version": 1, "at": 1717427943.5222867}
+{"obj": {"type": "AssignString", "path": ["sys", "description"], "value": ""}, "version": 2, "at": 1717427943.5225291}
+{"obj": {"type": "AssignString", "path": ["monitoring", "d5b7e944", "hostname"], "value": "sr07"}, "version": 3, "at": 1717427943.5226102}
+{"obj": {"type": "AssignString", "path": ["sys", "hostname"], "value": "sr07"}, "version": 4, "at": 1717427943.52266}
+{"obj": {"type": "AssignString", "path": ["monitoring", "d5b7e944", "pid"], "value": "3640995"}, "version": 5, "at": 1717427943.5227053}
+{"obj": {"type": "AssignString", "path": ["monitoring", "d5b7e944", "tid"], "value": "23456247998272"}, "version": 6, "at": 1717427943.5227537}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": false}, "version": 7, "at": 1717427943.5227933}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "d5b7e944", "stdout"]}, "version": 8, "at": 1717427943.5228553}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "d5b7e944", "stderr"]}, "version": 9, "at": 1717427943.522895}
+{"obj": {"type": "AssignString", "path": ["source_code", "entrypoint"], "value": "test.py"}, "version": 10, "at": 1717427943.5230675}
+{"obj": {"type": "UploadFileSet", "path": ["source_code", "files"], "file_globs": ["/scratch4/lisik3/emcmaho7/SIEEG_analysis/scripts/test.py"], "reset": "False"}, "version": 11, "at": 1717427943.523117}
+{"obj": {"type": "UploadFile", "path": ["source_code", "diff"], "ext": "patch", "file_path": null, "tmp_file_name": "source_code_diff-1717427943.568749-2024-06-03_11.19.03.568749.patch", "clean_after_upload": false}, "version": 12, "at": 1717427943.5827816}

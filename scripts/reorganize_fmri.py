@@ -7,18 +7,21 @@ import nibabel as nib
 from tqdm import tqdm
 from src.mri import gen_mask
 from glob import glob
+from src import tools
 
 
 class ReorganizefMRI:
     def __init__(self, args):
         self.process = 'ReorganizefMRI'
-        self.data_dir = args.data_dir
+        tools.neptune_init(self.process)
+
+        self.data_dir = f'{args.project_dir}/data'
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
-        print(vars(self))
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
         self.streams = ['EVC']
         self.streams += [f'{level}_{stream}' for level in ['mid', 'high'] for stream in ['ventral', 'lateral', 'parietal']]
+        tools.neptune_params(vars(self))
 
     def generate_benchmark(self, sort_idx):
         all_rois = []
@@ -82,7 +85,7 @@ class ReorganizefMRI:
         return metadata, response_data
     
     def load_stimulus_data(self):
-        stim_data = pd.read_csv(f'{self.data_dir}/interim/CaptionData/stimulus_data.csv')
+        stim_data = pd.read_csv(f'{self.data_dir}/raw/annotations/stimulus_data.csv')
 
         # get the sorting indices to combine the train and test fMRI data
         temp = stim_data[['video_name', 'stimulus_set']]
@@ -96,14 +99,14 @@ class ReorganizefMRI:
         stimulus_data.to_csv(f'{self.data_dir}/interim/{self.process}/stimulus_data.csv', index=False)
         metadata.to_csv(f'{self.data_dir}/interim/{self.process}/metadata.csv', index=False)
         response_data.to_csv(f'{self.data_dir}/interim/{self.process}/response_data.csv.gz', index=False, compression='gzip')
+        tools.neptune_stop()
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', '-data', type=str,
-                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
+    parser = argparse.ArgumentParser(description="Reorganize fMRI to DeepJuice format")
+    parser.add_argument('--project_dir', '-d', type=str, help='project directory')
     args = parser.parse_args()
-    ReorganziefMRI(args).run()
+    ReorganizefMRI(args).run()
 
 
 if __name__ == '__main__':
