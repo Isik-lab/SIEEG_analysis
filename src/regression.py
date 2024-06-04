@@ -28,6 +28,15 @@ def correlation_scorer(y_true, y_pred):
 
 
 def split_data(annotations, neural):
+    """split the data into train and test sets based on the simulus data
+
+    Args:
+        annotations (_type_): _description_
+        neural (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     train_idx = annotations.loc[annotations['stimulus_set'] == 'train'].index
     test_idx = annotations.loc[annotations['stimulus_set'] == 'train'].index
     X_cols = [col for col in annotations.columns if 'rating-' in col]
@@ -75,20 +84,24 @@ def preprocess(X_train, X_test, y_train, y_test):
 
 def regress_and_predict(X_train, y_train, X_test,
                         alpha_start=-2, alpha_stop=5,
-                        scoring='pearsonr', device='cuda'):
-    """_summary_
+                        scoring='pearsonr', device='cuda',
+                        return_alpha=False, return_betas=False):
+    """Use deepjuice TorchRidgeGCV to perform the regression 
+    and predict the response in the held out data
 
     Args:
-        X_train (_type_): _description_
-        y_train (_type_): _description_
-        X_test (_type_): _description_
-        alpha_start (int, optional): _description_. Defaults to -2.
-        alpha_stop (int, optional): _description_. Defaults to 5.
-        scoring (str, optional): _description_. Defaults to 'pearsonr'.
-        device (str, optional): _description_. Defaults to 'cuda'.
+        X_train (torch.Tensor): training X data
+        y_train (torch.Tensor): training y data
+        X_test (torch.Tensor): testing X data
+        alpha_start (int, optional): smallest power for alpha. Defaults to -2.
+        alpha_stop (int, optional): largest power for alpha. Defaults to 5.
+        scoring (str, optional): type of scoring function. Defaults to 'pearsonr'.
+        device (str, optional): device location of tensors. Defaults to 'cuda'.
+        return_alpha (bool, optional): return fitted alphas. Defaults to False.
+        return_betas (bool, optional): return beta coefficients. Defaults to False.
     
     Returns: 
-        y_hat ()
+        y_hat (torch.Tensor): predicted y values
     """
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                             alpha_per_target=True,
@@ -97,7 +110,12 @@ def regress_and_predict(X_train, y_train, X_test,
                             fit_intercept=False,
                             scoring=scoring)
     pipe.fit(X_train, y_train)
-    return pipe.predict(X_test)
+    out = {'yhat': pipe.predict(X_test)}
+    if return_alpha:
+        out['alpha'] = pipe.alpha_
+    if return_betas:
+        out['betas'] = pipe.coef_
+    return out
 
 
 # def eeg_feature_decoding(neural_df, feature_df,

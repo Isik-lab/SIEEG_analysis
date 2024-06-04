@@ -40,8 +40,25 @@ def trim_time(frame, start=-.2, end=1):
     return frame
 
 
-def smoothing(df, channels, grouping=['video1', 'video2'], precision=3):
-    rolling_df = df.groupby(grouping).apply(lambda x: x[['time'] + channels].rolling(window=5, min_periods=2, step=2).mean())
+def smoothing(df, channels, grouping=['video1', 'video2'],
+              precision=3, window=5, step=2, min_periods=2):
+    """_summary_
+
+    Args:
+        df (_type_): _description_
+        channels (_type_): _description_
+        grouping (list, optional): _description_. Defaults to ['video1', 'video2'].
+        precision (int, optional): _description_. Defaults to 3.
+        window (int, optional): _description_. Defaults to 5.
+        step (int, optional): _description_. Defaults to 2.
+        min_periods (int, optional): _description_. Defaults to 2.
+
+    Returns:
+        _type_: _description_
+    """
+    rolling_df = df.groupby(grouping).apply(lambda x: x[['time'] + channels].rolling(window=window,
+                                                                                     min_periods=min_periods,
+                                                                                     step=step).mean())
     rolling_df = rolling_df.reset_index().dropna()
     rolling_df['time'] = rolling_df['time'].round(precision)
     cols = [col for col in rolling_df.columns if 'level' not in col]
