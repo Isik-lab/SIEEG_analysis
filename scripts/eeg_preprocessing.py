@@ -1,8 +1,9 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from src import logging, loading, regression, tools, stats
+from src import temporal, logging
 import torch
+from pathlib import Path
 
 
 class eegPreprocessing:
@@ -20,15 +21,26 @@ class eegPreprocessing:
         logging.neptune_params(vars(self))
 
     @staticmethod
-    def average_repetitions(df):
-        df_mean = df.groupby(['time', 'video_name']).mean(numeric_only=True)
+    def average_repetitions(data):
+        df_mean = data.groupby(['time', 'video_name']).mean(numeric_only=True)
         cols = [col for col in df_mean.columns if 'channel' in col]
         df_filtered = df_mean[cols].reset_index()
         return df_filtered.sort_values(['time', 'video_name'])
 
-    def smooth_eeg(self, df):
-        cols = [col for col in df_mean.columns if 'channel' in col]
-        return temporal.smoothing(df_, cols, grouping=['video_name'],
+    @staticmethod
+    def viz_results(dfs):
+        fig, axes = plt.subplots(len(dfs))
+        for ax, data in zip(axes, dfs): 
+            cols = [col for col in data.columns if 'channel' in col]
+            df_mean = data.groupby('time').mean(numeric_only=True).reset_index()
+            x = df_mean['time'].unique()
+            ys = df_mean[cols].to_numpy()
+            ax.plot(x, ys)
+        logging.neptune_results(fig)
+
+    def smooth_eeg(self, data):
+        cols = [col for col in data.columns if 'channel' in col]
+        return temporal.smoothing(data, cols, grouping=['video_name'],
                                   window=self.smooth_window,
                                   step=self.smooth_step,
                                   min_periods=self.smooth_min_period)
@@ -36,18 +48,22 @@ class eegPreprocessing:
     def load_eeg(self):
         return pd.read_csv(self.eeg_file)
 
-    def save_results(self, results):
+    def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
-        for key, val in resutls.items():
-            out_file = f'{self.out_dir}/{key}.csv.gz'
-            pd.DataFrame(tools.to_numpy(val)).to_csv(out_file, index=False)
+
+    def save_results(self, df):
+        for itime, (_, df_time) in enumerate(df.groupby('time')):
+            df_time.sort_values('video_name', inplace=True)
+            out_file = f'{self.out_dir}/{self.eeg_sub}_time-{str(itime).zfill(2)}.csv.gz'
+            df_time.to_csv(out_file, index=False)
 
     def run(self):
         df = self.load_eeg()
         df_averaged = self.average_repetitions(df)
         df_smoothed = self.smooth_eeg(df_averaged)
-        print(df_smoothed.head())
-        # self.save_results(scores)
+        self.mk_out_dir()
+        self.save_results(df_smoothed)
+        self.viz_results([df_averaged, df_smoothed])
         logging.neptune_stop()
 
 
@@ -60,7 +76,7 @@ def main():
                         help='gaze regressed from the EEG time course')
     parser.add_argument('--smooth_step', type=int, default=1,
                         help='number of time points to step in smoothing')
-    parser.add_argument('--smooth_window', type=int, default=3,
+    parser.add_argument('--smooth_window', type=int, default=5,
                         help='number of consecutive time points to smooth')
     parser.add_argument('--smooth_min_period', type=int, default=1,
                         help='number of time points that are required for smoothing kernel')

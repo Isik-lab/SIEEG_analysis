@@ -33,10 +33,12 @@ class fmriEncoding:
         return X_train, X_test, y_train, y_test
 
     def save_results(self, results):
-        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
         for key, val in results.items():
             out_file = f'{self.out_dir}/{key}.csv.gz'
             pd.DataFrame(tools.to_numpy(val)).to_csv(out_file, index=False)
+
+    def mk_out_dir(self):
+        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def viz_results(self, scores):
         fig, ax = plt.subplots()
@@ -51,6 +53,7 @@ class fmriEncoding:
                                                  scoring=self.scoring,
                                                  device=self.device)
         results['scores'] = self.score_results(results['yhat'], y_test)
+        self.mk_out_dir()
         self.save_results(results)
         self.viz_results(results['scores'])
         logging.neptune_stop()
