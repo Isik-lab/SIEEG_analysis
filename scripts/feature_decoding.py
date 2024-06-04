@@ -6,14 +6,7 @@ from src import temporal, plotting, decoding
 import os
 
 
-def check_videos(df_, feature_df_):
-    """
-        Filter the videos in the feature DataFrame based on those that are present in the EEG data. 
-        Data may be missing from a particular video following data cleaning. 
-    """
-    eeg_videos = df_.video_name.unique()
-    filtered_features = feature_df_[feature_df_['video_name'].isin(eeg_videos)].reset_index(drop=True)
-    return filtered_features
+
 
 
 class FeatureDecoding:
