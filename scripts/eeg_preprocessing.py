@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from src import temporal, logging
+from src import temporal
 import torch
 from pathlib import Path
 
@@ -9,7 +9,6 @@ from pathlib import Path
 class eegPreprocessing:
     def __init__(self, args):
         self.process = 'eegPreprocessing'
-        logging.neptune_init(self.process)
         self.eeg_dir = args.eeg_dir
         self.eeg_sub = f'sub-{str(args.eeg_sub).zfill(2)}'
         self.regress_gaze = args.regress_gaze
@@ -18,7 +17,6 @@ class eegPreprocessing:
         self.smooth_min_period = args.smooth_min_period
         self.eeg_file = f'{self.eeg_dir}/{self.eeg_sub}_reg-gaze-{self.regress_gaze}.csv.gz'
         self.out_dir = args.out_dir
-        logging.neptune_params(vars(self))
 
     @staticmethod
     def average_repetitions(data):
@@ -26,17 +24,6 @@ class eegPreprocessing:
         cols = [col for col in df_mean.columns if 'channel' in col]
         df_filtered = df_mean[cols].reset_index()
         return df_filtered.sort_values(['time', 'video_name'])
-
-    @staticmethod
-    def viz_results(dfs):
-        fig, axes = plt.subplots(len(dfs))
-        for ax, data in zip(axes, dfs): 
-            cols = [col for col in data.columns if 'channel' in col]
-            df_mean = data.groupby('time').mean(numeric_only=True).reset_index()
-            x = df_mean['time'].unique()
-            ys = df_mean[cols].to_numpy()
-            ax.plot(x, ys)
-        logging.neptune_results(fig)
 
     def smooth_eeg(self, data):
         cols = [col for col in data.columns if 'channel' in col]
@@ -63,8 +50,6 @@ class eegPreprocessing:
         df_smoothed = self.smooth_eeg(df_averaged)
         self.mk_out_dir()
         self.save_results(df_smoothed)
-        self.viz_results([df_averaged, df_smoothed])
-        logging.neptune_stop()
 
 
 def main():

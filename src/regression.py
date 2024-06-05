@@ -27,23 +27,26 @@ def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
-def split_data(annotations, neural):
+def split_data(behavior, neurals):
     """split the data into train and test sets based on the simulus data
 
     Args:
-        annotations (_type_): _description_
-        neural (_type_): _description_
+        behavior (pandas.core.frame.DataFrame): _description_
+        neural (dictionary of pandas.core.frame.DataFrame): _description_
 
     Returns:
         _type_: _description_
     """
-    train_idx = annotations.loc[annotations['stimulus_set'] == 'train'].index
-    test_idx = annotations.loc[annotations['stimulus_set'] == 'train'].index
-    X_cols = [col for col in annotations.columns if 'rating-' in col]
-    X_train = annotations.iloc[train_idx][X_cols].to_numpy()
-    X_test = annotations.iloc[test_idx][X_cols].to_numpy()
-    y_train, y_test = neural.iloc[train_idx].to_numpy(), neural.iloc[test_idx].to_numpy()
-    return X_train, X_test, y_train, y_test
+    train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
+    test_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
+    cols = [col for col in behavior.columns if 'rating-' in col]
+    out = {}       
+    for key, neural in neurals.items():
+        out[f'{key}_train'] = neural.iloc[train_idx].to_numpy()
+        out[f'{key}_test'] = neural.iloc[test_idx].to_numpy()
+    out['behavior_train'] = behavior.iloc[train_idx][cols].to_numpy()
+    out['behavior_test'] = behavior.iloc[test_idx][cols].to_numpy()
+    return out
 
 
 def feature_scaler(train, test, dim=0):
