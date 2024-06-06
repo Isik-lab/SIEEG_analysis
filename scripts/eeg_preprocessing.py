@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from src import temporal
 import torch
 from pathlib import Path
+import pickle
 
 
 class eegPreprocessing:
@@ -39,10 +40,15 @@ class eegPreprocessing:
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def save_results(self, df):
-        for itime, (_, df_time) in enumerate(df.groupby('time')):
+        time_map = {}
+        for itime, (time, df_time) in enumerate(df.groupby('time')):
             df_time.sort_values('video_name', inplace=True)
             out_file = f'{self.out_dir}/{self.eeg_sub}_time-{str(itime).zfill(2)}.csv.gz'
             df_time.to_csv(out_file, index=False)
+            time_map[str(itime).zfill(2)] = time
+        #Save the map between the time indices and the real values
+        with open(f'{self.out_dir}/map_time.pkl', 'wb') as f:
+            pickle.dump(time_map, f)
 
     def run(self):
         df = self.load_eeg()

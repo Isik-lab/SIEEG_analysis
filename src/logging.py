@@ -1,4 +1,6 @@
 import neptune
+import git
+
 
 neptune_run = None
 
@@ -12,7 +14,7 @@ def neptune_init(name):
     # Get git hash
     global neptune_run
     neptune_run = neptune.init_run(project="emaliemcmahon/SIEEG-analysis",
-                                   name=name)
+                                   custom_run_id=name)
 
 
 def neptune_params(params):
@@ -43,3 +45,13 @@ def neptune_stop():
     """
     global neptune_run
     neptune_run.stop()
+
+
+def get_githash():
+    """get the current git hash to identify provenance of outputs
+
+    Returns:
+        str: short hash of the current git commit
+    """
+    repo = git.Repo(search_parent_directories=True)
+    return repo.head.object.hexsha[:10]

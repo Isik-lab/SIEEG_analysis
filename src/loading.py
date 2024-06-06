@@ -1,5 +1,8 @@
 import pandas as pd
 from pathlib import Path
+from glob import glob 
+from tqdm import tqdm
+import re
 
 
 def load_behavior(path):
@@ -25,7 +28,7 @@ def load_fmri(path):
         response data (pandas.core.frame.DataFrame): reorganized fMRI responses
         metadata (pandas.core.frame.DataFrame): Info about each target in the fMRI data
     """
-    return pd.read_csv(f'{path}/response_data.csv.gz'), pd.read_csv(f'{path}/metadata.csv')
+    return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
 
 
 def load_eeg(file_path):
@@ -81,3 +84,36 @@ def strip_eeg(eeg_df):
     """
     cols = [col for col in eeg_df.columns if 'channel' in col]
     return eeg_df[cols]
+
+
+def get_subj_time(file_name):
+    """_summary_
+
+    Args:
+        file_name (_type_): _description_
+
+    Returns:
+        subject_number (int): the number of the subject 
+        subject_number (int): the number of the subject 
+    """
+    pattern = re.compile(r'sub-(\d+)_time-(\d+)')
+    match = pattern.search(file_name)
+    if match:
+        subject_number = int(match.group(1))
+        time_number = match.group(2)
+        return subject_number, time_number
+    else:
+        return None
+
+
+def load_decoding_files(path, file_pattern, targets):
+    files = glob(f'{path}/{file_pattern}')
+    out = []
+    for file in tqdm(files, desc='Loading files'):
+        sub, time = get_subj_time(file)
+        df = pd.read_csv(file).rename({0: 'r'})
+        df['subj_id'] = sub
+        df['time_id'] = time
+        df['targets'] = targets
+        out.append(df)
+    return pd.concat(out)

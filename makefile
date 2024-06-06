@@ -13,11 +13,12 @@ fmri_eeg_encoding=$(project_folder)/data/interim/fmriEEGEncoding
 fmri_behavior_eeg_encoding=$(project_folder)/data/interim/fmriBehaviorEEGEncoding
 
 # Steps to run
-all: fmri_behavior_encoding eeg_preprocess eeg_decode clean
+all: fmri_behavior_encoding eeg_preprocess eeg_decode
 
 # Perform fMRI encoding with features
-fmri_behavior_encoding: $(fmri_behavior_encoding)/.encoding_done
-$(fmri_behavior_encoding)/.encoding_done: $(fmri_data)
+fmri_behavior_encoding: $(fmri_behavior_encoding)/.encoding_done $(fmri_data)
+$(fmri_behavior_encoding)/.encoding_done: 
+	mkdir -p $(fmri_behavior_encoding)
 	printf "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
@@ -29,12 +30,12 @@ ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 python $(project_folder)/scripts/fmri_behavior_encoding.py \
--f $(fmri_data) -o $(target)" | sbatch
+-f $(fmri_data) -o $(fmri_behavior_encoding)" | sbatch
 	touch $(fmri_behavior_encoding)/.encoding_done
 
 # Preprocess EEG data for regression
-eeg_preprocess: $(eeg_preprocess)/.preprocess_done
-$(eeg_preprocess)/.preprocess_done: $(matlab_eeg_path) $(fmri_data)
+eeg_preprocess: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
+$(eeg_preprocess)/.preprocess_done: 
 	mkdir -p $(eeg_preprocess)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
@@ -53,8 +54,8 @@ python $(project_folder)/scripts/eeg_preprocessing.py \
 	touch $(eeg_preprocess)/.preprocess_done
 
 # Decode EEG data
-eeg_decode: $(eeg_decoding)/.decode_done 
-$(eeg_decoding)/.decode_done: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
+eeg_decode: $(eeg_decoding)/.decode_done $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
+$(eeg_decoding)/.decode_done: 
 	mkdir -p $(eeg_decoding)
 
 	@echo "#!/bin/bash" > submit_decoding_jobs.sh
@@ -78,8 +79,8 @@ $(eeg_decoding)/.decode_done: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_pa
 	@echo "eeg_preprocess=\$$1" >> batch_decoding.sh
 	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> batch_decoding.sh
 	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> batch_decoding.sh
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri" >> batch_decoding.sh
 	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior" >> batch_decoding.sh
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri" >> batch_decoding.sh
 	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri" >> batch_decoding.sh
 	@chmod +x batch_decoding.sh
 
@@ -89,3 +90,4 @@ $(eeg_decoding)/.decode_done: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_pa
 
 clean:
 	rm *.sh
+	rm *.out

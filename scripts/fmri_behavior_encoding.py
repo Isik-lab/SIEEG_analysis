@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from src import logging, loading, regression, tools, stats
 import torch
 from pathlib import Path
+from src.regression import T_torch
+from src.stats import corr2d_gpu
 
 
 class fmriBehaviorEncoding:
@@ -16,20 +18,15 @@ class fmriBehaviorEncoding:
         self.scoring = args.scoring
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    @staticmethod
-    def score_results(y_hat, y_test):
-        return stats.corr2d_gpu(y_hat, y_test)
-
-    def load_split_norm(self):
-        annotations = loading.load_behavior(self.fmri_dir)
+    def load(self):
         fmri, _ = loading.load_fmri(self.fmri_dir)
-        eeg = loading.strip_eeg(eeg_filtered)
-        splits = regression.split_data(annotations, {'fmri': fmri})
-        X_train, X_test = splits['fmri_train'], splits['fmri_test']
-        y_train, y_test = splits['annotations_train'], splits['annotations_test']
-        [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
-                                                            device=self.device)
-        regression.preprocess(X_train, X_test, y_train, y_test)
+        return {'behavior': loading.load_behavior(self.fmri_dir),
+                 'fmri': fmri}
+
+    def split_data(self, data):
+        splits = regression.split_data(data['behavior'], {'fmri': data['fmri']})
+        X_train, X_test = splits['behavior_train'], splits['behavior_test']
+        y_train, y_test = splits['fmri_train'], splits['fmri_test']
         return X_train, X_test, y_train, y_test
 
     def save_results(self, results):
@@ -41,13 +38,22 @@ class fmriBehaviorEncoding:
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def run(self):
-        [X_train, X_test, y_train, y_test] = self.load_split_norm()
+        data = self.load()
+        X_train, X_test, y_train, y_test = self.split_data(data)
+        [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
+                                                            device=self.device)
+        regression.preprocess(X_train, X_test, y_train, y_test) #inplace
         results = regression.regress_and_predict(X_train, y_train, X_test,
                                                  alpha_start=self.alpha_start,
                                                  alpha_stop=self.alpha_stop,
                                                  scoring=self.scoring,
                                                  device=self.device)
-        results['scores'] = self.score_results(results['yhat'], y_test)
+        print(f'{results['yhat'].size()=}')
+        print(f'{X_train.size()=}')
+        print(f'{X_test.size()=}')
+        print(f'{y_train.size()=}')
+        print(f'{y_test.size()=}')
+        results['scores'] = corr2d_gpu(results['yhat'], y_test)
         self.mk_out_dir()
         self.save_results(results)
 

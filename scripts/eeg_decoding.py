@@ -5,6 +5,8 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
+from src.stats import corr2d_gpu
+from src.regression import T_torch
 
 
 class eegDecoding:
@@ -23,10 +25,6 @@ class eegDecoding:
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
         self.out_dir = args.out_dir
         print(vars(self))
-
-    @staticmethod
-    def score_results(y_hat, y_test):
-        return stats.corr2d_gpu(y_hat, y_test)
 
     def load_and_validate(self):
         behavior_raw = loading.load_behavior(self.fmri_dir)
@@ -72,7 +70,12 @@ class eegDecoding:
                                             alpha_stop=self.alpha_stop,
                                             scoring=self.scoring,
                                             device=self.device)
-        results['scores'] = self.score_results(results['yhat'], y_test)
+        results['scores'] = corr2d_gpu(results['yhat'], y_test)
+        print(f'{results['scores'].size()=}')
+        print(f'{X_train.size()=}')
+        print(f'{X_test.size()=}')
+        print(f'{y_train.size()=}')
+        print(f'{y_test.size()=}')
         self.mk_out_dir()
         self.save_results(results)
         print('finished')

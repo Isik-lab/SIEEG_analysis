@@ -14,6 +14,10 @@ from sklearn.feature_selection import SelectKBest, f_regression
 from deepjuice.alignment import TorchRidgeGCV
 
 
+def T_torch(tensor):
+    return torch.transpose(tensor, dim0=0, dim1=1)
+
+
 def correlation_scorer(y_true, y_pred):
     """correlation_scorer
 
@@ -38,7 +42,7 @@ def split_data(behavior, neurals):
         _type_: _description_
     """
     train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
-    test_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
+    test_idx = behavior.loc[behavior['stimulus_set'] == 'test'].index
     cols = [col for col in behavior.columns if 'rating-' in col]
     out = {}       
     for key, neural in neurals.items():
