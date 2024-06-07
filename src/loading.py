@@ -111,9 +111,15 @@ def load_decoding_files(path, file_pattern, targets):
     out = []
     for file in tqdm(files, desc='Loading files'):
         sub, time = get_subj_time(file)
-        df = pd.read_csv(file).rename({0: 'r'})
+        df = pd.read_csv(file).rename(columns={'0': 'r'})
         df['subj_id'] = sub
         df['time_id'] = time
-        df['targets'] = targets
+        #add the targets based on the dictionary
+        for key, val in targets.items():
+            df[key] = val
+        
+        #average over ROIs in the fMRI data
+        if len(df) > df['targets'].nunique():
+            df = df.groupby(['time_id', 'targets']).mean(numeric_only=True).reset_index()
         out.append(df)
     return pd.concat(out)

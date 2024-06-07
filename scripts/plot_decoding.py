@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import seaborn as sns
 import pickle
+from src.logging import get_githash
 
 
 class PlotDecoding:
@@ -33,11 +34,12 @@ class PlotDecoding:
     def get_targets(self):
         if self.y_name == 'behavior':
             y_data = loading.load_behavior(self.fmri_dir)
-            targets = [col for col in y_data.columns if 'rating' in col]
+            out = {'targets': [col for col in y_data.columns if 'rating' in col]}
         else: #self.y_name == 'fmri'
             _, y_data = loading.load_fmri(self.fmri_dir)
-            targets = y_data.voxel_id.to_list()
-        return targets
+            out = {'voxel_id': y_data.voxel_id.to_list(),
+                   'targets': y_data.roi_name.to_list()}
+        return out
 
     def get_time_map(self):
         with open(f'{self.eeg_dir}/map_time.pkl', 'rb') as f:
@@ -49,8 +51,14 @@ class PlotDecoding:
         return loading.load_decoding_files(self.decoding_dir, name_pattern, targets)
 
     def viz_results(self, results):
-        data.groupby('time').mean(numeric_only=True).reset_index()
-        sns.plot(x='time', y='')
+        df_mean = results.groupby(['time', 'targets']).mean(numeric_only=True).reset_index()
+        df_mean['r2'] = stats.sign_square(df_mean['r'].to_numpy())
+        fig, ax = plt.subplots()
+        sns.lineplot(x='time', y='r2', hue='targets', data=df_mean, ax=ax)
+        plt.savefig(f'{self.out_dir}/x-{self.x_name}_y-{self.y_name}.{get_githash()}.pdf')
+
+    def save_results(self, results):
+        results.to_csv(f'{self.out_dir}/x-{self.x_name}_y-{self.y_name}.csv.gz', index=False)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
@@ -62,6 +70,8 @@ class PlotDecoding:
         data = self.map_ind_to_time(data, time_map)
         print(data.head())
         self.mk_out_dir()
+        self.viz_results(data)
+        self.save_results(data)
         print('finished')
 
 
