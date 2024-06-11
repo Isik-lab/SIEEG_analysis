@@ -1,3 +1,4 @@
+import inspect
 from tqdm import tqdm 
 import numpy as np
 import pandas as pd
@@ -89,10 +90,27 @@ def preprocess(X_train, X_test, y_train, y_test):
     return None
 
 
-def regress_and_predict(X_train, y_train, X_test,
-                        alpha_start=-2, alpha_stop=5,
-                        scoring='pearsonr', device='cuda',
-                        return_alpha=False, return_betas=False):
+def regression_model(method_name, X_train, y_train, X_test, **kwargs):
+    method_dict = {
+        'ols': ols,
+        'ridge': ridge
+    }
+    
+    if method_name not in method_dict:
+        raise ValueError(f"Unknown method name: {method_name}")
+    regression_function = method_dict[method_name]
+
+    # Filter kwargs to include only those that the function accepts
+    params = inspect.signature(regression_function).parameters
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in params}
+    
+    return regression_function(X_train, y_train, X_test, **filtered_kwargs)
+
+
+def ridge(X_train, y_train, X_test,
+          alpha_start=-2, alpha_stop=5,
+          scoring='pearsonr', device='cuda',
+          return_alpha=False, return_betas=False):
     """Use deepjuice TorchRidgeGCV to perform the regression 
     and predict the response in the held out data
 
@@ -123,6 +141,28 @@ def regress_and_predict(X_train, y_train, X_test,
     if return_betas:
         out['betas'] = pipe.coef_
     return out
+
+
+def ols(X_train, y_train, X_test):
+    """
+    Fits an ordinary least squares regression model using torch.linalg.lstsq
+    without an intercept and generates test predictions.
+    
+    Parameters:
+    X_train (torch.Tensor): Training data features of shape (n_samples, n_features)
+    y_train (torch.Tensor): Training data targets of shape (n_samples, n_targets)
+    X_test (torch.Tensor): Test data features of shape (m_samples, n_features)
+    
+    Returns:
+    torch.Tensor: Predictions for the test data of shape (m_samples, n_targets)
+    """
+    # Solve the least squares problem
+    coeffs = torch.linalg.lstsq(X_train, y_train).solution
+
+    # Generate predictions on the test set
+    y_pred = X_test @ coeffs
+
+    return {'yhat': y_pred.squeeze()}
 
 
 # def eeg_feature_decoding(neural_df, feature_df,

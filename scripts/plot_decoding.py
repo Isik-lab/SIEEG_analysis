@@ -31,6 +31,16 @@ class PlotDecoding:
         out['time'] = out['time_id'].map(time_map)
         return out
 
+    @staticmethod
+    def average_over_subjs(results):
+        return results.groupby(['time', 'targets']).mean(numeric_only=True).reset_index()
+    
+    @staticmethod
+    def compute_explained_variance(results):
+        out = results.copy()
+        out['r2'] = stats.sign_square(out['r'].to_numpy())
+        return out
+
     def get_targets(self):
         if self.y_name == 'behavior':
             y_data = loading.load_behavior(self.fmri_dir)
@@ -51,10 +61,8 @@ class PlotDecoding:
         return loading.load_decoding_files(self.decoding_dir, name_pattern, targets)
 
     def viz_results(self, results):
-        df_mean = results.groupby(['time', 'targets']).mean(numeric_only=True).reset_index()
-        df_mean['r2'] = stats.sign_square(df_mean['r'].to_numpy())
         fig, ax = plt.subplots()
-        sns.lineplot(x='time', y='r2', hue='targets', data=df_mean, ax=ax)
+        sns.lineplot(x='time', y='r2', hue='targets', data=results, ax=ax)
         plt.savefig(f'{self.out_dir}/x-{self.x_name}_y-{self.y_name}.{get_githash()}.pdf')
 
     def save_results(self, results):
@@ -68,6 +76,9 @@ class PlotDecoding:
         data = self.load_results(targets)
         time_map = self.get_time_map()
         data = self.map_ind_to_time(data, time_map)
+        data = self.average_over_subjs(data)
+        data = self.compute_explained_variance(data)
+
         print(data.head())
         self.mk_out_dir()
         self.viz_results(data)
@@ -77,12 +88,19 @@ class PlotDecoding:
 
 def main():
     parser = argparse.ArgumentParser(description='Combine and plot the EEG decoding results')
-    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory')
-    parser.add_argument('--eeg_dir', '-e', type=str, help='EEG preprocessing directory')
-    parser.add_argument('--decoding_dir', '-d', type=str, help='directory of the decoding results')
-    parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs')
-    parser.add_argument('--y_name', '-y', type=str, help='name of the data to be used as regression target')
-    parser.add_argument('--x_name', '-x', type=str, help='name of the data for regression fitting')
+    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+    parser.add_argument('--eeg_dir', '-e', type=str, help='EEG preprocessing directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/')
+    parser.add_argument('--decoding_dir', '-d', type=str, help='directory of the decoding results',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
+    parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotDecoding')
+    parser.add_argument('--y_name', '-y', type=str, default='behavior',
+                        help='name of the data to be used as regression target')
+    parser.add_argument('--x_name', '-x', type=str, default='eeg',
+                        help='name of the data for regression fitting')
+
     args = parser.parse_args()
     PlotDecoding(args).run()
 

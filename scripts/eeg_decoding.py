@@ -6,7 +6,7 @@ import torch
 from pathlib import Path
 import numpy as np
 from src.stats import corr2d_gpu
-from src.regression import T_torch
+from src.regression import regression_model
 
 
 class eegDecoding:
@@ -24,6 +24,7 @@ class eegDecoding:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
         self.out_dir = args.out_dir
+        self.regression_method = args.regression_method
         print(vars(self))
 
     def load_and_validate(self):
@@ -59,38 +60,44 @@ class eegDecoding:
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
+    def get_kwargs(self):
+        return vars(self).copy()
+
     def run(self):
         data = self.load_and_validate()
         X_train, X_test, y_train, y_test = self.split_data(data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         regression.preprocess(X_train, X_test, y_train, y_test) #inplace
-        results = regression.regress_and_predict(X_train, y_train, X_test,
-                                            alpha_start=self.alpha_start,
-                                            alpha_stop=self.alpha_stop,
-                                            scoring=self.scoring,
-                                            device=self.device)
+
+        kwargs = self.get_kwargs()
+        results = regression_model(self.regression_method,
+                                   X_train, y_train, X_test,
+                                   **kwargs)
         results['scores'] = corr2d_gpu(results['yhat'], y_test)
-        print(f'{results['scores'].size()=}')
-        print(f'{X_train.size()=}')
-        print(f'{X_test.size()=}')
-        print(f'{y_train.size()=}')
-        print(f'{y_test.size()=}')
+
         self.mk_out_dir()
         self.save_results(results)
         print('finished')
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Predict fMRI responses using the features')
-    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory')
-    parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file')
-    parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs')
-    parser.add_argument('--y_name', '-y', type=str, help='name of the data to be used as regression target')
-    parser.add_argument('--x_name', '-x', type=str, help='name of the data for regression fitting')
+    parser = argparse.ArgumentParser(description='Decoding behavior or fMRI from EEG responses')
+    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+    parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/sub-01_time-00.csv.gz')
+    parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
+    parser.add_argument('--y_name', '-y', type=str, default='behavior',
+                        help='name of the data to be used as regression target')
+    parser.add_argument('--x_name', '-x', type=str, default='eeg',
+                        help='name of the data for regression fitting')
+    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
+                        help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=2,
+    parser.add_argument('--alpha_stop', type=int, default=10,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')

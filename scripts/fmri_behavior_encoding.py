@@ -6,6 +6,7 @@ import torch
 from pathlib import Path
 from src.regression import T_torch
 from src.stats import corr2d_gpu
+from src.regression import regression_model
 
 
 class fmriBehaviorEncoding:
@@ -16,6 +17,7 @@ class fmriBehaviorEncoding:
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
+        self.regression_method = args.regression_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def load(self):
@@ -37,22 +39,21 @@ class fmriBehaviorEncoding:
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
+    def get_kwargs(self):
+        kwargs = vars(self).copy()
+        return kwargs
+
     def run(self):
         data = self.load()
         X_train, X_test, y_train, y_test = self.split_data(data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         regression.preprocess(X_train, X_test, y_train, y_test) #inplace
-        results = regression.regress_and_predict(X_train, y_train, X_test,
-                                                 alpha_start=self.alpha_start,
-                                                 alpha_stop=self.alpha_stop,
-                                                 scoring=self.scoring,
-                                                 device=self.device)
-        print(f'{results['yhat'].size()=}')
-        print(f'{X_train.size()=}')
-        print(f'{X_test.size()=}')
-        print(f'{y_train.size()=}')
-        print(f'{y_test.size()=}')
+
+        kwargs = self.get_kwargs()
+        results = regression_model(self.regression_method, 
+                                   X_train, y_train, X_test,
+                                   **kwargs)
         results['scores'] = corr2d_gpu(results['yhat'], y_test)
         self.mk_out_dir()
         self.save_results(results)
@@ -60,11 +61,15 @@ class fmriBehaviorEncoding:
 
 def main():
     parser = argparse.ArgumentParser(description='Predict fMRI responses using the features')
-    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory')
-    parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results')
+    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+    parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriBehaviorEncoding')
+    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
+                        help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=2,
+    parser.add_argument('--alpha_stop', type=int, default=10,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
