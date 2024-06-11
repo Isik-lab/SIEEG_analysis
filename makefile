@@ -54,37 +54,39 @@ python $(project_folder)/scripts/eeg_preprocessing.py \
 	touch $(eeg_preprocess)/.preprocess_done
 
 # Decode EEG data
+submit_file=submit_decoding_jobs_pca.sh
+batch_file=batch_decoding_pca.sh
 eeg_decode: $(eeg_decoding)/.decode_done $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
 $(eeg_decoding)/.decode_done: 
 	mkdir -p $(eeg_decoding)
 
-	@echo "#!/bin/bash" > submit_decoding_jobs.sh
-	@echo "eeg_preprocess=$(eeg_preprocess)" >> submit_decoding_jobs.sh
-	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv.gz | wc -w)" >> submit_decoding_jobs.sh
-	@echo "echo \$$num_files" >> submit_decoding_jobs.sh
-	@echo "sbatch --array=0-\$$((num_files-1))%50 batch_decoding.sh \$$eeg_preprocess" >> submit_decoding_jobs.sh
-	@chmod +x submit_decoding_jobs.sh
+	@echo "#!/bin/bash" > $(submit_file)
+	@echo "eeg_preprocess=$(eeg_preprocess)" >> $(submit_file)
+	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv.gz | wc -w)" >> $(submit_file)
+	@echo "echo \$$num_files" >> $(submit_file)
+	@echo "sbatch --array=0-\$$((num_files-1))%50 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
+	@chmod +x $(submit_file)
 
-	@echo "#!/bin/bash" > batch_decoding.sh
-	@echo "#SBATCH --partition=shared" >> batch_decoding.sh
-	@echo "#SBATCH --account=lisik33" >> batch_decoding.sh
-	@echo "#SBATCH --job-name=eeg_decoding" >> batch_decoding.sh
-	@echo "#SBATCH --ntasks=1" >> batch_decoding.sh
-	@echo "#SBATCH --time=30:00" >> batch_decoding.sh
-	@echo "#SBATCH --cpus-per-task=6" >> batch_decoding.sh
-	@echo "set -e" >> batch_decoding.sh
-	@echo "ml anaconda" >> batch_decoding.sh
-	@echo "conda activate eeg" >> batch_decoding.sh
-	@echo "project_folder=$(project_folder)" >> batch_decoding.sh
-	@echo "eeg_preprocess=\$$1" >> batch_decoding.sh
-	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> batch_decoding.sh
-	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> batch_decoding.sh
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior" >> batch_decoding.sh
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri" >> batch_decoding.sh
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri" >> batch_decoding.sh
-	@chmod +x batch_decoding.sh
+	@echo "#!/bin/bash" > $(batch_file)
+	@echo "#SBATCH --partition=shared" >> $(batch_file)
+	@echo "#SBATCH --account=lisik33" >> $(batch_file)
+	@echo "#SBATCH --job-name=eeg_decoding" >> $(batch_file)
+	@echo "#SBATCH --ntasks=1" >> $(batch_file)
+	@echo "#SBATCH --time=30:00" >> $(batch_file)
+	@echo "#SBATCH --cpus-per-task=6" >> $(batch_file)
+	@echo "set -e" >> $(batch_file)
+	@echo "ml anaconda" >> $(batch_file)
+	@echo "conda activate eeg" >> $(batch_file)
+	@echo "project_folder=$(project_folder)" >> $(batch_file)
+	@echo "eeg_preprocess=\$$1" >> $(batch_file)
+	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> $(batch_file)
+	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri" >> $(batch_file)
+	@chmod +x $(batch_file)
 
-	./submit_decoding_jobs.sh
+	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
 
