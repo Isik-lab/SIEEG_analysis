@@ -81,9 +81,9 @@ $(eeg_decoding)/.decode_done:
 	@echo "eeg_preprocess=\$$1" >> $(batch_file)
 	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> $(batch_file)
 	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior --no-rotate_x" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri --no-rotate_x" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri --no-rotate_x" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behaviorx" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmrix" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmrix" >> $(batch_file)
 	@chmod +x $(batch_file)
 
 	./$(submit_file)
