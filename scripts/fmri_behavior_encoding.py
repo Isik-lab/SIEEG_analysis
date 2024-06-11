@@ -17,6 +17,7 @@ class fmriBehaviorEncoding:
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
+        self.rotate_x = args.rotate_x
         self.regression_method = args.regression_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -73,6 +74,8 @@ def main():
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
+                        help='gaze regressed from the EEG time course')
     args = parser.parse_args()
     fmriBehaviorEncoding(args).run()
 

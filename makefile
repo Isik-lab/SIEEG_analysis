@@ -5,10 +5,10 @@ eeg_subs := 01 02 03 04 05 06 08 09 10 11 12 13 14 15 16 17 18 19 20 21
 
 # Dependencies
 fmri_data=$(project_folder)/data/interim/ReorganizefMRI
-fmri_behavior_encoding=$(project_folder)/data/interim/fmriBehaviorEncoding_pca
+fmri_behavior_encoding=$(project_folder)/data/interim/fmriBehaviorEncoding
 matlab_eeg_path=$(project_folder)/data/interim/eegLab
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
-eeg_decoding=$(project_folder)/data/interim/eegDecoding_pca
+eeg_decoding=$(project_folder)/data/interim/eegDecoding
 fmri_eeg_encoding=$(project_folder)/data/interim/fmriEEGEncoding
 fmri_behavior_eeg_encoding=$(project_folder)/data/interim/fmriBehaviorEEGEncoding
 
@@ -54,8 +54,8 @@ python $(project_folder)/scripts/eeg_preprocessing.py \
 	touch $(eeg_preprocess)/.preprocess_done
 
 # Decode EEG data
-submit_file=submit_decoding_jobs_pca.sh
-batch_file=batch_decoding_pca.sh
+submit_file=submit_decoding_jobs.sh
+batch_file=batch_decoding.sh
 eeg_decode: $(eeg_decoding)/.decode_done $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
 $(eeg_decoding)/.decode_done: 
 	mkdir -p $(eeg_decoding)
@@ -81,9 +81,9 @@ $(eeg_decoding)/.decode_done:
 	@echo "eeg_preprocess=\$$1" >> $(batch_file)
 	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> $(batch_file)
 	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y behavior --no_rotate-x" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg -y fmri --no_rotate-x" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/eeg_decoding.py -f $(fmri_data) -e \$$file -o $(eeg_decoding) -x eeg_behavior -y fmri --no_rotate-x" >> $(batch_file)
 	@chmod +x $(batch_file)
 
 	./$(submit_file)

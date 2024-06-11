@@ -20,6 +20,7 @@ class eegDecoding:
         assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
+        self.rotate_x = args.rotate_x
         self.scoring = args.scoring
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
@@ -97,6 +98,8 @@ def main():
                         help='name of the data to be used as regression target')
     parser.add_argument('--x_name', '-x', type=str, default='eeg',
                         help='name of the data for regression fitting')
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
+                        help='gaze regressed from the EEG time course')
     parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
