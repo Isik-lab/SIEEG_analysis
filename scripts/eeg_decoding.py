@@ -69,6 +69,10 @@ class eegDecoding:
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         regression.preprocess(X_train, X_test, y_train, y_test) #inplace
+        print(f'{X_train.size()=}')
+        print(f'{X_test.size()=}')
+        print(f'{y_train.size()=}')
+        print(f'{y_test.size()=}')
 
         kwargs = self.get_kwargs()
         results = regression_model(self.regression_method,

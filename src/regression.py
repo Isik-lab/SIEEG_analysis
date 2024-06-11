@@ -13,6 +13,7 @@ import torch
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
 from deepjuice.alignment import TorchRidgeGCV
+from src.pca import PCA
 
 
 def T_torch(tensor):
@@ -110,6 +111,7 @@ def regression_model(method_name, X_train, y_train, X_test, **kwargs):
 def ridge(X_train, y_train, X_test,
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
+          rotate_x=True,
           return_alpha=False, return_betas=False):
     """Use deepjuice TorchRidgeGCV to perform the regression 
     and predict the response in the held out data
@@ -122,19 +124,29 @@ def ridge(X_train, y_train, X_test,
         alpha_stop (int, optional): largest power for alpha. Defaults to 5.
         scoring (str, optional): type of scoring function. Defaults to 'pearsonr'.
         device (str, optional): device location of tensors. Defaults to 'cuda'.
+        rotate_x (bool, optional): rotate X using PCA prior to fitting regression
         return_alpha (bool, optional): return fitted alphas. Defaults to False.
         return_betas (bool, optional): return beta coefficients. Defaults to False.
     
     Returns: 
         y_hat (torch.Tensor): predicted y values
     """
+    if rotate_x:
+        pca = PCA(n_components=X_train.size()[1])
+        X_train_ = pca.fit_transform(X_train)
+        X_test_ = pca.fit(X_test)
+    else:
+        X_train_ = X_train.copy()
+        X_test_ = X_test.copy() 
+
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                             alpha_per_target=True,
                             device=device,
                             scale_X=False,
                             fit_intercept=False,
                             scoring=scoring)
-    pipe.fit(X_train, y_train)
+
+    pipe.fit(X_train_, y_train)
     out = {'yhat': pipe.predict(X_test)}
     if return_alpha:
         out['alpha'] = pipe.alpha_
@@ -143,7 +155,7 @@ def ridge(X_train, y_train, X_test,
     return out
 
 
-def ols(X_train, y_train, X_test):
+def ols(X_train, y_train, X_test, rotate_x=True):
     """
     Fits an ordinary least squares regression model using torch.linalg.lstsq
     without an intercept and generates test predictions.
@@ -152,10 +164,19 @@ def ols(X_train, y_train, X_test):
     X_train (torch.Tensor): Training data features of shape (n_samples, n_features)
     y_train (torch.Tensor): Training data targets of shape (n_samples, n_targets)
     X_test (torch.Tensor): Test data features of shape (m_samples, n_features)
+    rotate_x (bool, optional): rotate X using PCA prior to fitting regression
     
     Returns:
     torch.Tensor: Predictions for the test data of shape (m_samples, n_targets)
     """
+    if rotate_x:
+        pca = PCA(n_components=X_train.size()[1])
+        X_train_ = pca.fit_transform(X_train)
+        X_test_ = pca.fit(X_test)
+    else:
+        X_train_ = X_train.copy()
+        X_test_ = X_test.copy() 
+
     # Solve the least squares problem
     coeffs = torch.linalg.lstsq(X_train, y_train).solution
 
