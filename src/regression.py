@@ -141,7 +141,7 @@ def ridge(X_train, y_train, X_test,
     if rotate_x:
         pca = PCA(n_components=X_train.size()[1])
         pipe.fit(pca.fit_transform(X_train), y_train)
-        out = {'yhat': pipe.predict(pca.fit(X_test))}
+        out = {'yhat': pipe.predict(pca.transform(X_test))}
     else:
         pipe.fit(X_train, y_train)
         out = {'yhat': pipe.predict(X_test)}
