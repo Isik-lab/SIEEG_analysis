@@ -16,8 +16,6 @@ class eegDecoding:
         self.eeg_file = args.eeg_file
         self.y_name = args.y_name
         self.x_name = args.x_name
-        assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
-        assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.rotate_x = args.rotate_x
@@ -27,6 +25,9 @@ class eegDecoding:
         self.out_dir = args.out_dir
         self.regression_method = args.regression_method
         print(vars(self))
+        assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
+        assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
+        
 
     def load_and_validate(self):
         behavior_raw = loading.load_behavior(self.fmri_dir)
