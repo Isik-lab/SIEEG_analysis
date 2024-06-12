@@ -18,11 +18,12 @@ class fmriBehaviorEncoding:
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
         self.rotate_x = args.rotate_x
+        self.roi_mean = args.roi_mean
         self.regression_method = args.regression_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def load(self):
-        fmri, _ = loading.load_fmri(self.fmri_dir)
+        fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         return {'behavior': loading.load_behavior(self.fmri_dir),
                  'fmri': fmri}
 
@@ -72,14 +73,16 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriBehaviorEncoding')
     parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform OLS or ridge regression')
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
+                        help='rotate the values of X by performing PCA before regression')
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
+                        help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
-    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
-                        help='gaze regressed from the EEG time course')
     args = parser.parse_args()
     fmriBehaviorEncoding(args).run()
 

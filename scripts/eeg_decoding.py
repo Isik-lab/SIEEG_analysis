@@ -24,6 +24,7 @@ class eegDecoding:
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
         self.out_dir = args.out_dir
         self.regression_method = args.regression_method
+        self.roi_mean = args.roi_mean
         print(vars(self))
         assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
         assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
@@ -31,7 +32,7 @@ class eegDecoding:
 
     def load_and_validate(self):
         behavior_raw = loading.load_behavior(self.fmri_dir)
-        fmri_raw, _ = loading.load_fmri(self.fmri_dir)
+        fmri_raw, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_filtered, behavior, fmri = loading.check_videos(eeg_raw, behavior_raw, fmri_raw)
         eeg = loading.strip_eeg(eeg_filtered)
@@ -100,7 +101,9 @@ def main():
     parser.add_argument('--x_name', '-x', type=str, default='eeg',
                         help='name of the data for regression fitting')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
-                        help='gaze regressed from the EEG time course')
+                        help='rotate the values of X by performing PCA before regression')
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
+                        help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,

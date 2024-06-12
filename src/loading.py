@@ -18,17 +18,56 @@ def load_behavior(path):
     return pd.read_csv(f'{path}/stimulus_data.csv')
 
 
-def load_fmri(path):
-    """load fMRI data
+def roi_fmri_summary(path):
+    """Summarize the fMRI responses to model the average
+     response in each ROI rather than the voxelwise responses
 
     Args:
         path (str): fMRI benchmark directory
 
     Returns:
+        response data (pandas.core.frame.DataFrame): fMRI data organized per ROI and subj
+        metadata (pandas.core.frame.DataFrame): Info about each of the fMRI targets
+    """
+    #load the data
+    metadata = pd.read_csv(f'{path}/metadatas.csv')
+    response_data = pd.read_csv(f'{path}/response_data.csv.gz')
+    video_names = pd.read_csv(f'{path}/stimulus_data.csv').video_name.to_list()
+
+    #summarize by roi
+    out_response = []
+    out_meta = []
+    for (subj, roi), meta in metadata.groupby(['subj_id', 'roi_name']):
+        if roi != 'none':
+            ids = meta.voxel_id.to_list()
+            responses = response_data.iloc[ids].mean().to_list()
+            for video_name, response in zip(video_names, responses):
+                out_meta.append({'subj_id': subj, 'targets': roi})
+                out_response.append({'id': f'sub-{subj}_roi-{roi}',
+                                     'video_name': video_name,
+                                     'response': response})
+    out_response = pd.DataFrame(out_response).pivot(index='video_name',
+                                                    columns='id',
+                                                    values='response').reset_index(drop=True)
+    out_meta = pd.DataFrame(out_meta)
+    return out_response, out_meta
+
+
+def load_fmri(path, roi_summary=True):
+    """load fMRI data
+
+    Args:
+        path (str): fMRI benchmark directory
+        roi_summary (bool, optional): Return the average ROI response instead of voxelwise response. Default is False
+
+    Returns:
         response data (pandas.core.frame.DataFrame): reorganized fMRI responses
         metadata (pandas.core.frame.DataFrame): Info about each target in the fMRI data
     """
-    return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
+    if roi_summary:
+        return roi_fmri_summary(path)
+    else:
+        return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
 
 
 def load_eeg(file_path):
