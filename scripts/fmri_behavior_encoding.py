@@ -78,7 +78,7 @@ def main():
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
-    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='gaze regressed from the EEG time course')
     args = parser.parse_args()
     fmriBehaviorEncoding(args).run()
