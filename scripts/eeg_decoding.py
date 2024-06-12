@@ -27,8 +27,7 @@ class eegDecoding:
         self.roi_mean = args.roi_mean
         print(vars(self))
         assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
-        assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
-        
+        assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'  
 
     def load_and_validate(self):
         behavior_raw = loading.load_behavior(self.fmri_dir)
@@ -108,7 +107,7 @@ def main():
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=10,
+    parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')

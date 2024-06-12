@@ -9,9 +9,9 @@ from src.stats import corr2d_gpu
 from src.regression import regression_model
 
 
-class fmriBehaviorEncoding:
+class fmriEncodings:
     def __init__(self, args):
-        self.process = 'fmriBehaviorEncoding'
+        self.process = 'fmriEncodings'
         self.fmri_dir = args.fmri_dir
         self.out_dir = args.out_dir
         self.alpha_start = args.alpha_start
@@ -70,7 +70,7 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriBehaviorEncoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
     parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform OLS or ridge regression')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
@@ -84,7 +84,7 @@ def main():
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
     args = parser.parse_args()
-    fmriBehaviorEncoding(args).run()
+    fmriEncodings(args).run()
 
 
 if __name__ == '__main__':

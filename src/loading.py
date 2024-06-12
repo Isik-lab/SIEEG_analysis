@@ -30,7 +30,7 @@ def roi_fmri_summary(path):
         metadata (pandas.core.frame.DataFrame): Info about each of the fMRI targets
     """
     #load the data
-    metadata = pd.read_csv(f'{path}/metadatas.csv')
+    metadata = pd.read_csv(f'{path}/metadata.csv')
     response_data = pd.read_csv(f'{path}/response_data.csv.gz')
     video_names = pd.read_csv(f'{path}/stimulus_data.csv').video_name.to_list()
 
@@ -41,30 +41,29 @@ def roi_fmri_summary(path):
         if roi != 'none':
             ids = meta.voxel_id.to_list()
             responses = response_data.iloc[ids].mean().to_list()
+            out_meta.append({'subj_id': subj, 'roi_name': roi})
             for video_name, response in zip(video_names, responses):
-                out_meta.append({'subj_id': subj, 'targets': roi})
                 out_response.append({'id': f'sub-{subj}_roi-{roi}',
                                      'video_name': video_name,
                                      'response': response})
     out_response = pd.DataFrame(out_response).pivot(index='video_name',
                                                     columns='id',
                                                     values='response').reset_index(drop=True)
-    out_meta = pd.DataFrame(out_meta)
-    return out_response, out_meta
+    return out_response, pd.DataFrame(out_meta)
 
 
-def load_fmri(path, roi_summary=True):
+def load_fmri(path, roi_mean=True):
     """load fMRI data
 
     Args:
         path (str): fMRI benchmark directory
-        roi_summary (bool, optional): Return the average ROI response instead of voxelwise response. Default is False
+        roi_mean (bool, optional): Return the average ROI response instead of voxelwise response. Default is False
 
     Returns:
         response data (pandas.core.frame.DataFrame): reorganized fMRI responses
         metadata (pandas.core.frame.DataFrame): Info about each target in the fMRI data
     """
-    if roi_summary:
+    if roi_mean:
         return roi_fmri_summary(path)
     else:
         return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')

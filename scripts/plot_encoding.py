@@ -23,7 +23,7 @@ class PlotEncoding:
         print(vars(self))
 
     def load_fmri_encoding(self):
-        _, fmri_info = loading.load_fmri(self.fmri_dir, roi_summary=self.roi_mean)
+        _, fmri_info = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         out = pd.read_csv(f'{self.fmri_encoding}/scores.csv.gz').rename(columns={'0': 'r'})
         out['targets'] = fmri_info.roi_name.to_list()
         if 'voxel_id' in fmri_info.columns:
