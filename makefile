@@ -11,9 +11,11 @@ eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_decoding=$(project_folder)/data/interim/eegDecoding
 fmri_eeg_encoding=$(project_folder)/data/interim/fmriEEGEncoding
 fmri_behavior_eeg_encoding=$(project_folder)/data/interim/fmriBehaviorEEGEncoding
+plot_decoding=$(project_folder)/data/interim/PlotDecoding
+plot_encoding=$(project_folder)/data/interim/PlotEncoding
 
 # Steps to run
-all: fmri_behavior_encoding eeg_preprocess eeg_decode
+all: fmri_behavior_encoding eeg_preprocess eeg_decode plot_decoding plot_encoding
 
 # Perform fMRI encoding with features
 fmri_behavior_encoding: $(fmri_behavior_encoding)/.encoding_done $(fmri_data)
@@ -89,6 +91,11 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
+plot_decoding: $(plot_decoding)/.plotting_done
+	touch $(plot_decoding)/.plotting_done
+
+plot_encoding: $(fmri_plotting)/.plotting_done
+	touch $(fmri_plotting)/.plotting_done
 
 clean:
 	rm *.sh
