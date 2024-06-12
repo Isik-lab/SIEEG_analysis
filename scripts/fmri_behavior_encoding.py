@@ -50,6 +50,10 @@ class fmriBehaviorEncoding:
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         regression.preprocess(X_train, X_test, y_train, y_test) #inplace
+        print(f'{X_train.size()=}')
+        print(f'{X_test.size()=}')
+        print(f'{y_train.size()=}')
+        print(f'{y_test.size()=}')
 
         kwargs = self.get_kwargs()
         results = regression_model(self.regression_method, 
@@ -66,15 +70,15 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriBehaviorEncoding')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
-                        help='starting value in log space for the ridge alpha penalty')
+    parser.add_argument('--regression_method', '-r', type=str, default='ols',
+                        help='whether to perform OLS or ridge regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=10,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
-    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=False,
                         help='gaze regressed from the EEG time course')
     args = parser.parse_args()
     fmriBehaviorEncoding(args).run()

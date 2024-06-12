@@ -6,16 +6,17 @@ eeg_subs := 01 02 03 04 05 06 08 09 10 11 12 13 14 15 16 17 18 19 20 21
 # Dependencies
 fmri_data=$(project_folder)/data/interim/ReorganizefMRI
 fmri_behavior_encoding=$(project_folder)/data/interim/fmriBehaviorEncoding
+plot_encoding=$(project_folder)/data/interim/PlotEncoding
+
 matlab_eeg_path=$(project_folder)/data/interim/eegLab
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_decoding=$(project_folder)/data/interim/eegDecoding
 fmri_eeg_encoding=$(project_folder)/data/interim/fmriEEGEncoding
 fmri_behavior_eeg_encoding=$(project_folder)/data/interim/fmriBehaviorEEGEncoding
 plot_decoding=$(project_folder)/data/interim/PlotDecoding
-plot_encoding=$(project_folder)/data/interim/PlotEncoding
 
 # Steps to run
-all: fmri_behavior_encoding eeg_preprocess eeg_decode plot_decoding plot_encoding
+all: fmri_behavior_encoding eeg_preprocess eeg_decode plot_encoding
 
 # Perform fMRI encoding with features
 fmri_behavior_encoding: $(fmri_behavior_encoding)/.encoding_done $(fmri_data)
@@ -32,7 +33,9 @@ ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 python $(project_folder)/scripts/fmri_behavior_encoding.py \
--f $(fmri_data) -o $(fmri_behavior_encoding)" | sbatch
+-f $(fmri_data) -o $(fmri_behavior_encoding)\n\
+python $(project_folder)/scripts/plot_encoding.py \
+-f $(fmri_data) -e $(fmri_behavior_encoding) -o $(plot_encoding)" | sbatch
 	touch $(fmri_behavior_encoding)/.encoding_done
 
 # Preprocess EEG data for regression
@@ -47,6 +50,7 @@ $(eeg_preprocess)/.preprocess_done:
 #SBATCH --ntasks=1\n\
 #SBATCH --time=30:00\n\
 #SBATCH --cpus-per-task=6\n\
+set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
@@ -91,12 +95,9 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
-plot_decoding: $(plot_decoding)/.plotting_done
-	touch $(plot_decoding)/.plotting_done
-
 plot_encoding: $(fmri_plotting)/.plotting_done
 	touch $(fmri_plotting)/.plotting_done
 
 clean:
-	rm *.sh
 	rm *.out
+	rm *.sh

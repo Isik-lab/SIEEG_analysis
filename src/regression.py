@@ -170,10 +170,10 @@ def ols(X_train, y_train, X_test, rotate_x=True):
     if rotate_x:
         pca = PCA(n_components=X_train.size()[1])
         coeffs = torch.linalg.lstsq(pca.fit_transform(X_train), y_train).solution
-        y_pred = pca.fit(pca.transform(X_test))
+        y_pred = pca.transform(X_test) @ coeffs
     else:
         coeffs = torch.linalg.lstsq(X_train, y_train).solution
-        y_pred = pca.fit(X_test)
+        y_pred = X_test @ coeffs
 
     return {'yhat': y_pred.squeeze()}
 
