@@ -22,6 +22,7 @@ class PlotDecoding:
         assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
         assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
         self.out_dir = args.out_dir
+        self.roi_mean = args.roi_mean
         # logging.neptune_params(self)
         print(vars(self))
 
@@ -45,10 +46,14 @@ class PlotDecoding:
         if self.y_name == 'behavior':
             y_data = loading.load_behavior(self.fmri_dir)
             out = {'targets': [col for col in y_data.columns if 'rating' in col]}
-        else: #self.y_name == 'fmri'
-            _, y_data = loading.load_fmri(self.fmri_dir)
-            out = {'voxel_id': y_data.voxel_id.to_list(),
-                   'targets': y_data.roi_name.to_list()}
+        else:
+            _, y_data = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
+            if self.roi_mean:
+                out = {'subj_id': y_data.subj_id.to_list(),
+                       'targets': y_data.roi_name.to_list()}
+            else:
+                out = {'voxel_id': y_data.voxel_id.to_list(),
+                       'targets': y_data.roi_name.to_list()}
         return out
 
     def get_time_map(self):
@@ -100,7 +105,8 @@ def main():
                         help='name of the data to be used as regression target')
     parser.add_argument('--x_name', '-x', type=str, default='eeg',
                         help='name of the data for regression fitting')
-
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
+                        help='predicted roi mean response instead of voxelwise responses')
     args = parser.parse_args()
     PlotDecoding(args).run()
 
