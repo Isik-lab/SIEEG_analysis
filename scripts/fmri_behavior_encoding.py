@@ -70,11 +70,11 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriBehaviorEncoding')
-    parser.add_argument('--regression_method', '-r', type=str, default='ols',
+    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform OLS or ridge regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=10,
+    parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
