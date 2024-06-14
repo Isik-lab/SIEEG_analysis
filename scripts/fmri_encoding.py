@@ -31,7 +31,8 @@ class fmriEncodings:
         splits = regression.split_data(data['behavior'], {'fmri': data['fmri']})
         X_train, X_test = splits['behavior_train'], splits['behavior_test']
         y_train, y_test = splits['fmri_train'], splits['fmri_test']
-        return [X_train], [X_test], y_train, y_test
+        groups = np.zeros(X_train.shape[1])
+        return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
         for key, val in results.items():
@@ -41,9 +42,10 @@ class fmriEncodings:
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
-    def get_kwargs(self):
-        kwargs = vars(self).copy()
-        return kwargs
+    def get_kwargs(self, groups):
+        out = vars(self).copy()
+        out['groups'] = groups
+        return out
 
     def run(self):
         data = self.load()
@@ -51,10 +53,10 @@ class fmriEncodings:
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
-        print(f'{len(X_train)=}')
-        print(f'{len(X_test)=}')
-        print(f'{y_train.size()=}')
-        print(f'{y_test.size()=}')
+        print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
+        print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
+        print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
+        print(f'y_train std check: {np.isclose(torch.std(y_train, dim=0)[0], 1)}')
 
         kwargs = self.get_kwargs()
         results = regression_model(self.regression_method, 

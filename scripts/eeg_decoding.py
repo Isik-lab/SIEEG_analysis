@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from src.stats import corr2d_gpu
 from src.regression import regression_model
+from himalaya.ridge import ColumnTransformerNoStack
 
 
 class eegDecoding:
@@ -42,17 +43,21 @@ class eegDecoding:
         if self.y_name == 'behavior' and self.x_name == 'eeg':
             X_train, X_test = splits['eeg_train'], splits['eeg_test']
             y_train, y_test = splits['behavior_train'], splits['behavior_test']
+            groups = np.zeros(splits['eeg_train'].shape[1])
         elif self.y_name == 'fmri' and self.x_name == 'eeg':
             X_train, X_test = splits['eeg_train'], splits['eeg_test']
             y_train, y_test = splits['fmri_train'], splits['fmri_test']
+            groups = np.zeros(splits['eeg_train'].shape[1])
         elif self.y_name == 'fmri' and self.x_name == 'eeg_behavior':
             X_train = np.hstack((splits['eeg_train'], splits['behavior_train']))
             X_test = np.hstack((splits['eeg_test'], splits['behavior_test']))
             y_train, y_test = splits['fmri_train'], splits['fmri_test']
+            groups = np.hstack((np.zeros(splits['eeg_train'].shape[1]),
+                                np.ones(splits['behavior_train'].shape[1])))
         else:
             raise Exception(f'Sorry regression not implemented for combinations of x={self.x_name} and y={self.y_name}')
             
-        return X_train, X_test, y_train, y_test
+        return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
         for key, val in results.items():
@@ -62,23 +67,25 @@ class eegDecoding:
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
-    def get_kwargs(self):
-        return vars(self).copy()
+    def get_kwargs(self, groups):
+        out = vars(self).copy()
+        out['groups'] = groups
+        return out
 
     def run(self):
         data = self.load_and_validate()
-        X_train, X_test, y_train, y_test = self.split_data(data)
+        X_train, X_test, y_train, y_test, groups = self.split_data(data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
-        regression.preprocess(X_train, X_test, y_train, y_test) #inplace
-        print(f'{X_train.size()=}')
-        print(f'{X_test.size()=}')
-        print(f'{y_train.size()=}')
-        print(f'{y_test.size()=}')
+        X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
+        print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
+        print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
+        print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
+        print(f'y_train std check: {np.isclose(torch.std(y_train, dim=0)[0], 1)}')
 
-        kwargs = self.get_kwargs()
+        kwargs = self.get_kwargs(groups)
         results = regression_model(self.regression_method,
-                                   X_train, y_train, X_test,
+                                   X_train, y_train, X_test, 
                                    **kwargs)
         results['scores'] = corr2d_gpu(results['yhat'], y_test)
 
@@ -103,7 +110,7 @@ def main():
                         help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
+    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')

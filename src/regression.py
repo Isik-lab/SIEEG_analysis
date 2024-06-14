@@ -86,18 +86,11 @@ def preprocess(X_train, X_test, y_train, y_test):
         y_test (numpy.ndarray): 2D np array of samples x features (or reversed)
 
     Returns:
-        normalized X_train, X_test, y_train, y_test
+        X_train, X_test, y_train, y_test
     """
-    out_xtrain, out_xtest = [], []
-    if isinstance(X_train, list):
-        for xtrain, xtest in zip(X_train, X_test):
-            xtrain_normed, xtest_normed = feature_scaler(xtrain, xtest)
-            out_xtrain.append(xtrain_normed)
-            out_xtest.append(xtest_normed)
-    else:
-        out_xtrain, out_xtest = feature_scaler(X_train, X_test)
-    out_ytrain, out_ytest = feature_scaler(y_train, y_test)   
-    return out_xtrain, out_xtest, out_ytrain, out_ytest
+    X_train, X_test = feature_scaler(X_train, X_test)   
+    y_train, y_test = feature_scaler(y_train, y_test)   
+    return X_train, X_test, y_train, y_test
 
 
 def regression_model(method_name, X_train, y_train, X_test, **kwargs):
@@ -118,10 +111,9 @@ def regression_model(method_name, X_train, y_train, X_test, **kwargs):
     return regression_function(X_train, y_train, X_test, **filtered_kwargs)
 
 
-def banded_ridge(X_train, y_train, X_test,
+def banded_ridge(X_train, y_train, X_test, groups,
                  alpha_start=-2, alpha_stop=5,
-                 device='cuda',
-                 rotate_x=True,
+                 device='cuda', rotate_x=True,
                  return_alpha=False, return_betas=False):
     """Use himalaya GroupRidgeCV to perform the regression 
     and predict the response in the held out data
@@ -145,23 +137,25 @@ def banded_ridge(X_train, y_train, X_test,
     else:
         backend = set_backend("torch_cuda")
 
-    alphas = np.logspace(alpha_start, alpha_stop, num=alpha_stop-alpha_start)
+    alphas = np.logspace(alpha_start, alpha_stop, num=(alpha_stop-alpha_start)+1)
     print(alphas)
-    pipe = GroupRidgeCV(groups=len(X), 
-                        solver_params={'alphas': alphas},
-                        fit_intercept=False)
 
     if rotate_x:
-        X_train_rotated, X_test_rotated = [], []
-        for train, test in zip(X_train, X_test):
-            pca = PCA(n_components=X_train.size()[1])
-            X_train_rotated.append(pca.fit_transform(train))
-            X_test_rotated.append(pca.transform(test))
-        pipe.fit(X_train_rotated, y_train)
-        out = {'yhat': pipe.predict(X_test_rotated)}
+        X_train_, X_test_ = [], []
+        for group in np.unique(groups):
+            idx = groups == group
+            pca = PCA(n_components=np.sum(idx))
+            X_train_.append(pca.fit_transform(X_train[:, idx]))
+            X_test_.append(pca.transform(X_test[:, idx]))
+        X_train_, X_test_ = torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1)
     else:
-        pipe.fit(X_train, y_train)
-        out = {'yhat': pipe.predict(X_test)}
+        X_train_ = torch.clone(X_train)
+        X_test_ = torch.clone(X_test)
+
+    pipe = GroupRidgeCV(solver_params={'alphas': alphas},
+                        fit_intercept=False)
+    pipe.fit(X_train_, y_train)
+    out = {'yhat': pipe.predict(X_test_)}
 
     if return_alpha:
         out['alpha'] = pipe.best_alphas_
