@@ -7,6 +7,7 @@ from pathlib import Path
 from src.regression import T_torch
 from src.stats import corr2d_gpu
 from src.regression import regression_model
+import numpy as np
 
 
 class fmriEncodings:
