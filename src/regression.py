@@ -86,11 +86,18 @@ def preprocess(X_train, X_test, y_train, y_test):
         y_test (numpy.ndarray): 2D np array of samples x features (or reversed)
 
     Returns:
-        None
+        normalized X_train, X_test, y_train, y_test
     """
-    X_train, X_test = feature_scaler(X_train, X_test)
-    y_train, y_test = feature_scaler(y_train, y_test)   
-    return None
+    out_xtrain, out_xtest = [], []
+    if isinstance(X_train, list):
+        for xtrain, xtest in X_train, X_test: 
+            xtrain_normed, xtest_normed = feature_scaler(xtrain, xtest)
+            out_xtrain.append(xtrain_normed)
+            out_xtest.append(xtest_normed)
+    else:
+        out_xtrain, out_xtest = feature_scaler(X_train, X_test)
+    out_ytrain, out_ytest = feature_scaler(y_train, y_test)   
+    return out_xtrain, out_xtest, out_ytrain, out_ytest
 
 
 def regression_model(method_name, X_train, y_train, X_test, **kwargs):

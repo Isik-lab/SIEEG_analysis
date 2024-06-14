@@ -5,7 +5,7 @@ eeg_subs := 01 02 03 04 05 06 08 09 10 11 12 13 14 15 16 17 18 19 20 21
 
 # Dependencies
 fmri_data=$(project_folder)/data/interim/ReorganizefMRI
-fmri_encoding=$(project_folder)/data/interim/Encoding
+fmri_encoding=$(project_folder)/data/interim/fmriEncoding
 plot_encoding=$(project_folder)/data/interim/PlotEncoding
 
 matlab_eeg_path=$(project_folder)/data/interim/eegLab

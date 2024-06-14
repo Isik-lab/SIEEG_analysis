@@ -50,9 +50,9 @@ class fmriEncodings:
         X_train, X_test, y_train, y_test = self.split_data(data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
-        regression.preprocess(X_train, X_test, y_train, y_test) #inplace
-        print(f'{X_train.size()=}')
-        print(f'{X_test.size()=}')
+        X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
+        print(f'{len(X_train)=}')
+        print(f'{len(X_test)=}')
         print(f'{y_train.size()=}')
         print(f'{y_test.size()=}')
 
