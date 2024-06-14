@@ -93,6 +93,33 @@ def preprocess(X_train, X_test, y_train, y_test):
     return X_train, X_test, y_train, y_test
 
 
+def pca_rotation(X_train, X_test, groups=None):
+    """_summary_
+
+    Args:
+        X_train (torch.Tensor): X training data
+        X_test (torch.Tensor): X test data
+        groups (numpy.array, optional ): if not None a 1D np.array with length equal to dim 1 of 
+                                         X_train and X_test that defines the groups of the features
+                                         Default is None
+
+    Returns:
+        X_train_rotated (torch.Tensor): rotated X train within group
+        X_test_rotated (torch.Tensor): rotated X test based on components from X train within group
+    """
+    if groups is not None:
+        X_train_, X_test_ = [], []
+        for group in np.unique(groups):
+            idx = groups == group
+            pca = PCA(n_components=np.sum(idx))
+            X_train_.append(pca.fit_transform(X_train[:, idx]))
+            X_test_.append(pca.transform(X_test[:, idx]))
+        return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1)
+    else:
+        pca = PCA(n_components=X_train.size()[1])
+        return pca.fit_transform(X_train), pca.transform(X_test)
+
+
 def regression_model(method_name, X_train, y_train, X_test, **kwargs):
     method_dict = {
         'ols': ols,
@@ -138,24 +165,14 @@ def banded_ridge(X_train, y_train, X_test, groups,
         backend = set_backend("torch_cuda")
 
     alphas = np.logspace(alpha_start, alpha_stop, num=(alpha_stop-alpha_start)+1)
-    print(alphas)
 
     if rotate_x:
-        X_train_, X_test_ = [], []
-        for group in np.unique(groups):
-            idx = groups == group
-            pca = PCA(n_components=np.sum(idx))
-            X_train_.append(pca.fit_transform(X_train[:, idx]))
-            X_test_.append(pca.transform(X_test[:, idx]))
-        X_train_, X_test_ = torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1)
-    else:
-        X_train_ = torch.clone(X_train)
-        X_test_ = torch.clone(X_test)
+        X_train, X_test = pca_rotation(X_train, X_test, groups)
 
     pipe = GroupRidgeCV(solver_params={'alphas': alphas},
                         fit_intercept=False)
-    pipe.fit(X_train_, y_train)
-    out = {'yhat': pipe.predict(X_test_)}
+    pipe.fit(X_train, y_train)
+    out = {'yhat': pipe.predict(X_test)}
 
     if return_alpha:
         out['alpha'] = pipe.best_alphas_
@@ -187,11 +204,8 @@ def ridge(X_train, y_train, X_test,
     Returns: 
         y_hat (torch.Tensor): predicted y values
     """
-    # Concatenate lists of tensors if needed
-    if isinstance(X_train, list):
-        X_train = torch.cat(X_train, dim=0)
-    if isinstance(X_test, list):
-        X_test = torch.cat(X_test, dim=0)
+    if rotate_x:
+        X_train, X_test = pca_rotation(X_train, X_test, groups)
 
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
@@ -200,13 +214,8 @@ def ridge(X_train, y_train, X_test,
                         fit_intercept=False,
                         scoring=scoring)
 
-    if rotate_x:
-        pca = PCA(n_components=X_train.size()[1])
-        pipe.fit(pca.fit_transform(X_train), y_train)
-        out = {'yhat': pipe.predict(pca.transform(X_test))}
-    else:
-        pipe.fit(X_train, y_train)
-        out = {'yhat': pipe.predict(X_test)}
+    pipe.fit(X_train, y_train)
+    out = {'yhat': pipe.predict(X_test)}
 
     if return_alpha:
         out['alpha'] = pipe.alpha_
@@ -236,13 +245,10 @@ def ols(X_train, y_train, X_test, rotate_x=True):
         X_test = torch.cat(X_test, dim=0)
 
     if rotate_x:
-        pca = PCA(n_components=X_train.size()[1])
-        coeffs = torch.linalg.lstsq(pca.fit_transform(X_train), y_train).solution
-        y_pred = pca.transform(X_test) @ coeffs
-    else:
-        coeffs = torch.linalg.lstsq(X_train, y_train).solution
-        y_pred = X_test @ coeffs
-
+        X_train, X_test = pca_rotation(X_train, X_test, groups)
+    
+    coeffs = torch.linalg.lstsq(X_train, y_train).solution
+    y_pred = X_test @ coeffs
     return {'yhat': y_pred.squeeze()}
 
 

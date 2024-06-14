@@ -50,7 +50,7 @@ class fmriEncodings:
 
     def run(self):
         data = self.load()
-        X_train, X_test, y_train, y_test = self.split_data(data)
+        X_train, X_test, y_train, y_test, groups = self.split_data(data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
         X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
@@ -59,7 +59,7 @@ class fmriEncodings:
         print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
         print(f'y_train std check: {np.isclose(torch.std(y_train, dim=0)[0], 1)}')
 
-        kwargs = self.get_kwargs()
+        kwargs = self.get_kwargs(groups)
         results = regression_model(self.regression_method, 
                                    X_train, y_train, X_test,
                                    **kwargs)
