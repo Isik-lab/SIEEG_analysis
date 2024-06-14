@@ -90,7 +90,7 @@ def preprocess(X_train, X_test, y_train, y_test):
     """
     out_xtrain, out_xtest = [], []
     if isinstance(X_train, list):
-        for xtrain, xtest in X_train, X_test: 
+        for xtrain, xtest in zip(X_train, X_test):
             xtrain_normed, xtest_normed = feature_scaler(xtrain, xtest)
             out_xtrain.append(xtrain_normed)
             out_xtest.append(xtest_normed)
