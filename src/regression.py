@@ -138,8 +138,10 @@ def banded_ridge(X_train, y_train, X_test,
     else:
         backend = set_backend("torch_cuda")
 
+    alphas = np.logspace(alpha_start, alpha_stop, num=alpha_stop-alpha_start)
+    print(alphas)
     pipe = GroupRidgeCV(groups=len(X), 
-                        solver_params={'alphas': np.logspace(alpha_start, alpha_stop)}
+                        solver_params={'alphas': alphas},
                         fit_intercept=False)
 
     if rotate_x:
