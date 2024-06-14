@@ -74,11 +74,11 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
-    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
+    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform OLS, ridge, or banded ridge regression')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='rotate the values of X by performing PCA before regression')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')

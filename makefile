@@ -12,9 +12,11 @@ matlab_eeg_path=$(project_folder)/data/interim/eegLab
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_decoding=$(project_folder)/data/interim/eegDecoding
 plot_decoding=$(project_folder)/data/interim/PlotDecoding
+plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
+
 
 # Steps to run
-all: fmri_encoding eeg_preprocess eeg_decode plot_encoding
+all: fmri_encoding eeg_preprocess eeg_decode plot_decoding plot_shared_variance
 
 # Perform fMRI encoding with features
 fmri_encoding: $(fmri_encoding)/.encoding_done $(fmri_data)
@@ -93,8 +95,57 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
-plot_encoding: $(fmri_plotting)/.plotting_done
-	touch $(fmri_plotting)/.plotting_done
+plot_decoding: $(plot_decoding)/.plotting_done $(eeg_decoding)
+$(plot_decoding)/.plotting_done: 
+	mkdir -p $(plot_decoding)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=plot_decoding\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time=30:00\n\
+#SBATCH --cpus-per-task=6\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(token)\n\
+python $(project_folder)/scripts/plot_decoding.py -x eeg -y fmri" | sbatch
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=plot_decoding\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time=30:00\n\
+#SBATCH --cpus-per-task=6\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(token)\n\
+python $(project_folder)/scripts/plot_decoding.py -x eeg -y behavior" | sbatch
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=plot_decoding\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time=30:00\n\
+#SBATCH --cpus-per-task=6\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(token)\n\
+python $(project_folder)/scripts/plot_decoding.py -x eeg_behavior -y fmri" | sbatch
+	touch $(plot_decoding)/.plotting_done
+
+plot_shared_variance: $(plot_shared_variance)/.plotting_done $(eeg_decoding) $(plot_decoding)
+$(plot_shared_variance)/.plotting_done: 
+	mkdir -p $(plot_shared_variance)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=plot_shared_variance\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time=5:00\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(token)\n\
+python $(project_folder)/scripts/plot_shared_variance.py" | sbatch
 
 clean:
 	rm *.out

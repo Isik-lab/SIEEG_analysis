@@ -205,7 +205,7 @@ def ridge(X_train, y_train, X_test,
         y_hat (torch.Tensor): predicted y values
     """
     if rotate_x:
-        X_train, X_test = pca_rotation(X_train, X_test, groups)
+        X_train, X_test = pca_rotation(X_train, X_test)
 
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
@@ -245,7 +245,7 @@ def ols(X_train, y_train, X_test, rotate_x=True):
         X_test = torch.cat(X_test, dim=0)
 
     if rotate_x:
-        X_train, X_test = pca_rotation(X_train, X_test, groups)
+        X_train, X_test = pca_rotation(X_train, X_test)
     
     coeffs = torch.linalg.lstsq(X_train, y_train).solution
     y_pred = X_test @ coeffs
