@@ -68,7 +68,7 @@ $(eeg_decoding)/.decode_done:
 	@echo "eeg_preprocess=$(eeg_preprocess)" >> $(submit_file)
 	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv.gz | wc -w)" >> $(submit_file)
 	@echo "echo \$$num_files" >> $(submit_file)
-	@echo "sbatch --array=0-\$$((num_files-1))%50 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
+	@echo "sbatch --array=0-\$$((num_files-1))%55 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
 	@chmod +x $(submit_file)
 
 	@echo "#!/bin/bash" > $(batch_file)
