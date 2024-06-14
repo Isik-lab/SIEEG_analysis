@@ -14,6 +14,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
 from deepjuice.alignment import TorchRidgeGCV
 from src.pca import PCA
+from himalaya.ridge import GroupRidgeCV
+from himalaya.backend import set_backend
 
 
 def T_torch(tensor):
@@ -94,7 +96,8 @@ def preprocess(X_train, X_test, y_train, y_test):
 def regression_model(method_name, X_train, y_train, X_test, **kwargs):
     method_dict = {
         'ols': ols,
-        'ridge': ridge
+        'ridge': ridge,
+        'banded_ridge': banded_ridge
     }
     
     if method_name not in method_dict:
@@ -106,6 +109,56 @@ def regression_model(method_name, X_train, y_train, X_test, **kwargs):
     filtered_kwargs = {k: v for k, v in kwargs.items() if k in params}
     
     return regression_function(X_train, y_train, X_test, **filtered_kwargs)
+
+
+def banded_ridge(X_train, y_train, X_test,
+                 alpha_start=-2, alpha_stop=5,
+                 device='cuda',
+                 rotate_x=True,
+                 return_alpha=False, return_betas=False):
+    """Use himalaya GroupRidgeCV to perform the regression 
+    and predict the response in the held out data
+
+    Args:
+        X_train (torch.Tensor): training X data
+        y_train (torch.Tensor): training y data
+        X_test (torch.Tensor): testing X data
+        alpha_start (int, optional): smallest power for alpha. Defaults to -2.
+        alpha_stop (int, optional): largest power for alpha. Defaults to 5.
+        device (str, optional): device location of tensors. Defaults to 'cuda'.
+        rotate_x (bool, optional): rotate X using PCA prior to fitting regression
+        return_alpha (bool, optional): return fitted alphas. Defaults to False.
+        return_betas (bool, optional): return beta coefficients. Defaults to False.
+    
+    Returns: 
+        y_hat (torch.Tensor): predicted y values
+    """
+    if device == 'cpu':
+        backend = set_backend("torch")
+    else:
+        backend = set_backend("torch_cuda")
+
+    pipe = GroupRidgeCV(groups=len(X), 
+                        solver_params={'alphas': np.logspace(alpha_start, alpha_stop)}
+                        fit_intercept=False)
+
+    if rotate_x:
+        X_train_rotated, X_test_rotated = [], []
+        for train, test in zip(X_train, X_test):
+            pca = PCA(n_components=X_train.size()[1])
+            X_train_rotated.append(pca.fit_transform(train))
+            X_test_rotated.append(pca.transform(test))
+        pipe.fit(X_train_rotated, y_train)
+        out = {'yhat': pipe.predict(X_test_rotated)}
+    else:
+        pipe.fit(X_train, y_train)
+        out = {'yhat': pipe.predict(X_test)}
+
+    if return_alpha:
+        out['alpha'] = pipe.best_alphas_
+    if return_betas:
+        out['betas'] = pipe.coef_
+    return out
 
 
 def ridge(X_train, y_train, X_test,
@@ -131,6 +184,12 @@ def ridge(X_train, y_train, X_test,
     Returns: 
         y_hat (torch.Tensor): predicted y values
     """
+    # Concatenate lists of tensors if needed
+    if isinstance(X_train, list):
+        X_train = torch.cat(X_train, dim=0)
+    if isinstance(X_test, list):
+        X_test = torch.cat(X_test, dim=0)
+
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
                         device=device,
@@ -167,6 +226,12 @@ def ols(X_train, y_train, X_test, rotate_x=True):
     Returns:
     torch.Tensor: Predictions for the test data of shape (m_samples, n_targets)
     """
+    # Concatenate lists of tensors if needed
+    if isinstance(X_train, list):
+        X_train = torch.cat(X_train, dim=0)
+    if isinstance(X_test, list):
+        X_test = torch.cat(X_test, dim=0)
+
     if rotate_x:
         pca = PCA(n_components=X_train.size()[1])
         coeffs = torch.linalg.lstsq(pca.fit_transform(X_train), y_train).solution

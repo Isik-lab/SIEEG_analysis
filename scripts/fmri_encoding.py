@@ -31,7 +31,7 @@ class fmriEncodings:
         splits = regression.split_data(data['behavior'], {'fmri': data['fmri']})
         X_train, X_test = splits['behavior_train'], splits['behavior_test']
         y_train, y_test = splits['fmri_train'], splits['fmri_test']
-        return X_train, X_test, y_train, y_test
+        return [X_train], [X_test], y_train, y_test
 
     def save_results(self, results):
         for key, val in results.items():
@@ -71,8 +71,8 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
-                        help='whether to perform OLS or ridge regression')
+    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
+                        help='whether to perform OLS, ridge, or banded ridge regression')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
