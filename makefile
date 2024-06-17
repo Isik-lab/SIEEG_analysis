@@ -95,8 +95,8 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
-plot_decoding: $(plot_decoding)/.plotting_done $(eeg_decoding)
-$(plot_decoding)/.plotting_done: 
+plot_decoding: $(plot_decoding)/.done $(eeg_decoding)
+$(plot_decoding)/.done: 
 	mkdir -p $(plot_decoding)
 	printf "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
@@ -131,10 +131,10 @@ ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 python $(project_folder)/scripts/plot_decoding.py -x eeg_behavior -y fmri" | sbatch
-	touch $(plot_decoding)/.plotting_done
+	touch $(plot_decoding)/.done
 
-plot_shared_variance: $(plot_shared_variance)/.plotting_done $(eeg_decoding) $(plot_decoding)
-$(plot_shared_variance)/.plotting_done: 
+plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
+$(plot_shared_variance)/.done: 
 	mkdir -p $(plot_shared_variance)
 	printf "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
