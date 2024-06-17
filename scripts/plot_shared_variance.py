@@ -57,11 +57,37 @@ class PlotSharedVariance:
         return pd.concat(out, ignore_index=True).reset_index(drop=True)
 
     def viz_results(self, results):
+        time_labels = [0, .5]
         n_targets = results.targets.nunique()
-        fig, axes = plt.subplots(4, np.ceil(n_targets/4))
-        axes = trim_axs(np.flatten(axes), n_targets)
-        for target, df in zip(results.groupby('targets'), axes):
-            sns.lineplot(x='time', y='r2', hue='targets', data=results, ax=ax)
+        fig, axes = plt.subplots(3, int(np.ceil(n_targets/3)),
+                                 sharex=True, sharey=True)
+        axes = trim_axs(axes.flatten(), n_targets)
+        ymin, ymax = -0.02, 0.1
+        for (target, df), ax in zip(results.groupby('targets'), axes):
+            df.sort_values(by='time', inplace=True)
+            time = df.time.to_numpy()
+            time_inds = np.arange(0, len(time))
+            r2 = df.r2.to_numpy()
+            r2_adjusted = r2 - r2[time < 0].mean()
+            ax.plot(time_inds, r2, color='black', zorder=1)
+            ax.plot(time_inds, r2_adjusted, color='green', zorder=1)
+            ax.set_title(target)
+            ax.set_xlim([0, len(time)])
+            tick_inds = [(np.abs(time - t)).argmin() for t in time_labels]
+            ax.vlines(x=tick_inds, ymin=ymin,
+                      ymax=ymax, linestyles='dashed',
+                      color='gray', zorder=0, linewidth=1)
+            ax.hlines(y=0, xmin=0, xmax=len(time),
+                      color='black', zorder=0, linewidth=1)
+            ax.set_xticks(tick_inds, time_labels)
+            ax.set_ylim([ymin, ymax])
+            ax.set_xticklabels(time_labels)
+            ax.set_xlabel('Time (s)', fontsize=8)
+            ax.set_ylabel('Shared variance ($r^2$)', fontsize=6)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+        plt.tight_layout()
         plt.savefig(f'{self.out_dir}/shared_variance.{get_githash()}.pdf')
 
     def mk_out_dir(self):
