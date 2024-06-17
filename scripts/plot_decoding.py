@@ -105,7 +105,7 @@ def main():
                         help='name of the data to be used as regression target')
     parser.add_argument('--x_name', '-x', type=str, default='eeg',
                         help='name of the data for regression fitting')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     args = parser.parse_args()
     PlotDecoding(args).run()

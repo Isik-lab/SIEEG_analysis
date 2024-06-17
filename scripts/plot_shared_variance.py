@@ -8,6 +8,7 @@ import numpy as np
 import seaborn as sns
 import pickle
 from src.logging import get_githash
+from src.plotting import trim_axs
 from tqdm import tqdm
 
 
@@ -56,8 +57,11 @@ class PlotSharedVariance:
         return pd.concat(out, ignore_index=True).reset_index(drop=True)
 
     def viz_results(self, results):
-        fig, ax = plt.subplots()
-        sns.lineplot(x='time', y='r2', hue='targets', data=results, ax=ax)
+        n_targets = results.targets.nunique()
+        fig, axes = plt.subplots(4, np.ceil(n_targets/4))
+        axes = trim_axs(np.flatten(axes), n_targets)
+        for target, df in zip(results.groupby('targets'), axes):
+            sns.lineplot(x='time', y='r2', hue='targets', data=results, ax=ax)
         plt.savefig(f'{self.out_dir}/shared_variance.{get_githash()}.pdf')
 
     def mk_out_dir(self):
@@ -91,7 +95,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotDecoding')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotSharedVariance')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     args = parser.parse_args()
     PlotSharedVariance(args).run()

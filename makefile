@@ -131,7 +131,6 @@ ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 python $(project_folder)/scripts/plot_decoding.py -x eeg_behavior -y fmri" | sbatch
-	touch $(plot_decoding)/.done
 
 plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
 $(plot_shared_variance)/.done: 
