@@ -184,7 +184,6 @@ dependencies:
   - referencing=0.32.1=pyhd8ed1ab_0
   - rich=13.7.0=pyhd8ed1ab_0
   - sacremoses=0.0.43=pyhd3eb1b0_0
-  - sentence-transformers=2.3.0=pyhd8ed1ab_0
   - shellingham=1.5.4=pyhd8ed1ab_0
   - six=1.16.0=pyh6c4a22f_0
   - smart_open=6.4.0=pyhd8ed1ab_0
@@ -250,8 +249,11 @@ dependencies:
     - gitdb==4.0.11
     - gitpython==3.1.43
     - h5py==3.11.0
+    - himalaya==0.4.4
     - idna==3.4
-    - ipykernel==6.29.0
+    - imageio==2.34.1
+    - imageio-ffmpeg==0.5.1
+    - ipykernel==6.28.0
     - ipython==8.20.0
     - isoduration==20.11.0
     - jedi==0.18.1
@@ -295,7 +297,7 @@ dependencies:
     - opencv-python==4.9.0.80
     - overrides==7.4.0
     - pandas==2.1.4
-    - pillow==10.0.1
+    - pillow==10.3.0
     - pip==23.3.1
     - preshed==3.0.6
     - prometheus-client==0.14.1
