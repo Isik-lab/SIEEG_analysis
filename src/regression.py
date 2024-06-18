@@ -35,25 +35,33 @@ def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
-def split_data(behavior, neurals):
+def split_data(behavior, neurals, normalize=True):
     """split the data into train and test sets based on the simulus data
 
     Args:
         behavior (pandas.core.frame.DataFrame): _description_
-        neural (dictionary of pandas.core.frame.DataFrame): _description_
+        neurals (dictionary of pandas.core.frame.DataFrame or numpy.ndarray): _description_
+        normalize (bool): whether to normalize data after split. Default is True.
 
     Returns:
         _type_: _description_
     """
     train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
     test_idx = behavior.loc[behavior['stimulus_set'] == 'test'].index
-    cols = [col for col in behavior.columns if 'rating-' in col]
-    out = {}       
+    beh_cols = [col for col in behavior.columns if 'rating-' in col]
+
+    out = {}
     for key, neural in neurals.items():
-        out[f'{key}_train'] = neural.iloc[train_idx].to_numpy()
-        out[f'{key}_test'] = neural.iloc[test_idx].to_numpy()
-    out['behavior_train'] = behavior.iloc[train_idx][cols].to_numpy()
-    out['behavior_test'] = behavior.iloc[test_idx][cols].to_numpy()
+        if type(neural) is pd.core.frame.DataFrame: 
+            neural_train = neural.iloc[train_idx].to_numpy()
+            neural_test = neural.iloc[test_idx].to_numpy()
+        else:
+            neural_train = neural[train_idx]
+            neural_test = neural[test_idx]
+        out[f'{key}_train'], out[f'{key}_test'] = feature_scaler(neural_train, neural_test)
+    
+    out['behavior_train'], out['behavior_test'] = feature_scaler(behavior.iloc[train_idx][beh_cols].to_numpy(),
+                                                                 behavior.iloc[test_idx][beh_cols].to_numpy())
     return out
 
 
@@ -69,10 +77,30 @@ def feature_scaler(train, test, dim=0):
         train_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
         test_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
     """
-    train_mean = torch.mean(train, dim=dim, keepdim=True)
-    train_std = torch.std(train, dim=dim, keepdim=True)
-    train_normed = (train-train_mean)/train_std
-    test_normed = (test-train_mean)/train_std
+    if type(train) == torch.Tensor: 
+        # First make sure that there are no features that are the same for all videos.
+        # If there are, remove those features from the train and test data. 
+        idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
+        train_ = train[:, idx]
+        test_ = test[:, idx]
+
+        # Calculate the mean and std of the modified train data
+        train_mean = torch.mean(train_, dim=dim, keepdim=True)
+        train_std = torch.std(train_, dim=dim, keepdim=True)
+    elif type(train) == np.ndarray: 
+        # First make sure that there are no features that are the same for all videos.
+        # If there are, remove those features from the train and test data. 
+        idx = np.invert(np.isclose(train.std(axis=dim), 0))
+        train_ = train[:, idx]
+        test_ = test[:, idx]
+
+        # Calculate the mean and std of the modified train data
+        train_mean = train_.mean(axis=dim, keepdims=True)
+        train_std = train_.std(axis=dim, keepdims=True)
+
+    train_normed = (train_-train_mean)/train_std
+    test_normed = (test_-train_mean)/train_std
+    print(f'train std check: {np.all(np.isclose(train_normed.std(axis=dim), 0))}')
     return train_normed, test_normed
 
 
@@ -109,9 +137,10 @@ def pca_rotation(X_train, X_test, groups=None):
     """
     if groups is not None:
         X_train_, X_test_ = [], []
-        for group in np.unique(groups):
+        for group in np.unique(groups): 
             idx = groups == group
-            pca = PCA(n_components=np.sum(idx))
+            n_components = np.sum(idx) if np.sum(idx) <= X_train.size()[0] else X_train.size()[0]
+            pca = PCA(n_components=n_components)
             X_train_.append(pca.fit_transform(X_train[:, idx]))
             X_test_.append(pca.transform(X_test[:, idx]))
         return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1)

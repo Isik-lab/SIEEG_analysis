@@ -40,7 +40,7 @@ class MotionEnergyActivations():
                 vid.append(vid_obj.get_data(i).mean(axis=-1)) #Make gray scale
             vid = np.array(vid)
             moten_features = pyramid.project_stimulus(vid)
-            out_moten.append(moten_features.mean(axis=0))
+            out_moten.append(moten_features.mean(axis=0)) #average over frames and append to array
         return np.array(out_moten)
 
     def run(self):

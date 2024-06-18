@@ -14,6 +14,8 @@ class fmriEncodings:
     def __init__(self, args):
         self.process = 'fmriEncodings'
         self.fmri_dir = args.fmri_dir
+        self.motion_energy = args.motion_energy
+        self.alexnet = args.alexnet
         self.out_dir = args.out_dir
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
@@ -22,17 +24,31 @@ class fmriEncodings:
         self.roi_mean = args.roi_mean
         self.regression_method = args.regression_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(vars(self))
 
     def load(self):
         fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
-        return {'behavior': loading.load_behavior(self.fmri_dir),
-                 'fmri': fmri}
+        moten = loading.load_model_activations(self.motion_energy)
+        alexnet = loading.load_model_activations(self.alexnet)
+        return loading.load_behavior(self.fmri_dir), {'fmri': fmri,
+                                                     'alexnet': alexnet,
+                                                     'moten': moten}
 
-    def split_data(self, data):
-        splits = regression.split_data(data['behavior'], {'fmri': data['fmri']})
-        X_train, X_test = splits['behavior_train'], splits['behavior_test']
+    def split_data(self, behavior, data):
+        splits = regression.split_data(behavior, data)
         y_train, y_test = splits['fmri_train'], splits['fmri_test']
-        groups = np.zeros(X_train.shape[1])
+        X_train = np.hstack((splits['behavior_train'],
+                            splits['alexnet_train'],
+                            splits['moten_train']))
+        X_test = np.hstack((splits['behavior_test'],
+                            splits['alexnet_test'],
+                            splits['moten_test']))
+        groups = np.hstack((np.zeros(splits['behavior_train'].shape[1]),
+                            np.ones(splits['alexnet_train'].shape[1]),
+                            np.ones(splits['moten_train'].shape[1])*2))
+        print(f'{X_train.shape=}')
+        print(f'{X_test.shape=}')
+        print(f'{groups.shape=}')
         return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
@@ -49,11 +65,10 @@ class fmriEncodings:
         return out
 
     def run(self):
-        data = self.load()
-        X_train, X_test, y_train, y_test, groups = self.split_data(data)
+        behavior, other_data = self.load()
+        X_train, X_test, y_train, y_test, groups = self.split_data(behavior, other_data)
         [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
                                                             device=self.device)
-        X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
         print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
         print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
         print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
@@ -72,9 +87,13 @@ def main():
     parser = argparse.ArgumentParser(description='Predict fMRI responses using the features')
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+    parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
+    parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory for the regression results',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
+    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
                         help='whether to perform OLS, ridge, or banded ridge regression')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='rotate the values of X by performing PCA before regression')

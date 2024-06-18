@@ -3,6 +3,7 @@ from pathlib import Path
 from glob import glob 
 from tqdm import tqdm
 import re
+import numpy as np
 
 
 def load_behavior(path):
@@ -79,6 +80,17 @@ def load_eeg(file_path):
         eeg_data (pandas.core.frame.DataFrame): preproceesed EEG data
     """
     return pd.read_csv(file_path)
+
+
+def load_model_activations(file_path):
+    """Load AlexNet or motion energy activation data
+
+    Args:
+        file_path (str): path to activations
+    Returns:
+        array (numpy.ndarray): activations
+    """
+    return np.load(file_path)
 
 
 def check_videos(eeg_df, annotation_df, fmri_df=None):
