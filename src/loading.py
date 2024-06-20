@@ -93,7 +93,7 @@ def load_model_activations(file_path):
     return np.load(file_path)
 
 
-def check_videos(eeg_df, annotation_df, fmri_df=None):
+def check_videos(eeg_df, annotation_df, other=None):
     """Filter the videos in the feature DataFrame based on those that are present in the EEG data. 
         Data may be missing from a particular video following data cleaning.
         It also reorders the data so that the EEG and annotation data are in the same order.
@@ -101,7 +101,7 @@ def check_videos(eeg_df, annotation_df, fmri_df=None):
     Args:
         eeg_df (pandas.core.frame.DataFrame): eeg data frame
         annotation_df (pandas.core.frame.DataFrame): annotation data frame
-        fmri_df (pandas.core.frame.DataFrame, optional): fMRI data frame. Defaults to None
+        other (list of pandas.core.frame.DataFrame or np.ndarray, optional): fMRI data frame, alexnet, moten, etc. Defaults to None
 
     Returns:
         pandas.core.frame.DataFrame: filtered annotation dataframe
@@ -110,16 +110,22 @@ def check_videos(eeg_df, annotation_df, fmri_df=None):
     eeg_videos = eeg_df.video_name.unique()
     eeg_out = eeg_df.sort_values('video_name').reset_index(drop=True)
 
-    # Clean the behavioral data and get the indices for fmri_df if not None
+    # Clean the behavioral data and get the indices for other if not None
     filtered_annot = annotation_df[annotation_df['video_name'].isin(eeg_videos)]
     anot_idx = filtered_annot.sort_values('video_name').index
     annot_out = filtered_annot.sort_values('video_name').reset_index(drop=True)
 
-    if fmri_df is None:
+    if other is None:
         return eeg_out, annot_out
     else:
-        fmri_out = fmri_df.iloc[anot_idx].reset_index(drop=True)
-        return eeg_out, annot_out, fmri_out
+        other_out = []
+        for item in other:
+            if type(item) == pd.core.frame.DataFrame:
+                other_out.append(item.iloc[anot_idx].reset_index(drop=True))
+            elif type(item) == np.ndarray:
+                other_out.append(item[anot_idx])
+                
+        return eeg_out, annot_out, other_out
 
 
 

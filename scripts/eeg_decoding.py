@@ -6,8 +6,7 @@ import torch
 from pathlib import Path
 import numpy as np
 from src.stats import corr2d_gpu
-from src.regression import regression_model
-from himalaya.ridge import ColumnTransformerNoStack
+from src.regression import regression_model, feature_scaler
 
 
 class eegDecoding:
@@ -15,6 +14,8 @@ class eegDecoding:
         self.process = 'eegDecoding'
         self.fmri_dir = args.fmri_dir
         self.eeg_file = args.eeg_file
+        self.motion_energy = args.motion_energy
+        self.alexnet = args.alexnet
         self.y_name = args.y_name
         self.x_name = args.x_name
         self.alpha_start = args.alpha_start
@@ -31,32 +32,47 @@ class eegDecoding:
         assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'  
 
     def load_and_validate(self):
-        behavior_raw = loading.load_behavior(self.fmri_dir)
-        fmri_raw, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         eeg_raw = loading.load_eeg(self.eeg_file)
-        eeg_filtered, behavior, fmri = loading.check_videos(eeg_raw, behavior_raw, fmri_raw)
-        eeg = loading.strip_eeg(eeg_filtered)
-        return {'behavior': behavior, 'eeg': eeg, 'fmri': fmri}
 
-    def split_data(self, data):
-        splits = regression.split_data(data['behavior'], {'eeg': data['eeg'], 'fmri': data['fmri']})
-        if self.y_name == 'behavior' and self.x_name == 'eeg':
-            X_train, X_test = splits['eeg_train'], splits['eeg_test']
-            y_train, y_test = splits['behavior_train'], splits['behavior_test']
-            groups = np.zeros(splits['eeg_train'].shape[1])
-        elif self.y_name == 'fmri' and self.x_name == 'eeg':
-            X_train, X_test = splits['eeg_train'], splits['eeg_test']
-            y_train, y_test = splits['fmri_train'], splits['fmri_test']
-            groups = np.zeros(splits['eeg_train'].shape[1])
-        elif self.y_name == 'fmri' and self.x_name == 'eeg_behavior':
-            X_train = np.hstack((splits['eeg_train'], splits['behavior_train']))
-            X_test = np.hstack((splits['eeg_test'], splits['behavior_test']))
-            y_train, y_test = splits['fmri_train'], splits['fmri_test']
-            groups = np.hstack((np.zeros(splits['eeg_train'].shape[1]),
-                                np.ones(splits['behavior_train'].shape[1])))
-        else:
+        behavior = loading.load_behavior(self.fmri_dir)
+        fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
+        moten = loading.load_model_activations(self.motion_energy)
+        alexnet = loading.load_model_activations(self.alexnet)
+        
+        eeg_filtered, behavior, [fmri, alexnet, moten] = loading.check_videos(eeg_raw, behavior, [fmri, alexnet, moten])
+        eeg = loading.strip_eeg(eeg_filtered)
+        return behavior, {'eeg': eeg, 'fmri': fmri, 'alexnet': alexnet, 'moten': moten}
+
+    def split_and_norm(self, behavior, data):
+        train, test = regression.train_test_split(behavior, data, device=self.device)
+        for key in train.keys():
+            train[key], test[key] = feature_scaler(train[key], test[key], device=self.device)
+
+        if self.x_name == 'eeg_behavior' and self.y_name == 'fmri':
+            y_train, y_test = train['fmri'], test['fmri']
+            X_train = torch.hstack((train['eeg'],
+                                    train['behavior'],
+                                    train['alexnet'],
+                                    train['moten']))
+            X_test = torch.hstack((test['eeg'],
+                                   test['behavior'],
+                                   test['alexnet'],
+                                   test['moten']))
+            groups = torch.hstack((torch.ones(train['eeg'].size()[1])*0,
+                                   torch.ones(train['behavior'].size()[1])*1,
+                                   torch.ones(train['alexnet'].size()[1])*2,
+                                   torch.ones(train['moten'].size()[1])*3))
+        elif self.x_name == 'eeg' and self.y_name == 'fmri': 
+            y_train, y_test = train['fmri'], test['fmri']
+            X_train, X_test = train['eeg'], test['eeg']
+            groups = torch.ones(train['eeg'].size()[1])*0
+        elif self.x_name == 'eeg' and self.y_name == 'behavior':
+            y_train, y_test = train['behavior'], test['behavior']
+            X_train, X_test = train['eeg'], test['eeg']
+            groups = torch.ones(train['eeg'].size()[1])*0
+        else: 
             raise Exception(f'Sorry regression not implemented for combinations of x={self.x_name} and y={self.y_name}')
-            
+
         return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
@@ -73,11 +89,8 @@ class eegDecoding:
         return out
 
     def run(self):
-        data = self.load_and_validate()
-        X_train, X_test, y_train, y_test, groups = self.split_data(data)
-        [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
-                                                            device=self.device)
-        X_train, X_test, y_train, y_test = regression.preprocess(X_train, X_test, y_train, y_test)
+        behavior, other_data = self.load_and_validate()
+        X_train, X_test, y_train, y_test, groups = self.split_and_norm(behavior, other_data)
         print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
         print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
         print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
@@ -102,6 +115,10 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/sub-01_time-00.csv.gz')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
+    parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
+    parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--y_name', '-y', type=str, default='behavior',
                         help='name of the data to be used as regression target')
     parser.add_argument('--x_name', '-x', type=str, default='eeg',
@@ -110,7 +127,7 @@ def main():
                         help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
+    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
