@@ -6,7 +6,7 @@ import torch
 from pathlib import Path
 from src.regression import T_torch
 from src.stats import corr2d_gpu
-from src.regression import regression_model
+from src.regression import regression_model, feature_scaler
 import numpy as np
 
 
@@ -34,21 +34,24 @@ class fmriEncodings:
                                                      'alexnet': alexnet,
                                                      'moten': moten}
 
-    def split_data(self, behavior, data):
-        splits = regression.split_data(behavior, data)
-        y_train, y_test = splits['fmri_train'], splits['fmri_test']
-        X_train = np.hstack((splits['behavior_train'],
-                            splits['alexnet_train'],
-                            splits['moten_train']))
-        X_test = np.hstack((splits['behavior_test'],
-                            splits['alexnet_test'],
-                            splits['moten_test']))
-        groups = np.hstack((np.zeros(splits['behavior_train'].shape[1]),
-                            np.ones(splits['alexnet_train'].shape[1]),
-                            np.ones(splits['moten_train'].shape[1])*2))
-        print(f'{X_train.shape=}')
-        print(f'{X_test.shape=}')
-        print(f'{groups.shape=}')
+    def split_and_norm(self, behavior, data):
+        train, test = regression.train_test_split(behavior, data, device=self.device)
+        for key in train.keys():
+            train[key], test[key] = feature_scaler(train[key], test[key], device=self.device)
+
+        y_train, y_test = train['fmri'], test['fmri']
+        X_train = torch.hstack((train['behavior'],
+                                train['alexnet'],
+                                train['moten']))
+        X_test = torch.hstack((test['behavior'],
+                               test['alexnet'],
+                               test['moten']))
+        groups = torch.hstack((torch.zeros(train['behavior'].size()[1]),
+                               torch.ones(train['alexnet'].size()[1]),
+                               torch.ones(train['moten'].size()[1])*2))
+        print(f'{X_train.size()=}')
+        print(f'{X_test.size()=}')
+        print(f'{groups.size()=}')
         return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
@@ -66,9 +69,7 @@ class fmriEncodings:
 
     def run(self):
         behavior, other_data = self.load()
-        X_train, X_test, y_train, y_test, groups = self.split_data(behavior, other_data)
-        [X_train, X_test, y_train, y_test] = tools.to_torch([X_train, X_test, y_train, y_test],
-                                                            device=self.device)
+        X_train, X_test, y_train, y_test, groups = self.split_and_norm(behavior, other_data)
         print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
         print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
         print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')

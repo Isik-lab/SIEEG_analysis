@@ -16,6 +16,7 @@ from deepjuice.alignment import TorchRidgeGCV
 from src.pca import PCA
 from himalaya.ridge import GroupRidgeCV
 from himalaya.backend import set_backend
+from src.tools import to_torch
 
 
 def T_torch(tensor):
@@ -35,22 +36,23 @@ def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
-def split_data(behavior, neurals, normalize=True):
+def train_test_split(behavior, neurals, device='cpu'):
     """split the data into train and test sets based on the simulus data
 
     Args:
         behavior (pandas.core.frame.DataFrame): _description_
         neurals (dictionary of pandas.core.frame.DataFrame or numpy.ndarray): _description_
-        normalize (bool): whether to normalize data after split. Default is True.
+        device (str, optional): whether on cpu or cuda. Default is cpu.
 
     Returns:
-        _type_: _description_
+        out (dictionary): returns a dictionary of the data that has been separated
     """
     train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
     test_idx = behavior.loc[behavior['stimulus_set'] == 'test'].index
     beh_cols = [col for col in behavior.columns if 'rating-' in col]
 
-    out = {}
+    train = {}
+    test = {}
     for key, neural in neurals.items():
         if type(neural) is pd.core.frame.DataFrame: 
             neural_train = neural.iloc[train_idx].to_numpy()
@@ -58,49 +60,46 @@ def split_data(behavior, neurals, normalize=True):
         else:
             neural_train = neural[train_idx]
             neural_test = neural[test_idx]
-        out[f'{key}_train'], out[f'{key}_test'] = feature_scaler(neural_train, neural_test)
+        train[key], test[key] = neural_train, neural_test
     
-    out['behavior_train'], out['behavior_test'] = feature_scaler(behavior.iloc[train_idx][beh_cols].to_numpy(),
-                                                                 behavior.iloc[test_idx][beh_cols].to_numpy())
-    return out
+    train['behavior'] = behavior.iloc[train_idx][beh_cols].to_numpy()
+    test['behavior'] = behavior.iloc[test_idx][beh_cols].to_numpy()
+    return train, test
 
 
-def feature_scaler(train, test, dim=0):
-    """feature_scaler
+def feature_scaler(train, test, dim=0, device='cpu'):
+    """Calculate the mean and std of the train set. 
+    Normalize the train and test by this mean and std. 
+    If the input is a numpy array, it is converted to a torch tensor to perform normalization. 
 
     Args:
-        train (numpy.ndarray): 2D np array of samples x features (or reversed)
-        test (numpy.ndarray): 2D np array of samples x features (or reversed)
-        dim (int, optional): . Defaults to 0.
+        train (torch.Tensor or np.ndarray): 2D tensor of samples x features (or reversed).
+                                            If np.ndarray, output will be a torch tensor. 
+        test (torch.Tensor or np.ndarray): 2D tensor of samples x features (or reversed).
+                                            If np.ndarray, output will be a torch tensor. 
+        dim (int, optional): The dimension over which to calculate the mean and std. Defaults to 0.
+        device (str, optional): whether on cpu or cuda. Default is cpu.
 
     Returns:
-        train_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
-        test_scored (numpy.ndarray): 2D np array of samples x features normalized by train mean and std
+        train_scored (torch.Tensor): 2D tensor of samples x features normalized by train mean and std
+        test_scored (torch.Tensor): 2D tensor of samples x features normalized by train mean and std
     """
-    if type(train) == torch.Tensor: 
-        # First make sure that there are no features that are the same for all videos.
-        # If there are, remove those features from the train and test data. 
-        idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
-        train_ = train[:, idx]
-        test_ = test[:, idx]
+    if type(train) == np.ndarray:
+        # If the input is a numpy array, first convert to torch tensor
+        [train, test] = to_torch([train, test], device=device)
 
-        # Calculate the mean and std of the modified train data
-        train_mean = torch.mean(train_, dim=dim, keepdim=True)
-        train_std = torch.std(train_, dim=dim, keepdim=True)
-    elif type(train) == np.ndarray: 
-        # First make sure that there are no features that are the same for all videos.
-        # If there are, remove those features from the train and test data. 
-        idx = np.invert(np.isclose(train.std(axis=dim), 0))
-        train_ = train[:, idx]
-        test_ = test[:, idx]
+    # First make sure that there are no features that are the same for all videos.
+    # If there are, remove those features from the train and test data. 
+    idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
+    train_ = train[:, idx]
+    test_ = test[:, idx]
 
-        # Calculate the mean and std of the modified train data
-        train_mean = train_.mean(axis=dim, keepdims=True)
-        train_std = train_.std(axis=dim, keepdims=True)
+    # Calculate the mean and std of the modified train data
+    train_mean = torch.mean(train_, dim=dim, keepdim=True)
+    train_std = torch.std(train_, dim=dim, keepdim=True)
 
     train_normed = (train_-train_mean)/train_std
     test_normed = (test_-train_mean)/train_std
-    print(f'train std check: {np.all(np.isclose(train_normed.std(axis=dim), 0))}')
     return train_normed, test_normed
 
 
@@ -136,14 +135,15 @@ def pca_rotation(X_train, X_test, groups=None):
         X_test_rotated (torch.Tensor): rotated X test based on components from X train within group
     """
     if groups is not None:
-        X_train_, X_test_ = [], []
-        for group in np.unique(groups): 
+        X_train_, X_test_, groups_ = [], [], []
+        for group in torch.unique(groups): 
             idx = groups == group
-            n_components = np.sum(idx) if np.sum(idx) <= X_train.size()[0] else X_train.size()[0]
+            n_components = torch.sum(idx) if torch.sum(idx) <= X_train.size()[0] else X_train.size()[0]
             pca = PCA(n_components=n_components)
             X_train_.append(pca.fit_transform(X_train[:, idx]))
             X_test_.append(pca.transform(X_test[:, idx]))
-        return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1)
+            groups_.append(torch.ones(n_components)*group)
+        return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1), torch.cat(groups_)
     else:
         pca = PCA(n_components=X_train.size()[1])
         return pca.fit_transform(X_train), pca.transform(X_test)
@@ -196,9 +196,10 @@ def banded_ridge(X_train, y_train, X_test, groups,
     alphas = np.logspace(alpha_start, alpha_stop, num=(alpha_stop-alpha_start)+1)
 
     if rotate_x:
-        X_train, X_test = pca_rotation(X_train, X_test, groups)
+        X_train, X_test, groups = pca_rotation(X_train, X_test, groups)
 
-    pipe = GroupRidgeCV(solver_params={'alphas': alphas},
+    pipe = GroupRidgeCV(groups=groups,
+                        solver_params={'alphas': alphas},
                         fit_intercept=False)
     pipe.fit(X_train, y_train)
     out = {'yhat': pipe.predict(X_test)}
