@@ -175,7 +175,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotSharedVariance')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
-    parser.add_argument('--unique_feature', '-u' type=str, default=None,
+    parser.add_argument('--unique_feature', '-u', type=str, default=None,
                         help='The feature category that uniquely shares variance with EEG\n Default is none and will plot the shared variance between all features and EEG.')                    
     args = parser.parse_args()
     PlotSharedVariance(args).run()
