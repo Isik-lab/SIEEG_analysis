@@ -8,6 +8,26 @@ from src.regression import T_torch
 from src.stats import corr2d_gpu
 from src.regression import regression_model, feature_scaler
 import numpy as np
+import json
+
+
+def dict_to_tensor(train_dict, test_dict, keys):
+    def list_to_tensor(l):
+        return torch.hstack(tuple(l))
+
+    def group_vec(tensor, i):
+        return torch.ones(tensor.size()[1])*i_group
+
+    train_out, test_out, groups = [], [], []
+    for i_group, key in enumerate(keys):
+        train_out.append(train_dict[key])
+        test_out.append(test_dict[key])
+        groups.append(group_vec(train_dict[key], i_group))
+    return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
+
+
+def are_all_elements_present(list1, list2):
+    return all(elem in list2 for elem in list1)
 
 
 class fmriEncodings:
@@ -24,7 +44,13 @@ class fmriEncodings:
         self.roi_mean = args.roi_mean
         self.regression_method = args.regression_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.y_names = json.loads(args.y_names)
+        self.x_names = json.loads(args.x_names)
         print(vars(self))
+        valid_names = ['fmri', 'alexnet', 'moten', 'behavior']
+        valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
+        assert all(name in valid_names for name in self.x_names), valid_err_msg
+        assert all(name in valid_names for name in self.y_names), valid_err_msg
 
     def load(self):
         fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
@@ -39,24 +65,13 @@ class fmriEncodings:
         for key in train.keys():
             train[key], test[key] = feature_scaler(train[key], test[key], device=self.device)
 
-        y_train, y_test = train['fmri'], test['fmri']
-        X_train = torch.hstack((train['behavior'],
-                                train['alexnet'],
-                                train['moten']))
-        X_test = torch.hstack((test['behavior'],
-                               test['alexnet'],
-                               test['moten']))
-        groups = torch.hstack((torch.zeros(train['behavior'].size()[1]),
-                               torch.ones(train['alexnet'].size()[1]),
-                               torch.ones(train['moten'].size()[1])*2))
-        print(f'{X_train.size()=}')
-        print(f'{X_test.size()=}')
-        print(f'{groups.size()=}')
+        X_train, X_test, groups = dict_to_tensor(train, test, self.x_names)
+        y_train, y_test, _ = dict_to_tensor(train, test, self.y_names)
         return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
         for key, val in results.items():
-            out_file = f'{self.out_dir}/{key}.csv.gz'
+            out_file = f'{self.out_dir}/x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}_{key}.csv.gz'
             pd.DataFrame(tools.to_numpy(val)).to_csv(out_file, index=False)
 
     def mk_out_dir(self):
@@ -106,6 +121,10 @@ def main():
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
+    parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
+                        help='a list of data names to be used as regression target')
+    parser.add_argument('--x_names', '-x', type=str, default='["behavior", "alexnet", "moten"]',
+                        help='a list of data names for regression fitting')
     args = parser.parse_args()
     fmriEncodings(args).run()
 

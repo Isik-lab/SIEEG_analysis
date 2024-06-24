@@ -9,6 +9,7 @@ import seaborn as sns
 import pickle
 from src.logging import get_githash
 from tqdm import tqdm
+import json
 
 
 class PlotEncoding:
@@ -19,12 +20,15 @@ class PlotEncoding:
         self.fmri_encoding = args.fmri_encoding
         self.out_dir = args.out_dir
         self.roi_mean = args.roi_mean
+        self.y_names = json.loads(args.y_names)
+        self.x_names = json.loads(args.x_names)
         # logging.neptune_params(self)
         print(vars(self))
 
     def load_fmri_encoding(self):
         _, fmri_info = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
-        out = pd.read_csv(f'{self.fmri_encoding}/scores.csv.gz').rename(columns={'0': 'r'})
+        file = f'{self.fmri_encoding}/x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}_scores.csv.gz'
+        out = pd.read_csv(file).rename(columns={'0': 'r'})
         out['targets'] = fmri_info.roi_name.to_list()
         if 'voxel_id' in fmri_info.columns:
             out['voxel_id'] = fmri_info.voxel_id.to_list()
@@ -37,10 +41,10 @@ class PlotEncoding:
     def viz_results(self, results):
         _, ax = plt.subplots()
         sns.barplot(x='targets', y='r2', data=results, ax=ax)
-        plt.savefig(f'{self.out_dir}/roi_encoding.{get_githash()}.pdf')
+        plt.savefig(f'{self.out_dir}/roi-encoding_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.{get_githash()}.pdf')
 
     def save_results(self, results):
-        results.to_csv(f'{self.out_dir}/roi_encoding.csv.gz', index=False)
+        results.to_csv(f'{self.out_dir}/roi-encoding_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.csv.gz', index=False)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
@@ -62,6 +66,10 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotEncoding')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
+    parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
+                        help='a list of data names to be used as regression target')
+    parser.add_argument('--x_names', '-x', type=str, default='["behavior", "alexnet", "moten"]',
+                        help='a list of data names for regression fitting')
     args = parser.parse_args()
     PlotEncoding(args).run()
 
