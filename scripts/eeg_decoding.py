@@ -14,8 +14,8 @@ def dict_to_tensor(train_dict, test_dict, keys):
     def list_to_tensor(l):
         return torch.hstack(tuple(l))
 
-    def group_vec(tensor, i):
-        return torch.ones(tensor.size()[1])*i_group
+    def group_vec(array, i):
+        return torch.ones(array.size()[1])*i_group
 
     train_out, test_out, groups = [], [], []
     for i_group, key in enumerate(keys):
@@ -48,10 +48,14 @@ class eegDecoding:
         self.alexnet = args.alexnet
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
         self.out_dir = args.out_dir
-        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'behavior']
+        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
         assert all(name in valid_names for name in self.y_names), valid_err_msg
+        self.behavior_categories = {'scene': ['rating-indoor', 'rating-expanse', 'rating-object'],
+                                    'primitive': ['rating-agent_distance', 'rating-facingness'],
+                                    'social': ['rating-joint_action', 'rating-communication'],
+                                    'affective': ['rating-valence', 'rating-arousal']}
 
     def load_and_validate(self):
         eeg_raw = loading.load_eeg(self.eeg_file)
@@ -66,7 +70,7 @@ class eegDecoding:
         return behavior, {'eeg': eeg, 'fmri': fmri, 'alexnet': alexnet, 'moten': moten}
 
     def split_and_norm(self, behavior, data):
-        train, test = regression.train_test_split(behavior, data, device=self.device)
+        train, test = regression.train_test_split(behavior, data, behavior_categories=self.behavior_categories)
         for key in train.keys():
             train[key], test[key] = feature_scaler(train[key], test[key], device=self.device)
 
@@ -90,10 +94,10 @@ class eegDecoding:
     def run(self):
         behavior, other_data = self.load_and_validate()
         X_train, X_test, y_train, y_test, groups = self.split_and_norm(behavior, other_data)
-        print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
-        print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
-        print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
-        print(f'y_train std check: {np.isclose(torch.std(y_train, dim=0)[0], 1)}')
+        print(f'X_train mean check: {np.all(np.isclose(torch.mean(X_train, dim=0).cpu().detach().numpy(), 0, atol=1e-5))}')
+        print(f'X_train std check: {np.all(np.isclose(torch.std(X_train, dim=0).cpu().detach().numpy(), 1, atol=1e-5))}')
+        print(f'y_train mean check: {np.all(np.isclose(torch.mean(y_train, dim=0).cpu().detach().numpy(), 0, atol=1e-5))}')
+        print(f'y_train std check: {np.all(np.isclose(torch.std(y_train, dim=0).cpu().detach().numpy(), 1, atol=1e-5))}')
 
         kwargs = self.get_kwargs(groups)
         results = regression_model(self.regression_method,
@@ -120,7 +124,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
-    parser.add_argument('--x_names', '-x', type=str, default='["eeg"]',
+    parser.add_argument('--x_names', '-x', type=str, default='["eeg", "alexnet", "moten", "scene", "primitive", "social", "affective"]',
                         help='a list of data names for regression fitting')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='rotate the values of X by performing PCA before regression')

@@ -30,9 +30,9 @@ def are_all_elements_present(list1, list2):
     return all(elem in list2 for elem in list1)
 
 
-class fmriEncodings:
+class fmriEncoding:
     def __init__(self, args):
-        self.process = 'fmriEncodings'
+        self.process = 'fmriEncoding'
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet
@@ -47,10 +47,14 @@ class fmriEncodings:
         self.y_names = json.loads(args.y_names)
         self.x_names = json.loads(args.x_names)
         print(vars(self))
-        valid_names = ['fmri', 'alexnet', 'moten', 'behavior']
+        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
         assert all(name in valid_names for name in self.y_names), valid_err_msg
+        self.behavior_categories = {'scene': ['rating-indoor', 'rating-expanse', 'rating-object'],
+                                    'primitive': ['rating-agent_distance', 'rating-facingness'],
+                                    'social': ['rating-joint_action', 'rating-communication'],
+                                    'affective': ['rating-valence', 'rating-arousal']}
 
     def load(self):
         fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
@@ -61,12 +65,14 @@ class fmriEncodings:
                                                      'moten': moten}
 
     def split_and_norm(self, behavior, data):
-        train, test = regression.train_test_split(behavior, data, device=self.device)
+        train, test = regression.train_test_split(behavior, data, behavior_categories=self.behavior_categories)
+        train_normed, test_normed = {}, {}
         for key in train.keys():
-            train[key], test[key] = feature_scaler(train[key], test[key], device=self.device)
+            train_normed[key], test_normed[key] = feature_scaler(train[key], test[key], device=self.device)
 
-        X_train, X_test, groups = dict_to_tensor(train, test, self.x_names)
-        y_train, y_test, _ = dict_to_tensor(train, test, self.y_names)
+        X_train, X_test, groups = dict_to_tensor(train_normed, test_normed, self.x_names)
+        print(np.all(np.isclose(torch.mean(X_train, dim=0).cpu().detach().numpy(), 0)))
+        y_train, y_test, _ = dict_to_tensor(train_normed, test_normed, self.y_names)
         return X_train, X_test, y_train, y_test, groups
 
     def save_results(self, results):
@@ -85,10 +91,10 @@ class fmriEncodings:
     def run(self):
         behavior, other_data = self.load()
         X_train, X_test, y_train, y_test, groups = self.split_and_norm(behavior, other_data)
-        print(f'X_train mean check: {np.isclose(torch.mean(X_train, dim=0)[0], 0)}')
-        print(f'X_train std check: {np.isclose(torch.std(X_train, dim=0)[0], 1)}')
-        print(f'y_train mean check: {np.isclose(torch.mean(y_train, dim=0)[0], 0)}')
-        print(f'y_train std check: {np.isclose(torch.std(y_train, dim=0)[0], 1)}')
+        print(f'X_train mean check: {np.all(np.isclose(torch.mean(X_train, dim=0).cpu().detach().numpy(), 0, atol=1e-5))}')
+        print(f'X_train std check: {np.all(np.isclose(torch.std(X_train, dim=0).cpu().detach().numpy(), 1, atol=1e-5))}')
+        print(f'y_train mean check: {np.all(np.isclose(torch.mean(y_train, dim=0).cpu().detach().numpy(), 0, atol=1e-5))}')
+        print(f'y_train std check: {np.all(np.isclose(torch.std(y_train, dim=0).cpu().detach().numpy(), 1, atol=1e-5))}')
 
         kwargs = self.get_kwargs(groups)
         results = regression_model(self.regression_method, 
@@ -123,10 +129,10 @@ def main():
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
-    parser.add_argument('--x_names', '-x', type=str, default='["behavior", "alexnet", "moten"]',
+    parser.add_argument('--x_names', '-x', type=str, default='["alexnet", "moten", "scene", "primitive", "social", "affective"]',
                         help='a list of data names for regression fitting')
     args = parser.parse_args()
-    fmriEncodings(args).run()
+    fmriEncoding(args).run()
 
 
 if __name__ == '__main__':

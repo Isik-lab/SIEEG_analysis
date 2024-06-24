@@ -12,13 +12,18 @@ from src.plotting import trim_axs
 from tqdm import tqdm
 
 
-feature_to_X = {'alexnet': 'moten-behavior',
-                'moten': 'alexnet-behavior',
-                'behavior': 'alexnet-moten'}
+def feature_to_X(feature):
+    if feature is None:
+        return None
+    else: 
+        d = {'alexnet': 'moten-behavior',
+            'moten': 'alexnet-behavior',
+            'behavior': 'alexnet-moten'}
+        return d[feature]
 
 
 def load_eeg(file):
-    out = pd.read_csv()
+    out = pd.read_csv(file)
     out = out.groupby(['time', 'targets']).mean(numeric_only=True).reset_index()
     if 'r2' not in out.columns:
         out['r2'] = stats.sign_square(out['r'].to_numpy())
@@ -61,13 +66,12 @@ class PlotSharedVariance:
             return r2_annot_full, r2_annot_drop
 
     def load_eeg_decoding(self):
+        r2s_annot_eeg_full = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-alexnet-moten-behavior_y-fmri.csv.gz')
         if self.unique_feature is None: 
-            r2s_eeg_behavior = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-behavior_y-fmri.csv.gz')
             r2s_eeg = load_eeg(f'{self.eeg_decoding_summary}/x-eeg_y-fmri.csv.gz')
-            return r2s_eeg, r2s_eeg_behavior
+            return r2s_eeg, r2s_annot_eeg_full
         else:
             r2s_annot_eeg_drop = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-{self.feature_ids}_y-fmri.csv.gz')
-            r2s_annot_eeg_full = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-alexnet-moten-behavior_y-fmri.csv.gz')
             return r2s_annot_eeg_full, r2s_annot_eeg_drop
 
     def compute_shared_variance(self, r2_behavior, r2s_eeg, r2s_eeg_behavior):
@@ -104,7 +108,7 @@ class PlotSharedVariance:
         fig, axes = plt.subplots(3, int(np.ceil(n_targets/3)),
                                  sharex=True, sharey=True)
         axes = trim_axs(axes.flatten(), n_targets)
-        ymin, ymax = -0.02, 0.1
+        ymin, ymax = results.r2.min() + 0.01, results.r2.max() + 0.01
         for (target, df), ax in zip(results.groupby('targets'), axes):
             df.sort_values(by='time', inplace=True)
             time = df.time.to_numpy()

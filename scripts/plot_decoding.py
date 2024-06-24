@@ -8,6 +8,7 @@ import numpy as np
 import seaborn as sns
 import pickle
 from src.logging import get_githash
+import json
 
 
 class PlotDecoding:
@@ -17,12 +18,18 @@ class PlotDecoding:
         self.decoding_dir = args.decoding_dir
         self.fmri_dir = args.fmri_dir
         self.eeg_dir = args.eeg_dir
-        self.y_name = args.y_name
-        self.x_name = args.x_name
-        assert self.x_name == 'eeg' or self.x_name == 'eeg_behavior', 'x input must be eeg or eeg_behavior'
-        assert self.y_name == 'behavior' or self.y_name == 'fmri', 'y input must be behavior or fmri'
+        self.y_names = json.loads(args.y_names)
+        self.x_names = json.loads(args.x_names)
+        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'behavior']
+        valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
+        assert all(name in valid_names for name in self.x_names), valid_err_msg
+        assert all(name in valid_names for name in self.y_names), valid_err_msg
         self.out_dir = args.out_dir
         self.roi_mean = args.roi_mean
+        self.behavior_categories = {'scene': ['rating-indoor', 'rating-expanse', 'rating-object'],
+                                    'primitive': ['rating-agent_distance', 'rating-facingness'],
+                                    'social': ['rating-joint_action', 'rating-communication'],
+                                    'affective': ['rating-valence', 'rating-arousal']}
         # logging.neptune_params(self)
         print(vars(self))
 
@@ -43,7 +50,7 @@ class PlotDecoding:
         return out
 
     def get_targets(self):
-        if self.y_name == 'behavior':
+        if 'behavior' in self.y_names:
             y_data = loading.load_behavior(self.fmri_dir)
             out = {'targets': [col for col in y_data.columns if 'rating' in col]}
         else:
@@ -62,16 +69,16 @@ class PlotDecoding:
         return loaded_dict
 
     def load_results(self, targets):
-        name_pattern = f'*x-{self.x_name}_y-{self.y_name}_scores.csv.gz'
+        name_pattern = f'*x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}_scores.csv.gz'
         return loading.load_decoding_files(self.decoding_dir, name_pattern, targets)
 
     def viz_results(self, results):
         fig, ax = plt.subplots()
         sns.lineplot(x='time', y='r2', hue='targets', data=results, ax=ax)
-        plt.savefig(f'{self.out_dir}/x-{self.x_name}_y-{self.y_name}.{get_githash()}.pdf')
+        plt.savefig(f'{self.out_dir}/x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.{get_githash()}.pdf')
 
     def save_results(self, results):
-        results.to_csv(f'{self.out_dir}/x-{self.x_name}_y-{self.y_name}.csv.gz', index=False)
+        results.to_csv(f'{self.out_dir}/x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.csv.gz', index=False)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
@@ -101,10 +108,10 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotDecoding')
-    parser.add_argument('--y_name', '-y', type=str, default='behavior',
-                        help='name of the data to be used as regression target')
-    parser.add_argument('--x_name', '-x', type=str, default='eeg',
-                        help='name of the data for regression fitting')
+    parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
+                        help='a list of data names to be used as regression target')
+    parser.add_argument('--x_names', '-x', type=str, default='["eeg"]',
+                        help='a list of data names for regression fitting')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     args = parser.parse_args()

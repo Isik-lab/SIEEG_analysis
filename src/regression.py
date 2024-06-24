@@ -36,20 +36,19 @@ def correlation_scorer(y_true, y_pred):
     return stats.corr(y_true, y_pred)
 
 
-def train_test_split(behavior, neurals, device='cpu'):
+def train_test_split(behavior, neurals, behavior_categories=None):
     """split the data into train and test sets based on the simulus data
 
     Args:
-        behavior (pandas.core.frame.DataFrame): _description_
-        neurals (dictionary of pandas.core.frame.DataFrame or numpy.ndarray): _description_
-        device (str, optional): whether on cpu or cuda. Default is cpu.
+        behavior (pandas.core.frame.DataFrame): ratings for each of the features with info about train/test split
+        neurals (dictionary of pandas.core.frame.DataFrame or numpy.ndarray): ratings for each of the features with info about train/test split
+        behavior_categories (dictionary, optional): dictionary that maps behavioral categories to columns in behavior. Default is None
 
     Returns:
         out (dictionary): returns a dictionary of the data that has been separated
     """
     train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
     test_idx = behavior.loc[behavior['stimulus_set'] == 'test'].index
-    beh_cols = [col for col in behavior.columns if 'rating-' in col]
 
     train = {}
     test = {}
@@ -61,9 +60,15 @@ def train_test_split(behavior, neurals, device='cpu'):
             neural_train = neural[train_idx]
             neural_test = neural[test_idx]
         train[key], test[key] = neural_train, neural_test
-    
-    train['behavior'] = behavior.iloc[train_idx][beh_cols].to_numpy()
-    test['behavior'] = behavior.iloc[test_idx][beh_cols].to_numpy()
+
+    if behavior_categories is None:
+        cols = [col for col in behavior.columns if 'rating-' in col]
+        train['behavior'] = behavior.iloc[train_idx][cols].to_numpy()
+        test['behavior'] = behavior.iloc[test_idx][cols].to_numpy()
+    else:
+        for key, cols in behavior_categories.items(): 
+            train[key] = behavior.iloc[train_idx][cols].to_numpy()
+            test[key] = behavior.iloc[test_idx][cols].to_numpy()
     return train, test
 
 
