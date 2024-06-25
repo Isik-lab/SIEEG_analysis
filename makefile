@@ -61,7 +61,8 @@ python $(project_folder)/scripts/plot_encoding.py \
 python $(project_folder)/scripts/plot_encoding.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/plot_encoding.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'" | sbatch
+-x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_fmri_variance.py" | sbatch
 	touch $(fmri_encoding)/.encoding_done
 
 # Preprocess EEG data for regression
