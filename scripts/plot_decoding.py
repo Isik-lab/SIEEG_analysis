@@ -20,7 +20,7 @@ class PlotDecoding:
         self.eeg_dir = args.eeg_dir
         self.y_names = json.loads(args.y_names)
         self.x_names = json.loads(args.x_names)
-        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'behavior']
+        valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
         assert all(name in valid_names for name in self.y_names), valid_err_msg

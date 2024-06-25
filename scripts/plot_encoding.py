@@ -39,8 +39,26 @@ class PlotEncoding:
         return out.sort_values(by='targets')
 
     def viz_results(self, results):
-        _, ax = plt.subplots()
-        sns.barplot(x='targets', y='r2', data=results, ax=ax)
+        custom_params = {"axes.spines.right": False, "axes.spines.top": False}
+        sns.set_theme(context='paper', style='white', rc=custom_params)
+        fig, ax = plt.subplots()
+
+        sns.barplot(x='category', y='r2', palette='gray', saturation=0.8,
+                    data=results,
+                    ax=ax)
+        ax.set_title(roi, fontsize=font+2)
+        ax.set_xlabel('')
+        ax.set_ylim([0, self.y_max])
+
+        # Change the ytick font size
+        label_format = '{:,.2f}'
+        y_ticklocs = ax.get_yticks().tolist()
+        ax.yaxis.set_major_locator(mticker.FixedLocator(y_ticklocs))
+        ax.set_yticklabels([label_format.format(x) for x in y_ticklocs], fontsize=font)
+        ax.set_ylabel(f'{self.y_label} ($r^2$)', fontsize=font)
+        ax.legend([], [], frameon=False)
+        fig.delaxes(axes[-1])
+        plt.tight_layout()
         plt.savefig(f'{self.out_dir}/roi-encoding_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.{get_githash()}.pdf')
 
     def save_results(self, results):

@@ -117,7 +117,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
     parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
                         help='whether to perform OLS, ridge, or banded ridge regression')
-    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
+    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=False,
                         help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')

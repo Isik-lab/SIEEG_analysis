@@ -41,9 +41,9 @@ class eegDecoding:
         self.rotate_x = args.rotate_x
         self.scoring = args.scoring
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.eeg_file = args.eeg_file
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
-        self.eeg_file = args.eeg_file
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet
         self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
