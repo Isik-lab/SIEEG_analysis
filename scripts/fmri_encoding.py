@@ -33,7 +33,6 @@ def are_all_elements_present(list1, list2):
 class fmriEncoding:
     def __init__(self, args):
         self.process = 'fmriEncoding'
-
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring

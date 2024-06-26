@@ -10,6 +10,7 @@ import pickle
 from src.logging import get_githash
 from tqdm import tqdm
 import json
+import matplotlib.ticker as mticker
 
 
 class PlotEncoding:
@@ -38,26 +39,22 @@ class PlotEncoding:
         out['r2'] = stats.sign_square(out['r'].to_numpy())
         return out.sort_values(by='targets')
 
-    def viz_results(self, results):
+    def viz_results(self, results, font=6):
         custom_params = {"axes.spines.right": False, "axes.spines.top": False}
         sns.set_theme(context='paper', style='white', rc=custom_params)
         fig, ax = plt.subplots()
 
-        sns.barplot(x='category', y='r2', palette='gray', saturation=0.8,
+        sns.barplot(x='targets', y='r2', palette='gray', saturation=0.8,
                     data=results,
                     ax=ax)
-        ax.set_title(roi, fontsize=font+2)
-        ax.set_xlabel('')
-        ax.set_ylim([0, self.y_max])
 
         # Change the ytick font size
         label_format = '{:,.2f}'
         y_ticklocs = ax.get_yticks().tolist()
         ax.yaxis.set_major_locator(mticker.FixedLocator(y_ticklocs))
         ax.set_yticklabels([label_format.format(x) for x in y_ticklocs], fontsize=font)
-        ax.set_ylabel(f'{self.y_label} ($r^2$)', fontsize=font)
+        ax.set_ylabel(f'Explained variance ($r^2$)', fontsize=font)
         ax.legend([], [], frameon=False)
-        fig.delaxes(axes[-1])
         plt.tight_layout()
         plt.savefig(f'{self.out_dir}/roi-encoding_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}.{get_githash()}.pdf')
 
@@ -82,7 +79,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotEncoding')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
