@@ -15,7 +15,7 @@ def svd_flip(u, v):
 class PCA(nn.Module):
     """Copied from https://github.com/gngdb/pytorch-pca.git
     """
-    def __init__(self, n_components):
+    def __init__(self, n_components=None):
         super().__init__()
         self.n_components = n_components
 
@@ -30,6 +30,8 @@ class PCA(nn.Module):
         Vt = Vh
         U, Vt = svd_flip(U, Vt)
         self.register_buffer("components_", Vt[:d])
+        variances = S**2 / (X.size()[0]-1)
+        self.register_buffer("explained_variance_ratio_", variances / torch.sum(variances))
         return self
 
     def forward(self, X):

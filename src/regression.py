@@ -17,6 +17,7 @@ from src.pca import PCA
 from himalaya.ridge import GroupRidgeCV
 from himalaya.backend import set_backend
 from src.tools import to_torch
+from kneed import KneeLocator
 
 
 def T_torch(tensor):
@@ -142,8 +143,21 @@ def pca_rotation(X_train, X_test, groups=None):
     if groups is not None:
         X_train_, X_test_, groups_ = [], [], []
         for group in torch.unique(groups): 
-            idx = groups == group
-            n_components = torch.sum(idx) if torch.sum(idx) <= X_train.size()[0] else X_train.size()[0]
+            idx = groups == group #Get # of features 
+
+            # In the regression, the # of features needs to differ from the # of samples
+            # So this identifies the elbow if necessary with first PCA
+            if torch.sum(idx) > X_train.size()[0]: 
+                pca = PCA()
+                pca.fit(X_train[:, idx])
+                kneedle = KneeLocator(np.arange(X_train.size()[0])+1,
+                                      pca.explained_variance_ratio_,
+                                      S=1.0, curve="convex", direction="decreasing")
+                n_components = kneedle.knee
+            else:
+                n_components = int(torch.sum(idx))
+
+            print(f'{n_components=}')
             pca = PCA(n_components=n_components)
             X_train_.append(pca.fit_transform(X_train[:, idx]))
             X_test_.append(pca.transform(X_test[:, idx]))
@@ -202,6 +216,7 @@ def banded_ridge(X_train, y_train, X_test, groups,
 
     if rotate_x:
         X_train, X_test, groups = pca_rotation(X_train, X_test, groups)
+        print(f'X Size after rotation = {X_train.size()}')
 
     pipe = GroupRidgeCV(groups=groups,
                         solver_params={'alphas': alphas},

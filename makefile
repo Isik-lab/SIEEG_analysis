@@ -27,19 +27,19 @@ $(fmri_encoding)/.encoding_done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=fmri_encoding\n\
 #SBATCH --ntasks=1\n\
-#SBATCH --time=30:00\n\
+#SBATCH --time=1:00:00\n\
 #SBATCH --cpus-per-task=6\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 #Encode all the features\n\
-python $(project_folder)/scripts/fmri_encoding.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
--x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
--x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+# python $(project_folder)/scripts/fmri_encoding.py \
+# -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+# python $(project_folder)/scripts/fmri_encoding.py \
+# -x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+# python $(project_folder)/scripts/fmri_encoding.py \
+# -x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+# python $(project_folder)/scripts/fmri_encoding.py \
 -x '[\"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/fmri_encoding.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\

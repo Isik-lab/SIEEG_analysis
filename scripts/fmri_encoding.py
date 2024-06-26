@@ -33,10 +33,7 @@ def are_all_elements_present(list1, list2):
 class fmriEncoding:
     def __init__(self, args):
         self.process = 'fmriEncoding'
-        self.fmri_dir = args.fmri_dir
-        self.motion_energy = args.motion_energy
-        self.alexnet = args.alexnet
-        self.out_dir = args.out_dir
+
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
@@ -46,11 +43,15 @@ class fmriEncoding:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.y_names = json.loads(args.y_names)
         self.x_names = json.loads(args.x_names)
-        print(vars(self))
         valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
         assert all(name in valid_names for name in self.y_names), valid_err_msg
+        print(vars(self))
+        self.fmri_dir = args.fmri_dir
+        self.motion_energy = args.motion_energy
+        self.alexnet = args.alexnet
+        self.out_dir = args.out_dir
         self.behavior_categories = {'scene': ['rating-indoor', 'rating-expanse', 'rating-object'],
                                     'primitive': ['rating-agent_distance', 'rating-facingness'],
                                     'social': ['rating-joint_action', 'rating-communication'],
@@ -119,7 +120,7 @@ def main():
                         help='whether to perform OLS, ridge, or banded ridge regression')
     parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
                         help='rotate the values of X by performing PCA before regression')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
