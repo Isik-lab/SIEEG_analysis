@@ -150,8 +150,7 @@ python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"s
 python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\"]' -y '[\"fmri\"]'"| sbatch
+python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'"| sbatch
 
 plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
 $(plot_shared_variance)/.done: 

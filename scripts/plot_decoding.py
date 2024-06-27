@@ -50,7 +50,7 @@ class PlotDecoding:
         return out
 
     def get_targets(self):
-        if 'behavior' in self.y_names:
+        if 'fmri' not in self.y_names:
             y_data = loading.load_behavior(self.fmri_dir)
             out = {'targets': [col for col in y_data.columns if 'rating' in col]}
         else:

@@ -12,14 +12,9 @@ from src.plotting import trim_axs
 from tqdm import tqdm
 
 
-def feature_to_X(feature):
-    if feature is None:
-        return None
-    else: 
-        d = {'alexnet': 'moten-behavior',
-            'moten': 'alexnet-behavior',
-            'behavior': 'alexnet-moten'}
-        return d[feature]
+def find_missing(original, new):
+    missing = set(original) - set(new)
+    return missing.pop() if missing else 'all'
 
 
 def load_eeg(file):
@@ -52,26 +47,29 @@ class PlotSharedVariance:
         self.out_dir = args.out_dir
         self.roi_mean = args.roi_mean
         self.unique_feature = args.unique_feature
-        self.feature_ids = feature_to_X(self.unique_feature)
+        categories = ['alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
+        self.all_file = categories.copy()
+        categories.remove(self.unique_feature)
+        self.unique_file = ('-').join(categories)
         # logging.neptune_params(self)
         print(vars(self))
 
     def load_fmri_encoding(self):
         _, fmri_info = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
-        r2_annot_full = load_fmri(f'{self.fmri_encoding}/x-alexnet-moten-behavior_y-fmri_scores.csv.gz', fmri_info)
+        r2_annot_full = load_fmri(f'{self.fmri_encoding}/x-{self.all_file}_y-fmri_scores.csv.gz', fmri_info)
         if self.unique_feature is None: 
             return r2_annot_full, None
         else:
-            r2_annot_drop = load_fmri(f'{self.fmri_encoding}/x-{self.feature_ids}_y-fmri_scores.csv.gz', fmri_info)
+            r2_annot_drop = load_fmri(f'{self.fmri_encoding}/x-{self.unique_file}_y-fmri_scores.csv.gz', fmri_info)
             return r2_annot_full, r2_annot_drop
 
     def load_eeg_decoding(self):
-        r2s_annot_eeg_full = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-alexnet-moten-behavior_y-fmri.csv.gz')
+        r2s_annot_eeg_full = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-{self.all_file}_y-fmri.csv.gz')
         if self.unique_feature is None: 
             r2s_eeg = load_eeg(f'{self.eeg_decoding_summary}/x-eeg_y-fmri.csv.gz')
             return r2s_eeg, r2s_annot_eeg_full
         else:
-            r2s_annot_eeg_drop = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-{self.feature_ids}_y-fmri.csv.gz')
+            r2s_annot_eeg_drop = load_eeg(f'{self.eeg_decoding_summary}/x-eeg-{self.unique_file}_y-fmri.csv.gz')
             return r2s_annot_eeg_full, r2s_annot_eeg_drop
 
     def compute_shared_variance(self, r2_behavior, r2s_eeg, r2s_eeg_behavior):
