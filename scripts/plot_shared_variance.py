@@ -48,9 +48,10 @@ class PlotSharedVariance:
         self.roi_mean = args.roi_mean
         self.unique_feature = args.unique_feature
         categories = ['alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
-        self.all_file = categories.copy()
-        categories.remove(self.unique_feature)
-        self.unique_file = ('-').join(categories)
+        self.all_file = ('-').join(categories)
+        if self.unique_feature is not None:
+            categories.remove(self.unique_feature)
+            self.unique_file = ('-').join(categories)
         # logging.neptune_params(self)
         print(vars(self))
 
