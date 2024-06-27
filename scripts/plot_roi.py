@@ -13,9 +13,9 @@ import json
 import matplotlib.ticker as mticker
 
 
-class PlotEncoding:
+class PlotROI:
     def __init__(self, args):
-        self.process = 'PlotEncoding'
+        self.process = 'PlotROI'
         # logging.neptune_init(self.process)
         self.fmri_dir = args.fmri_dir
         self.fmri_encoding = args.fmri_encoding
@@ -76,9 +76,9 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--fmri_encoding', '-e', type=str, help='directory of the decoding results',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode/fmri')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotEncoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotROI')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
@@ -86,7 +86,7 @@ def main():
     parser.add_argument('--x_names', '-x', type=str, default='["behavior", "alexnet", "moten"]',
                         help='a list of data names for regression fitting')
     args = parser.parse_args()
-    PlotEncoding(args).run()
+    PlotROI(args).run()
 
 
 if __name__ == '__main__':

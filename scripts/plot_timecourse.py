@@ -11,9 +11,9 @@ from src.logging import get_githash
 import json
 
 
-class PlotDecoding:
+class PlotTimeCourse:
     def __init__(self, args):
-        self.process = 'PlotDecoding'
+        self.process = 'PlotTimeCourse'
         # logging.neptune_init(self.process)
         self.decoding_dir = args.decoding_dir
         self.fmri_dir = args.fmri_dir
@@ -105,9 +105,9 @@ def main():
     parser.add_argument('--eeg_dir', '-e', type=str, help='EEG preprocessing directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/')
     parser.add_argument('--decoding_dir', '-d', type=str, help='directory of the decoding results',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode/eeg')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotDecoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotTimeCourse')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
     parser.add_argument('--x_names', '-x', type=str, default='["eeg"]',
@@ -115,7 +115,7 @@ def main():
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     args = parser.parse_args()
-    PlotDecoding(args).run()
+    PlotTimeCourse(args).run()
 
 
 if __name__ == '__main__':

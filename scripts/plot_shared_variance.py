@@ -171,9 +171,9 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--fmri_encoding', '-e', type=str, help='fMRI encoding results',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fmriEncoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode/fmri')
     parser.add_argument('--eeg_decoding_summary', '-d', type=str, help='eeg decoding summary results',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotDecoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotROI')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotSharedVariance')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,

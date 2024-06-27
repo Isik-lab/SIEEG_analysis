@@ -5,13 +5,13 @@ eeg_subs := 01 02 03 04 05 06 08 09 10 11 12 13 14 15 16 17 18 19 20 21
 
 # Dependencies
 fmri_data=$(project_folder)/data/interim/ReorganizefMRI
-fmri_encoding=$(project_folder)/data/interim/fmriEncoding
-plot_encoding=$(project_folder)/data/interim/PlotEncoding
+fmri_encoding=$(project_folder)/data/interim/encodeDecode/fmri
+plot_encoding=$(project_folder)/data/interim/PlotROI
 
 matlab_eeg_path=$(project_folder)/data/interim/eegLab
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
-eeg_decoding=$(project_folder)/data/interim/eegDecoding
-plot_decoding=$(project_folder)/data/interim/PlotDecoding
+eeg_decoding=$(project_folder)/data/interim/encodeDecode/eeg
+plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
 plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 
 
@@ -33,34 +33,34 @@ ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
 #Encode all the features\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/fmri_encoding.py \
+python $(project_folder)/scripts/encode_decode.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
 #Plot the results\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_encoding.py \
+python $(project_folder)/scripts/plot_roi.py \
 -x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/plot_fmri_variance.py" | sbatch
 	touch $(fmri_encoding)/.encoding_done

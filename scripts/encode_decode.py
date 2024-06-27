@@ -46,8 +46,13 @@ class encodeDecode:
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet
-        self.eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
-        self.out_dir = args.out_dir
+        if self.eeg_file is not None:
+            eeg_base = self.eeg_file.split('/')[-1].split('.')[0]
+            self.out_dir = f'{args.out_dir}/eeg'
+            self.out_prefix = f'{self.out_dir}/{eeg_base}_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}'
+        else:
+            self.out_dir = f'{args.out_dir}/fmri'
+            self.out_prefix = f'{self.out_dir}/x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}'
         valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
@@ -63,7 +68,7 @@ class encodeDecode:
         moten = loading.load_model_activations(self.motion_energy)
         alexnet = loading.load_model_activations(self.alexnet)
         
-        if self.eeg_base is not None: 
+        if self.eeg_file is not None: 
             eeg_raw = loading.load_eeg(self.eeg_file)
             eeg_filtered, behavior, [fmri, alexnet, moten] = loading.check_videos(eeg_raw, behavior, [fmri, alexnet, moten])
             eeg = loading.strip_eeg(eeg_filtered)
@@ -82,7 +87,7 @@ class encodeDecode:
 
     def save_results(self, results):
         for key, val in results.items():
-            out_file = f'{self.out_dir}/{self.eeg_base}_x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}_{key}.csv.gz'
+            out_file = f'{self.out_prefix}_{key}.csv.gz'
             pd.DataFrame(tools.to_numpy(val)).to_csv(out_file, index=False)
 
     def mk_out_dir(self):
@@ -117,9 +122,9 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/sub-01_time-00.csv.gz')
+                        default=None)
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegDecoding')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode')
     parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
     parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
