@@ -114,15 +114,15 @@ $(eeg_decoding)/.decode_done:
 	@echo "eeg_preprocess=\$$1" >> $(batch_file)
 	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> $(batch_file)
 	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/eeg_decoding.py -e \$$file -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\"]' -y '[\"fmri\"]'" >> $(batch_file)
+	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'" >> $(batch_file)
 	@chmod +x $(batch_file)
 
 	@echo $(submit_file) 
@@ -142,15 +142,15 @@ $(plot_decoding)/.done:
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_decoding.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'"| sbatch
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
+python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'"| sbatch
 
 plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
 $(plot_shared_variance)/.done: 
