@@ -58,19 +58,26 @@ class PlotfMRIVariance:
 
     def load_fmri_encoding(self):
         _, fmri_info = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
+        print(f'{fmri_info.head()=}')
         files = glob(f'{self.fmri_encoding}/x-*_scores.csv.gz')
         data = []
         for file in files: 
             out = pd.read_csv(file).rename(columns={'0': 'r'})
             out['targets'] = fmri_info.roi_name.to_list()
+            print(f'{out.head()=}')
             if 'voxel_id' in fmri_info.columns:
                 out['voxel_id'] = fmri_info.voxel_id.to_list()
+                out['subj_id'] = fmri_info.subj_id.to_list()
             else:
                 out['subj_id'] = fmri_info.subj_id.to_list()
             out['r2'] = stats.sign_square(out['r'].to_numpy())
             out['condition'] = find_missing(self.categories, extract_elements(file))
             data.append(out.reset_index(drop=True))
-        df = pd.concat(data, ignore_index=True).set_index(['condition', 'targets', 'subj_id'])
+        df = pd.concat(data, ignore_index=True)
+        if not self.roi_mean:
+            df = df.groupby(['condition', 'targets', 'subj_id']).mean(numeric_only=True)
+        else:  
+            df.set_index(['condition', 'targets', 'subj_id'], inplace=True)
         all_r2 = df.xs('all', level='condition').reset_index()[['targets', 'subj_id', 'r2']]
         all_r2.columns = ['targets', 'subj_id', 'r2_all']
         df_reset = df.reset_index()
