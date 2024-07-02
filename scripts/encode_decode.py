@@ -137,7 +137,7 @@ def main():
                         help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
-    parser.add_argument('--regression_method', '-r', type=str, default='banded_ridge',
+    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
                         help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')

@@ -231,7 +231,7 @@ def banded_ridge(X_train, y_train, X_test, groups,
     return out
 
 
-def ridge(X_train, y_train, X_test,
+def ridge(X_train, y_train, X_test, groups, 
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
           rotate_x=True,
@@ -255,7 +255,7 @@ def ridge(X_train, y_train, X_test,
         y_hat (torch.Tensor): predicted y values
     """
     if rotate_x:
-        X_train, X_test = pca_rotation(X_train, X_test)
+        X_train, X_test, _ = pca_rotation(X_train, X_test, groups)
 
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
