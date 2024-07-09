@@ -31,20 +31,14 @@ photoidx = contains(data.label,'photodiode');
 photodat = squeeze(trl(photoidx,:,:));
 photodat = (photodat - repmat(nanmean(photodat,1),ntmp,1))./repmat(std(photodat,[],1),ntmp,1);
 
-%here we can interactively adjust threshold based on figure - uncomment below
-% figure;plot(time(t1:t2),photodat)
-% if contains(data.cfg.headerfile)
-% t = input(sprintf('Threshold for photodiode triggers is %.1f. Change or press Enter: ', thresh));
-% if ~isempty(t) && isnumeric(t), thresh = t; end
-% close
-
 % down or up triggers
-progressbar
 photosmp = nan(ntrl,1);
 fprintf(['onset sample number: ', num2str(onset_sample_number), '\n']);
 fprintf(['exclude sample number: ', num2str(onset_sample_number+sample_exclude), '\n']);
-
+ft_progress('init', 'text', 'reliagning to photodiode');
 for itrl = 1:ntrl
+    ft_progress(itrl/ntrl, 'reliagning to photodiode %d from %d\n', itrl, ntrl);
+    drawnow; 
     x = photodat(:, itrl);
     x_lpf = lowpass(x, low_pass_filter, frames_per_second);
     x_zscored = (x_lpf-mean(x_lpf))/std(x_lpf);
@@ -62,8 +56,8 @@ for itrl = 1:ntrl
         figure(itrl+1); plot([x, x_lpf, x_zscored]);
         title(['Light on sample number: ', num2str(photosmp(itrl))]);
     end
-    progressbar(itrl/ntrl); %update progress bar
 end
+ft_progress('close');
 
 %sometimes (n=3) the photodiode triggers don't work as expected in ~20% of trials
 badtrl_photo = logical(isnan(photosmp) + (photosmp<onset_sample_number) + (photosmp>(onset_sample_number+sample_exclude))); %remove bad trigger trials

@@ -1,76 +1,97 @@
+#/Applications/anaconda3/envs/nibabel/bin/python
+import os
+from pathlib import Path
 import argparse
 import pandas as pd
-import matplotlib.pyplot as plt
-from src import temporal
-import torch
-from pathlib import Path
-import pickle
+from glob import glob
+from src import preprocessing, temporal
+from scipy.io import loadmat
+from tqdm import tqdm
+import numpy as np
 
 
 class eegPreprocessing:
     def __init__(self, args):
         self.process = 'eegPreprocessing'
-        self.eeg_dir = args.eeg_dir
-        self.eeg_sub = f'sub-{str(args.eeg_sub).zfill(2)}'
-        self.regress_gaze = args.regress_gaze
-        self.smooth_step = args.smooth_step
-        self.smooth_window = args.smooth_window
-        self.smooth_min_period = args.smooth_min_period
-        self.eeg_file = f'{self.eeg_dir}/{self.eeg_sub}_reg-gaze-{self.regress_gaze}.csv.gz'
-        self.out_dir = args.out_dir
+        self.data_dir = args.data_dir
+        self.sid = f'sub-{str(args.sid).zfill(2)}'
+        self.resample_rate = args.resample_rate
+        self.n_samples_to_smooth = args.n_samples_to_smooth
+        print(vars(self))
+        self.out_dir = f'{self.data_dir}/interim/{self.process}'
+        Path(self.out_dir).mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def average_repetitions(data):
-        df_mean = data.groupby(['time', 'video_name']).mean(numeric_only=True)
-        cols = [col for col in df_mean.columns if 'channel' in col]
-        df_filtered = df_mean[cols].reset_index()
-        return df_filtered.sort_values(['time', 'video_name'])
+        return data.groupby(['time', 'video_name', 'channel']).mean(numeric_only=True).reset_index()
+    
+    def load_eeg(self, trials):
+        print('loading eeg...')
+        file = f'{self.data_dir}/interim/SIdyads_EEG/{self.sid}/{self.sid}_preproc.mat'
+        data_dict = loadmat(file)
+        return data_dict
+    
+    def reorganize_and_resample(self, eeg_dict, trials_df): 
+        df = []
+        iter_top = tqdm(zip(trials_df.groupby('trial'), zip(eeg_dict['time'][0],
+                                                          eeg_dict['trial'][0])),
+                        total=len(eeg_dict['trial'][0]), desc='Reorganizing EEG')
+        for (itrial, trial_row), (times, trial_eeg) in iter_top:
+            times = times[0] * 1000 # Change to ms
+            for channel, channel_eeg in zip(eeg_dict['label'], trial_eeg):
+                channel = channel[0][0]
+                resampled_time, resampled_data = temporal.resample(times, channel_eeg,
+                                                                   new_sample_rate=self.resample_rate)
+                smoothed_data = temporal.smooth(resampled_data, window_size=self.n_samples_to_smooth)
+                for (itime, time), signal in zip(enumerate(resampled_time), smoothed_data):
+                    df.append({'trial': itrial, 'channel': channel,
+                                'time': time, 'time_ind': itime,
+                                'signal': signal, 'video_name': trial_row.video_name,
+                                'stimulus_set': trial_row.stimulus_set,
+                                'condition': trial_row.condition, 'response': trial_row.response})
+        return pd.DataFrame(df) 
 
-    def smooth_eeg(self, data):
-        cols = [col for col in data.columns if 'channel' in col]
-        return temporal.smoothing(data, cols, grouping=['video_name'],
-                                  window=self.smooth_window,
-                                  step=self.smooth_step,
-                                  min_periods=self.smooth_min_period)
+    def load_trials(self):
+        trial_files = f'{self.data_dir}/raw/SIdyads_trials/{self.sid}/timingfiles/*.csv'
+        test_videos = pd.read_csv(f'{self.data_dir}/raw/annotations/test.csv')['video_name'].to_list()
 
-    def load_eeg(self):
-        return pd.read_csv(self.eeg_file)
+        trials = []
+        for run, tf in enumerate(sorted(glob(trial_files))):
+            t = pd.read_csv(tf)
+            t['run'] = run
+            t['run_file'] = tf
+            trials.append(t)
+        trials = pd.concat(trials).reset_index(drop=True)
+        trials.reset_index(inplace=True)
+        trials.rename(columns={'index': 'trial'}, inplace=True)
+        
+        # Add information about the training and test split
+        trials['stimulus_set'] = 'train'
+        trials.loc[trials.video_name.isin(test_videos), 'stimulus_set'] = 'test'
+        return trials[['trial', 'video_name', 'condition', 'stimulus_set', 'response']]
 
-    def mk_out_dir(self):
-        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
-
-    def save_results(self, df):
-        time_map = {}
-        for itime, (time, df_time) in enumerate(df.groupby('time')):
-            df_time.sort_values('video_name', inplace=True)
-            out_file = f'{self.out_dir}/{self.eeg_sub}_time-{str(itime).zfill(2)}.csv.gz'
-            df_time.to_csv(out_file, index=False)
-            time_map[str(itime).zfill(2)] = time
-        #Save the map between the time indices and the real values
-        with open(f'{self.out_dir}/map_time.pkl', 'wb') as f:
-            pickle.dump(time_map, f)
+    def save(self, df, name):
+        print('saving...')
+        df.to_csv(f'{self.out_dir}/{self.sid}_{name}.csv.gz', compression='gzip', index=False)
+        print('Finished!')
 
     def run(self):
-        df = self.load_eeg()
-        df_averaged = self.average_repetitions(df)
-        df_smoothed = self.smooth_eeg(df_averaged)
-        self.mk_out_dir()
-        self.save_results(df_smoothed)
+        trials = self.load_trials()
+        eeg_dict = self.load_eeg(trials)
+        eeg_df = self.reorganize_and_resample(eeg_dict, trials)
+        eeg_filtered = preprocessing.label_repetitions(preprocessing.filter_catch_trials(eeg_df))
+        eeg_averaged = self.average_repetitions(eeg_filtered)
+        self.save(eeg_filtered, 'trials')
+        self.save(eeg_averaged, 'averaged')
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Predict fMRI responses using the features')
-    parser.add_argument('--eeg_dir', '-e', type=str, help='EEG directory')
-    parser.add_argument('--eeg_sub', '-s', type=int, help='EEG subject number')
-    parser.add_argument('--out_dir', '-o', type=str, help='output drirectory for the smoothing results')
-    parser.add_argument('--regress_gaze', action=argparse.BooleanOptionalAction, default=False,
-                        help='gaze regressed from the EEG time course')
-    parser.add_argument('--smooth_step', type=int, default=1,
-                        help='number of time points to step in smoothing')
-    parser.add_argument('--smooth_window', type=int, default=5,
-                        help='number of consecutive time points to smooth')
-    parser.add_argument('--smooth_min_period', type=int, default=1,
-                        help='number of time points that are required for smoothing kernel')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sid', type=int, default=1)
+    parser.add_argument('--resample_rate', type=int, default=100)
+    parser.add_argument('--n_samples_to_smooth', type=int, default=5)
+    parser.add_argument('--data_dir', '-data', type=str,
+                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
     args = parser.parse_args()
     eegPreprocessing(args).run()
 

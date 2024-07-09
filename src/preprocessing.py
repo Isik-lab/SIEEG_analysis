@@ -4,43 +4,6 @@ import pandas as pd
 from tqdm import tqdm 
 
 
-def filter_trials(df, artifact_trials):
-    idx = np.where(np.invert(artifact_trials))[0]
-    out = df.loc[idx]
-    out = out.reset_index().drop(columns='trial')
-    if len(out) > len(artifact_trials):
-        out['trial_adjusted'] = out.groupby('time').cumcount()
-    else:
-        out['trial_adjusted'] = np.arange(0, len(out))
-    out.rename(columns={'trial_adjusted': 'trial'}, inplace=True)
-    return out
-
-
-def downsample_and_filter(df, resample_rate, start_time, end_time):
-    df_downsampled = df.groupby('trial').apply(temporal.resample_frame, resample_rate).reset_index().drop(columns='level_1')
-    df_downsampled = df_downsampled.groupby('trial').apply(temporal.trim_time, start_time, end_time).reset_index().drop(columns='level_1')
-    return df_downsampled
-
-
-def combine_data(eeg, trials, eyetracking):
-    out = pd.merge(eeg, trials[['trial', 'video_name', 'condition', 'response', 'stimulus_set']], on='trial', how='left')
-    if eyetracking is not None:
-        out = out.merge(eyetracking, on=['trial', 'time'])
-    return out
-
-
-def process_eyetracking(eyetracking, artifacts, offsets_df,
-                        resample_rate='4ms', start_time=-0.2, end_time=1):
-    df = filter_trials(eyetracking, artifacts)
-    #clean up columns
-    df.drop(columns=['run'], inplace=True)
-
-    # add the eeg offsets time and adjust the time
-    df = df.merge(offsets_df, on='trial').sort_values(by=['trial', 'time'])
-    df['time'] = np.round(df['time'] + df['offset_eyetrack'], decimals=3)
-
-    return downsample_and_filter(df, resample_rate, start_time, end_time) 
-
 
 def regress_out_gaze(df, channels): 
     print('regressing out gaze')
