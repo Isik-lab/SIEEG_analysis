@@ -19,7 +19,7 @@ class eegPreprocessing:
         self.n_samples_to_smooth = args.n_samples_to_smooth
         print(vars(self))
         self.out_dir = f'{self.data_dir}/interim/{self.process}'
-        Path(self.out_dir).mkdir(parents=True, exist_ok=True)
+        Path(f'{self.out_dir}/all_trials').mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def average_repetitions(data):
@@ -46,9 +46,11 @@ class eegPreprocessing:
                 for (itime, time), signal in zip(enumerate(resampled_time), smoothed_data):
                     df.append({'trial': itrial, 'channel': channel,
                                 'time': time, 'time_ind': itime,
-                                'signal': signal, 'video_name': trial_row.video_name,
-                                'stimulus_set': trial_row.stimulus_set,
-                                'condition': trial_row.condition, 'response': trial_row.response})
+                                'signal': signal,
+                                'video_name': trial_row.iloc[0]['video_name'],
+                                'stimulus_set': trial_row.iloc[0]['stimulus_set'],
+                                'condition': trial_row.iloc[0]['condition'],
+                                'response': trial_row.iloc[0]['response']})
         return pd.DataFrame(df) 
 
     def load_trials(self):
@@ -72,26 +74,31 @@ class eegPreprocessing:
 
     def save(self, df, name):
         print('saving...')
-        df.to_csv(f'{self.out_dir}/{self.sid}_{name}.csv.gz', compression='gzip', index=False)
+        df.to_csv(f'{self.out_dir}/{name}', compression='gzip', index=False)
         print('Finished!')
+
+    def save_time_df(self, df):
+        for time_ind, time_df in df.groupby('time_ind'):
+            time_df.to_csv(f'{self.out_dir}/{self.sid}_time-{str(int(time_ind)).zfill(3)}.csv')
 
     def run(self):
         trials = self.load_trials()
         eeg_dict = self.load_eeg(trials)
         eeg_df = self.reorganize_and_resample(eeg_dict, trials)
+        print(eeg_df.head())
         eeg_filtered = preprocessing.label_repetitions(preprocessing.filter_catch_trials(eeg_df))
+        self.save(eeg_filtered, f'all_trials/{self.sid}.csv.gz')
         eeg_averaged = self.average_repetitions(eeg_filtered)
-        self.save(eeg_filtered, 'trials')
-        self.save(eeg_averaged, 'averaged')
+        self.save_time_df(eeg_averaged)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=int, default=1)
-    parser.add_argument('--resample_rate', type=int, default=100)
+    parser.add_argument('--sid', '-s', type=int, default=1)
+    parser.add_argument('--resample_rate', type=int, default=2.5)
     parser.add_argument('--n_samples_to_smooth', type=int, default=5)
-    parser.add_argument('--data_dir', '-data', type=str,
-                         default='/Users/emcmaho7/Dropbox/projects/SI_EEG/SIEEG_analysis/data')
+    parser.add_argument('--data_dir', '-d', type=str,
+                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
     args = parser.parse_args()
     eegPreprocessing(args).run()
 

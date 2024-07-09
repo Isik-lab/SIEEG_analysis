@@ -43,8 +43,8 @@ def regress_out_gaze(df, channels):
 
 def filter_catch_trials(df):
     out = df.copy()
-    catch_trials = np.invert(out.condition.to_numpy().astype('bool'))
-    response_trials = out.response.to_numpy().astype('bool')
+    catch_trials = np.invert(df['condition'].to_numpy().astype('bool'))
+    response_trials = df['response'].to_numpy().astype('bool')
     trial_to_remove = catch_trials + response_trials
     return out[~trial_to_remove].reset_index(drop=True).drop(columns=['condition', 'response'])
 

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 
+
 def find_neighbours(value, df, colname):
     exactmatch = df[df[colname] == value]
     if not exactmatch.empty:
@@ -20,7 +21,7 @@ def smooth(array, window_size=20, step_size=1):
     return np.convolve(array, kernel, mode='full')[::step_size]
 
 
-def resample(time, data, new_sample_rate=100):
+def resample(time, data, new_sample_rate=10):
     new_time = np.arange(time.min(), time.max(), new_sample_rate)
     interpolation_function = interp1d(time, data, kind='linear', fill_value="extrapolate")
     return new_time, interpolation_function(new_time)
