@@ -79,11 +79,11 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode/fmri')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for plot outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotROI')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
-    parser.add_argument('--x_names', '-x', type=str, default='["behavior", "alexnet", "moten"]',
+    parser.add_argument('--x_names', '-x', type=str, default='["alexnet", "moten", "scene", "primitive", "social", "affective"]',
                         help='a list of data names for regression fitting')
     args = parser.parse_args()
     PlotROI(args).run()

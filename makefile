@@ -137,7 +137,7 @@ $(plot_decoding)/.done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=plot_decoding\n\
 #SBATCH --ntasks=1\n\
-#SBATCH --time=30:00\n\
+#SBATCH --time=45:00\n\
 #SBATCH --cpus-per-task=6\n\
 ml anaconda\n\
 conda activate eeg\n\
