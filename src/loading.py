@@ -138,8 +138,7 @@ def strip_eeg(eeg_df):
     Returns:
         pandas.core.frame.DataFrame: dataframe with just the channel-wise response data
     """
-    cols = [col for col in eeg_df.columns if 'channel' in col]
-    return eeg_df[cols]
+    return eeg_df.pivot(index='video_name', columns='channel', values='signal')
 
 
 def get_subj_time(file_name):

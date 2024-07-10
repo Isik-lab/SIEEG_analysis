@@ -74,9 +74,8 @@ $(eeg_preprocess)/.preprocess_done:
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_preprocess\n\
-#SBATCH --ntasks=1\n\
 #SBATCH --time=2:00:00\n\
-#SBATCH --cpus-per-task=6\n\
+#SBATCH --cpus-per-task=18\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
@@ -94,9 +93,9 @@ $(eeg_decoding)/.decode_done:
 
 	@echo "#!/bin/bash" > $(submit_file)
 	@echo "eeg_preprocess=$(eeg_preprocess)" >> $(submit_file)
-	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv.gz | wc -w)" >> $(submit_file)
+	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv | wc -w)" >> $(submit_file)
 	@echo "echo \$$num_files" >> $(submit_file)
-	@echo "sbatch --array=0-\$$((num_files-1))%50 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
+	@echo "sbatch --array=0-\$$((num_files-1))%47 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
 	@chmod +x $(submit_file)
 
 	@echo "#!/bin/bash" > $(batch_file)
