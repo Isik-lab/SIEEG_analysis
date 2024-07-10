@@ -49,7 +49,7 @@ class eegReliability:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', type=str, default='1')
+    parser.add_argument('--sid', '-s', type=str, default='1')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegReliability')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
