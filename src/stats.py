@@ -69,7 +69,7 @@ def calculate_p(r_null_, r_true_, n_perm_, H0_):
 def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=False):
     # Randomly sample and recompute r^2 n_perm times
     if verbose:
-        iter_loop = tqdm(range(n_perm), total=n_perm)
+        iter_loop = tqdm(range(n_perm), total=n_perm, desc='Bootstapped variance')
     else:
         iter_loop = range(n_perm)
 
@@ -124,7 +124,7 @@ def perm(a, b, n_perm=int(5e3), square=True, verbose=False):
         r2_null = np.zeros((n_perm,))
 
     if verbose:
-        iter_loop = tqdm(range(n_perm), total=n_perm)
+        iter_loop = tqdm(range(n_perm), total=n_perm, desc='Permutation null')
     else:
         iter_loop = range(n_perm)
 
