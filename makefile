@@ -13,14 +13,15 @@ plot_encoding=$(project_folder)/data/interim/PlotROI
 
 matlab_eeg_path=$(project_folder)/data/interim/SIdyads_EEG
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
+eeg_reliability=$(project_folder)/data/interim/eegReliability
 eeg_decoding=$(project_folder)/data/interim/encodeDecode/eeg
 plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
 plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 
-
 # Steps to run
-all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_decode plot_decoding plot_shared_variance
+all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode plot_decoding plot_shared_variance
 
+# Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
 $(motion_energy)/.done: 
 	mkdir -p $(motion_energy)
@@ -36,7 +37,7 @@ conda activate eeg\n\
 python $(project_folder)/scripts/motion_energy_activations.py " | sbatch
 	touch $(motion_energy)/.done
 
-
+# Get the activations from AlexNet for the 3 s videos
 alexnet: $(alexnet)/.done $(videos)
 $(alexnet)/.done: 
 	mkdir -p $(alexnet)
@@ -118,6 +119,25 @@ python $(project_folder)/scripts/eeg_preprocessing.py -s $$s" | sbatch; \
 	done
 	touch $(eeg_preprocess)/.preprocess_done
 
+#Compute the channel-wise EEG reliability
+eeg_reliability: $(eeg_reliability)/.done $(eeg_preprocess)
+$(eeg_reliability)/.done: 
+	mkdir -p $(eeg_reliability)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=eeg_reliability\n\
+#SBATCH --time=2:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
+python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
+	done
+	touch $(eeg_reliability)/.done
+
 # Decode EEG data
 submit_file=submit_decoding_jobs.sh
 batch_file=batch_decoding.sh
@@ -161,6 +181,7 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	touch $(eeg_decoding)/.decode_done
 
+#Plot the eeg decoding results
 plot_decoding: $(plot_decoding)/.done $(eeg_decoding)
 $(plot_decoding)/.done: 
 	mkdir -p $(plot_decoding)
@@ -184,6 +205,7 @@ python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \
 python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
 python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'"| sbatch
 
+#Plot the Unique Shared variance between features, EEG, and fMRI
 plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
 $(plot_shared_variance)/.done: 
 	mkdir -p $(plot_shared_variance)

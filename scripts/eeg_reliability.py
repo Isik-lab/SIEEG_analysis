@@ -16,10 +16,16 @@ class eegReliability:
         print(vars(self))
         self.eeg_file = args.eeg_file
         self.out_dir = args.out_dir
+        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def load_and_average(self):
         eeg = loading.load_eeg(self.eeg_file)
-        eeg_filtered = eeg.loc[eeg.stimulus_set == 'test'].reset_index(drop=True)
+        print(f'{len(eeg)=}')
+        print(f'{eeg.trial.nunique()=}')
+        print(f'{eeg.time.nunique()=}')
+        print(f'{eeg.channel.nunique()=}')
+        print(f'{(eeg.channel.nunique()*eeg.time.nunique()*eeg.trial.nunique())==len(eeg)=}')
+        eeg_filtered = eeg.loc[eeg.stimulus_set == 'test'].reset_index(drop=True) #Filter to the test set
         eeg_average = eeg_filtered.groupby(['time', 'channel', 'video_name', 'even']).mean(numeric_only=True)
         return eeg_average.reset_index()
 
@@ -28,7 +34,6 @@ class eegReliability:
         iterator = tqdm(df.groupby('time'), total=df.time.nunique(), desc='Calculating reliability')
         for time, time_df in iterator:
             for channel, channel_df in time_df.groupby('channel'):
-                print(channel_df.head())
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
                 results.append({'time': time, 'channel': channel, 'r': stats.corr(even, odd)})
