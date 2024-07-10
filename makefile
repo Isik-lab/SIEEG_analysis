@@ -19,7 +19,7 @@ plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
 plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 
 # Steps to run
-all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode plot_decoding plot_shared_variance
+all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode fmri_stats plot_decoding plot_shared_variance
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
