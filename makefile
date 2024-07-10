@@ -4,6 +4,9 @@ neptune_api_token=eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLmVwdHVuZS5haSIsImFwaV9rZX
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 
 # Dependencies
+videos=$(project_folder)/data/raw/videos_3000ms
+motion_energy=$(project_folder)/data/interim/MotionEnergyActivations
+alexnet=$(project_folder)/data/interim/AlexNetActivations
 fmri_data=$(project_folder)/data/interim/ReorganizefMRI
 fmri_encoding=$(project_folder)/data/interim/encodeDecode/fmri
 plot_encoding=$(project_folder)/data/interim/PlotROI
@@ -16,7 +19,38 @@ plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 
 
 # Steps to run
-all: fmri_encoding eeg_preprocess eeg_decode plot_decoding plot_shared_variance
+all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_decode plot_decoding plot_shared_variance
+
+motion_energy: $(motion_energy)/.done $(videos)
+$(motion_energy)/.done: 
+	mkdir -p $(motion_energy)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=moten\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 2:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/motion_energy_activations.py " | sbatch
+	touch $(motion_energy)/.done
+
+
+alexnet: $(alexnet)/.done $(videos)
+$(alexnet)/.done: 
+	mkdir -p $(alexnet)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=moten\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 2:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/alexnet_activations.py " | sbatch
+	touch $(alexnet)/.done
 
 # Perform fMRI encoding with features
 fmri_encoding: $(fmri_encoding)/.encoding_done $(fmri_data)
@@ -110,7 +144,7 @@ $(eeg_decoding)/.decode_done:
 	@echo "conda activate eeg" >> $(batch_file)
 	@echo "project_folder=$(project_folder)" >> $(batch_file)
 	@echo "eeg_preprocess=\$$1" >> $(batch_file)
-	@echo "eeg_files=(\$$eeg_preprocess/*.csv.gz)" >> $(batch_file)
+	@echo "eeg_files=(\$$eeg_preprocess/*.csv)" >> $(batch_file)
 	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
 	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
 	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
