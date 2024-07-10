@@ -13,7 +13,6 @@ from tqdm import tqdm
 class MotionEnergyActivations():
     def __init__(self, args):
         self.process = 'MotionEnergyActivations'
-        self.overwrite = args.overwrite
         self.vid_dir = args.vid_dir
         self.out_dir = args.out_dir
         self.stim_data = args.stim_data
@@ -44,16 +43,12 @@ class MotionEnergyActivations():
         return np.array(out_moten)
 
     def run(self):
-        if not os.path.exists(self.out_file) or self.overwrite:
-            out_moten = self.get_moten()
-            np.save(self.out_file, out_moten)
-        else:
-            out_moten = np.load(self.out_file)
+        out_moten = self.get_moten()
+        np.save(self.out_file, out_moten)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--stim_data', type=str, help='path to the stimulus data',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI/stimulus_data.csv')
     parser.add_argument('--vid_dir', '-v', type=str, help='video directory',

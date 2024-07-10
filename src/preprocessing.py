@@ -47,11 +47,3 @@ def filter_catch_trials(df):
     response_trials = df['response'].to_numpy().astype('bool')
     trial_to_remove = catch_trials + response_trials
     return out[~trial_to_remove].reset_index(drop=True).drop(columns=['condition', 'response'])
-
-
-def label_repetitions(df):
-    out = df.copy()
-    out['repetition'] = df.groupby(['time', 'video_name']).cumcount() + 1
-    out['even'] = False
-    out.loc[(out.repetition % 2) == 0, 'even'] = True
-    return out

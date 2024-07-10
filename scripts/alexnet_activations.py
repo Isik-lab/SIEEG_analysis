@@ -109,7 +109,6 @@ class AlexNetActivations():
     def __init__(self, args):
         self.process = 'AlexNetActivations'
         self.layer = args.layer
-        self.overwrite = args.overwrite
         self.average_all_frames = args.average_all_frames
         self.vid_dir = args.vid_dir
         self.out_dir = args.out_dir
@@ -119,42 +118,38 @@ class AlexNetActivations():
         print(vars(self))
 
     def run(self):
-        if not os.path.exists(self.out_file) or self.overwrite:
-            df = pd.read_csv(self.stim_data)
+        df = pd.read_csv(self.stim_data)
 
-            model = models.alexnet(weights='IMAGENET1K_V1')
-            model.eval()
-            feature_extractor = AlexNet_Extractor(model)
+        model = models.alexnet(weights='IMAGENET1K_V1')
+        model.eval()
+        feature_extractor = AlexNet_Extractor(model)
 
-            activation = []
-            for video_name in tqdm.tqdm(df.video_name, total=len(df),
-                                        desc="Getting activations for videos"):
-                vid_obj = imageio.get_reader(f'{self.vid_dir}/{video_name}', 'ffmpeg')
-                num_frames=vid_obj.count_frames()
-                
-                if self.average_all_frames:
-                    cur_act = []
-                    for i in range(num_frames):
-                        input_img = preprocess(Image.fromarray(vid_obj.get_data(i)))
-                        features = feature_extractor.forward(input_img, layer=self.layer, combination=None)
-                        cur_act.append(features)
-                    cur_act = np.concatenate(cur_act)
-                    activation.append(cur_act.mean(axis=0).reshape((1, -1)))
-                else:
-                    input_img = preprocess(Image.fromarray(vid_obj.get_data(0))) #get first frame
+        activation = []
+        for video_name in tqdm.tqdm(df.video_name, total=len(df),
+                                    desc="Getting activations for videos"):
+            vid_obj = imageio.get_reader(f'{self.vid_dir}/{video_name}', 'ffmpeg')
+            num_frames=vid_obj.count_frames()
+            
+            if self.average_all_frames:
+                cur_act = []
+                for i in range(num_frames):
+                    input_img = preprocess(Image.fromarray(vid_obj.get_data(i)))
                     features = feature_extractor.forward(input_img, layer=self.layer, combination=None)
-                    activation.append(features.reshape(1, -1))
-            activation = np.concatenate(activation)
-            print(f'{activation.shape=}')
-            np.save(self.out_file, activation)
-        else:
-            activation = np.load(self.out_file)
+                    cur_act.append(features)
+                cur_act = np.concatenate(cur_act)
+                activation.append(cur_act.mean(axis=0).reshape((1, -1)))
+            else:
+                input_img = preprocess(Image.fromarray(vid_obj.get_data(0))) #get first frame
+                features = feature_extractor.forward(input_img, layer=self.layer, combination=None)
+                activation.append(features.reshape(1, -1))
+        activation = np.concatenate(activation)
+        print(f'{activation.shape=}')
+        np.save(self.out_file, activation)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--layer', '-l', type=int, default=2)
-    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument('--average_all_frames', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--stim_data', type=str, help='path to the stimulus data',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI/stimulus_data.csv')

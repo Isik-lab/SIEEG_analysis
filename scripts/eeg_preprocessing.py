@@ -10,6 +10,27 @@ from tqdm import tqdm
 import numpy as np
 
 
+def track_stimulus_repititions(stimulus_name, stimulus_dict):
+    """
+    This function takes an stimulus name and a dictionary. If the stimulus name is not
+    present in the dictionary, it adds the stimulus with a counter starting at 0.
+    If the stimulus name is present, it increments the existing count by 1.
+
+    Args:
+    stimulus_name (str): The name of the stimulus to be tracked.
+    stimulus_dict (dict): A dictionary containing stimulus names as keys and their counts as values.
+
+    Returns:
+    tuple: The updated dictionary and the current count for the stimulus.
+    """
+    if stimulus_name in stimulus_dict:
+        stimulus_dict[stimulus_name] += 1
+    else:
+        stimulus_dict[stimulus_name] = 0
+    
+    return stimulus_dict, stimulus_dict[stimulus_name]
+
+
 class eegPreprocessing:
     def __init__(self, args):
         self.process = 'eegPreprocessing'
@@ -36,6 +57,7 @@ class eegPreprocessing:
         iter_top = tqdm(zip(trials_df.groupby('trial'), zip(eeg_dict['time'][0],
                                                           eeg_dict['trial'][0])),
                         total=len(eeg_dict['trial'][0]), desc='Reorganizing EEG')
+        stimulus_dict = {}
         for (itrial, trial_row), (times, trial_eeg) in iter_top:
             times = times[0] * 1000 # Change to ms
             for channel, channel_eeg in zip(eeg_dict['label'], trial_eeg):
@@ -44,9 +66,13 @@ class eegPreprocessing:
                                                                    new_sample_rate=self.resample_rate)
                 smoothed_data = temporal.smooth(resampled_data, window_size=self.n_samples_to_smooth)
                 for (itime, time), signal in zip(enumerate(resampled_time), smoothed_data):
+                    stimulus_dict, repitition = track_stimulus_repititions(trial_row.iloc[0]['video_name'],
+                                                                           stimulus_dict)
+                    even = (repitition % 2 == 0)
                     df.append({'trial': itrial, 'channel': channel,
                                 'time': time, 'time_ind': itime,
-                                'signal': signal,
+                                'signal': signal, 
+                                'repitition': repitition, 'even': even, 
                                 'video_name': trial_row.iloc[0]['video_name'],
                                 'stimulus_set': trial_row.iloc[0]['stimulus_set'],
                                 'condition': trial_row.iloc[0]['condition'],
@@ -86,7 +112,7 @@ class eegPreprocessing:
         eeg_dict = self.load_eeg(trials)
         eeg_df = self.reorganize_and_resample(eeg_dict, trials)
         print(eeg_df.head())
-        eeg_filtered = preprocessing.label_repetitions(preprocessing.filter_catch_trials(eeg_df))
+        eeg_filtered = preprocessing.filter_catch_trials(eeg_df)
         self.save(eeg_filtered, f'all_trials/{self.sid}.csv.gz')
         eeg_averaged = self.average_repetitions(eeg_filtered)
         self.save_time_df(eeg_averaged)

@@ -29,7 +29,7 @@ $(motion_energy)/.done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=moten\n\
 #SBATCH --ntasks=1\n\
-#SBATCH --time 2:00:00\n\
+#SBATCH --time 5:00:00\n\
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
@@ -45,7 +45,7 @@ $(alexnet)/.done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=moten\n\
 #SBATCH --ntasks=1\n\
-#SBATCH --time 2:00:00\n\
+#SBATCH --time 1:00:00\n\
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
