@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from glob import glob
-from src import preprocessing, temporal
+from src import temporal
 from scipy.io import loadmat
 from tqdm import tqdm
 import numpy as np
@@ -32,6 +32,16 @@ def track_stimulus_repititions(stimulus_name, stimulus_dict):
 
 
 def return_value(row, cols):
+    """
+    This function returns the value from a selected row in a pandas dataframe
+
+    Args:
+        row (pd.core.frame.DataFrame): a single rowed pandas dataframe
+        cols (str or list): the columns to select
+
+    Returns:
+        str or list: the value in the selected column. type returned is the same as the input
+    """
     if type(cols) == str:
         return row.iloc[0][cols]
     elif type(cols) == list:
