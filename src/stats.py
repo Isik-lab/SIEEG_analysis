@@ -51,17 +51,17 @@ def mantel_permutation(a, i):
     return squareform(a_shuffle)
 
 
-def calculate_p(r_null_, r_true_, n_perm_, H0_):
+def calculate_p(r_null, r_true, n_perm, H0):
     # Get the p-value depending on the type of test
-    denominator = n_perm_ + 1
-    if H0_ == 'two_tailed':
-        numerator = np.sum(np.abs(r_null_) >= np.abs(r_true_), axis=0) + 1
+    denominator = n_perm + 1
+    if H0 == 'two_tailed':
+        numerator = np.sum(np.abs(r_null) >= np.abs(r_true), axis=0) + 1
         p_ = numerator / denominator
-    elif H0_ == 'greater':
-        numerator = np.sum(r_true_ > r_null_, axis=0) + 1
+    elif H0 == 'greater':
+        numerator = np.sum(r_true > r_null, axis=0) + 1
         p_ = 1 - (numerator / denominator)
     else:  # H0 == 'less':
-        numerator = np.sum(r_true_ < r_null_, axis=0) + 1
+        numerator = np.sum(r_true < r_null, axis=0) + 1
         p_ = 1 - (numerator / denominator)
     return p_
 
@@ -290,7 +290,7 @@ def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
     return r_var
 
 
-def compute_null_clusters(nulls, alpha=0.05, desc=None):
+def compute_null_clusters(nulls, alpha=0.05, desc=None, verbose=False):
     """
         inputs:
             nulls: 2d numpy array, the first dim is the time points and second is the number of permutations
@@ -302,9 +302,13 @@ def compute_null_clusters(nulls, alpha=0.05, desc=None):
         'Cluster permutation'
 
     n_perm = nulls.shape[-1]
+    if verbose is True:
+        iterator = tqdm(range(n_perm), total=n_perm, desc=desc)
+    else:
+        iterator = range(n_perm)
 
     cluster_null = []
-    for i_perm in tqdm(range(n_perm), total=n_perm, desc=desc):
+    for i_perm in iterator:
         # Get the current random time series
         true = nulls[:, i_perm:i_perm + 1]
 
@@ -328,7 +332,7 @@ def compute_null_clusters(nulls, alpha=0.05, desc=None):
     return np.array(cluster_null)
 
 
-def cluster_correction(rs, ps, r_nulls, alpha=0.05, desc=None):
+def cluster_correction(rs, ps, r_nulls, alpha=0.05, desc=None, verbose=False):
     """
         inputs:
             rs: np.array of the r values at each time point
@@ -339,7 +343,7 @@ def cluster_correction(rs, ps, r_nulls, alpha=0.05, desc=None):
         outputs: 
             cluster_ps: a vector of corrected p values. Unsignificant p values are unchanged
     """
-    cluster_nulls = compute_null_clusters(r_nulls, desc=desc)
+    cluster_nulls = compute_null_clusters(r_nulls, desc=desc, verbose=verbose)
     cluster_ps = ps.copy()
 
     # Label the clusters

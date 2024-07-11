@@ -18,6 +18,7 @@ from himalaya.ridge import GroupRidgeCV
 from himalaya.backend import set_backend
 from src.tools import to_torch
 from kneed import KneeLocator
+from sklearn.decomposition import PCA as sklearn_PCA
 
 
 def T_torch(tensor):
@@ -150,9 +151,10 @@ def pca_rotation(X_train, X_test, groups=None):
             if torch.sum(idx) > X_train.size()[0]: 
                 pca = PCA()
                 pca.fit(X_train[:, idx])
-                kneedle = KneeLocator(np.arange(X_train.size()[0])+1,
-                                      pca.explained_variance_ratio_,
-                                      S=1.0, curve="convex", direction="decreasing")
+                ev_ratio = pca.explained_variance_ratio_
+                kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
+                                      curve="convex", direction="decreasing",
+                                      interp_method="polynomial")
                 n_components = kneedle.knee
             else:
                 n_components = int(torch.sum(idx))
