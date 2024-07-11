@@ -143,7 +143,7 @@ class eegPreprocessing:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', '-s', type=int, default=1)
-    parser.add_argument('--resample_rate', type=int, default=2.5)
+    parser.add_argument('--resample_rate', type=float, default=2.5)
     parser.add_argument('--n_samples_to_smooth', type=int, default=5)
     parser.add_argument('--data_dir', '-d', type=str,
                          default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')

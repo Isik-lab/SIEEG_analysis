@@ -20,6 +20,9 @@ class PlotTimeCourse:
         self.eeg_dir = args.eeg_dir
         self.y_names = json.loads(args.y_names)
         self.x_names = json.loads(args.x_names)
+        self.start_time = args.start_time
+        self.end_time = args.end_time
+        self.resample_rate = args.resample_rate
         valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x_names are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x_names), valid_err_msg
@@ -64,9 +67,8 @@ class PlotTimeCourse:
         return out
 
     def get_time_map(self):
-        with open(f'{self.eeg_dir}/map_time.pkl', 'rb') as f:
-            loaded_dict = pickle.load(f)
-        return loaded_dict
+        arr = np.arange(self.start_time, self.end_time, self.resample_rate)
+        return {str(i).zfill(3): time for i, time in enumerate(arr)}
 
     def load_results(self, targets):
         name_pattern = f'*x-{'-'.join(self.x_names)}_y-{'-'.join(self.y_names)}_scores.csv.gz'
@@ -114,6 +116,12 @@ def main():
                         help='a list of data names for regression fitting')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predicted roi mean response instead of voxelwise responses')
+    parser.add_argument('--start_time', type=int, default=-200,
+                        help='time that the timecourse starts in milliseconds')
+    parser.add_argument('--end_time', type=int, default=1000,
+                        help='time that the timecourse ends in milliseconds')
+    parser.add_argument('--resample_rate', type=float, default=2.5,
+                        help='sampling interval of the signal in milliseconds')
     args = parser.parse_args()
     PlotTimeCourse(args).run()
 
