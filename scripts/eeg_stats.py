@@ -19,11 +19,15 @@ class eegStats:
         self.pred_file_pattern = args.pred_file_pattern
         self.out_dir = args.out_dir
         sub = self.pred_file_pattern.split("/")[-1].split("*")[0]
-        x_y_names = self.pred_file_pattern.split("/")[-1].split("*_")[-1].split("_yhat")[0]
+        x_y_names = self.pred_file_pattern.split("/")[-1].split("*")[-1].split("_yhat")[0]
         print(f'{x_y_names=}')
-        self.prefix = f'{self.out_dir}/{sub}_{x_y_names}'
+        self.prefix = f'{self.out_dir}/{sub}{x_y_names}'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
+        self.behavior_targets = ['rating-indoor', 'rating-expanse', 'rating-object',
+                                 'rating-agent_distance', 'rating-facingness',
+                                 'rating-joint_action', 'rating-communication',
+                                 'rating-valence', 'rating-arousal']
 
     @staticmethod
     def compute_score(true, pred):
@@ -39,10 +43,13 @@ class eegStats:
         return pd.read_csv(file).to_numpy()
 
     def load_true(self):
-        true, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
+        fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         behavior = loading.load_behavior(self.fmri_dir)
-        idx = behavior.loc[behavior.stimulus_set == 'test'].index
-        return true.iloc[idx].to_numpy()
+        if 'y-fmri' in self.pred_file_pattern:  
+            idx = behavior.loc[behavior.stimulus_set == 'test'].index
+            return fmri.iloc[idx].to_numpy()
+        else: #Behavior targets:
+            return behavior.loc[behavior.stimulus_set == 'test', self.behavior_targets].to_numpy()
 
     def compute_dists(self, true):
         r2, null, var = [], [], []
@@ -63,6 +70,9 @@ class eegStats:
     def run(self):
         true = self.load_true()
         r2, null, var = self.compute_dists(true)
+        print(f'{r2.shape=}')
+        print(f'{null.shape=}')
+        print(f'{var.shape=}')
         self.mk_out_dir()
         self.save_array(r2, 'r2')
         self.save_array(null, 'null')
