@@ -55,7 +55,7 @@ class eegStats:
         return np.concatenate(r2, axis=0), np.concatenate(null, axis=0), np.concatenate(var, axis=0)
 
     def save_array(self, arr, suffix):
-        np.save(f'{self.prefix}_{suffix}.npy', arr)
+        np.save(f'{self.prefix}_stat-{suffix}.npy', arr)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
