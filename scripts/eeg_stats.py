@@ -18,9 +18,9 @@ class eegStats:
         self.n_perm = args.n_perm
         self.pred_file_pattern = args.pred_file_pattern
         self.out_dir = args.out_dir
-        sub = self.pred_file_pattern.split("/")[-1].split("time")[0]
-        x_y_names = self.pred_file_pattern.split("/")[-1].split("_x-")[-1].split("y_hat")[0]
-        self.prefix = f'{self.out_dir}/{sub}_x-{x_y_names}'
+        sub = self.pred_file_pattern.split("/")[-1].split("*")[0]
+        x_y_names = self.pred_file_pattern.split("/")[-1].split("*_")[-1].split("y_hat")[0]
+        self.prefix = f'{self.out_dir}/{sub}_{x_y_names}'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
 
@@ -52,6 +52,7 @@ class eegStats:
             null.append(self.compute_perm_dist(true, pred))
             var.append(self.compute_var_dist(true, pred))
         return np.concatenate(r2, axis=0), np.concatenate(null, axis=0), np.concatenate(var, axis=0)
+
     def save_array(self, arr, suffix):
         np.save(f'{self.prefix}_{suffix}.npy', arr)
 
