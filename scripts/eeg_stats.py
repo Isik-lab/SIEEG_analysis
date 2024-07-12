@@ -19,7 +19,8 @@ class eegStats:
         self.pred_file_pattern = args.pred_file_pattern
         self.out_dir = args.out_dir
         sub = self.pred_file_pattern.split("/")[-1].split("*")[0]
-        x_y_names = self.pred_file_pattern.split("/")[-1].split("*_")[-1].split("y_hat")[0]
+        x_y_names = self.pred_file_pattern.split("/")[-1].split("*_")[-1].split("_yhat")[0]
+        print(f'{x_y_names=}')
         self.prefix = f'{self.out_dir}/{sub}_{x_y_names}'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
