@@ -10,9 +10,9 @@ from glob import glob
 from tqdm import tqdm
 
 
-class fmriStats:
+class eegStats:
     def __init__(self, args):
-        self.process = 'fmriStats'
+        self.process = 'eegStats'
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.roi_mean = args.roi_mean
         self.start_time = args.start_time
@@ -21,8 +21,8 @@ class fmriStats:
         self.n_perm = args.n_perm
         self.compute_stats = args.compute_stats
         self.y_names = args.y_names
-        print(vars(self)) 
         self.pred_file_pattern = args.pred_file_pattern
+        print(vars(self)) 
         self.out_dir = args.out_dir
         self.fmri_dir = args.fmri_dir
         self.prefix = f'{self.out_dir}/{self.pred_file_pattern.split("/")[-1].split("time")[0]}'
@@ -49,6 +49,7 @@ class fmriStats:
     def compute_dists(self, true):
         r2, null, var = [], [], []
         files = sorted(glob(self.pred_file_pattern))
+        print(f'{files=}')
         for file in tqdm(files, total=len(files), desc='Computing dists through time'):
             pred = self.load_pred(file)
             r2.append(self.compute_score(true, pred))
@@ -138,7 +139,7 @@ def main():
     parser.add_argument('--pred_file_pattern', '-p', type=str, help='prediction file',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/encodeDecode/eeg/sub-03_time-*_x-eeg_y-fmri_yhat.csv.gz')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/nullStats')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegStats')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--compute_stats', action=argparse.BooleanOptionalAction, default=False,
@@ -154,7 +155,7 @@ def main():
     parser.add_argument('--n_perm', type=int, default=int(5e3),
                         help='number of permutations/resamples to run')                   
     args = parser.parse_args()
-    fmriStats(args).run()
+    eegStats(args).run()
 
 
 if __name__ == '__main__':

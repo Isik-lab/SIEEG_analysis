@@ -15,12 +15,12 @@ matlab_eeg_path=$(project_folder)/data/interim/SIdyads_EEG
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_reliability=$(project_folder)/data/interim/eegReliability
 eeg_decoding=$(project_folder)/data/interim/encodeDecode/eeg
-fmri_stats=$(project_folder)/data/interim/fmriStats
+eeg_stats=$(project_folder)/data/interim/eegStats
 plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
 plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 
 # Steps to run
-all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode plot_decoding plot_shared_variance
+all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode eeg_stats plot_decoding plot_shared_variance
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -181,6 +181,29 @@ $(eeg_decoding)/.decode_done:
 	./$(submit_file)
 	# touch $(eeg_decoding)/.decode_done
 
+
+#Compute the channel-wise EEG reliability
+eeg_stats: $(eeg_stats)/.done $(eeg_decoding)
+$(eeg_stats)/.done: 
+	mkdir -p $(eeg_stats)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=eeg_stats\n\
+#SBATCH --time=2:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
+python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%03d' $${s})*_x-eeg_y-fmri_yhat.csv.gz\n\
+python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%03d' $${s})*_x-eeg-alexnet-moten-scene-primitive-social-affective_y-fmri_yhat.csv.gz\n\
+python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%03d' $${s})*_x-eeg_y-scene-primitive-social-affective_yhat.csv.gz" | sbatch; \
+	done
+	touch $(eeg_stats)/.done
+
+
 #Plot the eeg decoding results
 plot_decoding: $(plot_decoding)/.done $(eeg_decoding)
 $(plot_decoding)/.done: 
@@ -218,12 +241,12 @@ $(plot_shared_variance)/.done:
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(token)\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u alexnet\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u moten\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u scene\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u primitive\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u social\n\
-python $(project_folder)/scripts/plot_shared_variance.py -u affective\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u alexnet\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u moten\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u scene\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u primitive\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u social\n\
+# python $(project_folder)/scripts/plot_shared_variance.py -u affective\n\
 python $(project_folder)/scripts/plot_shared_variance.py" | sbatch
 
 clean:
