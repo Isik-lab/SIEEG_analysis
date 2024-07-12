@@ -16,14 +16,14 @@ class eegStats:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.roi_mean = args.roi_mean
         self.start_time = args.start_time
-        self.end_time = args.end_time
+        self.end_time = args.end_times
         self.resample_rate = args.resample_rate
         self.n_perm = args.n_perm
         self.compute_stats = args.compute_stats
         self.y_names = args.y_names
         self.pred_file_pattern = args.pred_file_pattern
         sub = self.pred_file_pattern.split("/")[-1].split("time")[0]
-        x_y_names = self.pred_file_pattern.split("/")[-1].split("_x-")[-].split("y_hat")[0]
+        x_y_names = self.pred_file_pattern.split("/")[-1].split("_x-")[-1].split("y_hat")[0]
         self.prefix = f'{self.out_dir}/{sub}_x-{x_y_names}'
         print(vars(self)) 
         self.out_dir = args.out_dir
