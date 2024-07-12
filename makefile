@@ -197,11 +197,11 @@ set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-fmri_yhat.csv.gz\n\
-python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg-alexnet-moten-scene-primitive-social-affective_y-fmri_yhat.csv.gz\n\
-python $(project_folder)/scripts/eeg_stats.py -p $(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-scene-primitive-social-affective_yhat.csv.gz" | sbatch; \
+python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-fmri_yhat.csv.gz'\n\
+python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg-alexnet-moten-scene-primitive-social-affective_y-fmri_yhat.csv.gz'\n\
+python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-scene-primitive-social-affective_yhat.csv.gz'" | sbatch; \
 	done
-	touch $(eeg_stats)/.done
+	# touch $(eeg_stats)/.done
 
 
 #Plot the eeg decoding results

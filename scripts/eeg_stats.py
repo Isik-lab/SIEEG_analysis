@@ -49,7 +49,6 @@ class eegStats:
     def compute_dists(self, true):
         r2, null, var = [], [], []
         files = sorted(glob(self.pred_file_pattern))
-        print(f'{files=}')
         for file in tqdm(files, total=len(files), desc='Computing dists through time'):
             pred = self.load_pred(file)
             r2.append(self.compute_score(true, pred))
