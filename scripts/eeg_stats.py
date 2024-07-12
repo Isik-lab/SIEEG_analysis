@@ -22,10 +22,14 @@ class eegStats:
         self.compute_stats = args.compute_stats
         self.y_names = args.y_names
         self.pred_file_pattern = args.pred_file_pattern
+        sub = self.pred_file_pattern.split("/")[-1].split("time")[0]
+        x_y_names = self.pred_file_pattern.split("/")[-1].split("_x-")[-].split("y_hat")[0]
+        self.prefix = f'{self.out_dir}/{sub}_x-{x_y_names}'
         print(vars(self)) 
         self.out_dir = args.out_dir
         self.fmri_dir = args.fmri_dir
-        self.prefix = f'{self.out_dir}/{self.pred_file_pattern.split("/")[-1].split("time")[0]}'
+        
+        
 
     @staticmethod
     def compute_score(true, pred):
