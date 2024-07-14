@@ -23,6 +23,7 @@ class groupAnalysis:
         self.end_time = args.end_time
         self.resample_rate = args.resample_rate
         self.in_dir = args.in_dir
+        self.fmri_dir = args.fmri_dir
         self.out_dir = args.out_dir
         self.summary_stat = args.summary_stat
         valid_err_msg = f"--summary_stat must be feature_decoding, fmri_encoding, or eeg_feature_shared, {self.summary_stat}"
@@ -34,7 +35,7 @@ class groupAnalysis:
         if self.summary_stat == 'feature_decoding':
             y_data = loading.load_behavior(self.fmri_dir)
             targets = [col for col in y_data.columns if 'rating' in col]
-            out = {'subj_id': list(np.nan(len(targets))), 
+            out = {'subj_id': list(np.ones(len(targets))*np.nan), 
                   'targets': targets}
         else:
             _, y_data = loading.load_fmri(self.fmri_dir, roi_mean=True)
@@ -69,8 +70,8 @@ class groupAnalysis:
                             'subj_id': subj_id, 'target': target,
                             'r2': r2[itime, itarget], 'time_ind': time_ind, 'time': time,
                             'p': p[itime, itarget],
-                            'lower_ci': [0, itime, itarget],
-                            'upper_ci': [1, itime, itarget]
+                            'lower_ci': ci[0, itime, itarget],
+                            'upper_ci': ci[1, itime, itarget]
                             })
         return pd.DataFrame(out)
 
@@ -99,7 +100,7 @@ class groupAnalysis:
         return out
 
     def save_df(self, df):
-        df.to_csv(f'{self.prefix}_summary.csv', index=False)
+        df.to_csv(f'{self.out_dir}/{self.summary_stat}_summary.csv', index=False)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
@@ -107,9 +108,11 @@ class groupAnalysis:
     def run(self):
         if self.summary_stat != 'eeg_feature_shared':
             r2, null, var = self.load_data(['r2', 'null', 'var'])
+            print(f'{var.shape=}')
         else:
             r2, null, var = self.load_shared_data(['r2', 'null', 'var'])
         ci = self.compute_ci(var)
+        print(f'{ci.shape=}')
         p = self.compute_p(r2, null)
         print(f'{p.shape=}')
         del var, null
@@ -127,6 +130,8 @@ def main():
     parser = argparse.ArgumentParser(description='Decoding behavior or fMRI from EEG responses')
     parser.add_argument('--in_dir', '-r', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegStats')
+    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/groupAnalysis')
     parser.add_argument('--summary_stat', '-s', type=str, default='feature_decoding',
