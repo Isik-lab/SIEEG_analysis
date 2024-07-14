@@ -97,6 +97,7 @@ class groupAnalysis:
                 feature_eeg = np.load(feature_eeg_file)
                 result.append((feature + eeg) - feature_eeg)
             out.append(np.mean(result, axis=0))
+        del feature, eeg, feature_eeg
         return out
 
     def save_df(self, df):
