@@ -18,9 +18,10 @@ eeg_decoding=$(project_folder)/data/interim/encodeDecode/eeg
 eeg_stats=$(project_folder)/data/interim/eegStats
 plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
 plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
+back_to_back=$(project_folder)/data/interim/Back2Back
 
 # Steps to run
-all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode eeg_stats plot_decoding plot_shared_variance
+all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode eeg_stats plot_decoding plot_shared_variance back_to_back
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -138,6 +139,26 @@ export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
 python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	done
 	touch $(eeg_reliability)/.done
+
+
+#Compute the channel-wise EEG reliability
+back_to_back: $(back_to_back)/.done $(eeg_preprocess)
+$(back_to_back)/.done: 
+	mkdir -p $(back_to_back)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=back_to_back\n\
+#SBATCH --time=2:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz" | sbatch; \
+	done
+	touch $(back_to_back)/.done
 
 # Decode EEG data
 submit_file=submit_decoding_jobs.sh

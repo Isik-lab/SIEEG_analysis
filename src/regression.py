@@ -49,19 +49,25 @@ def train_test_split(behavior, neurals, behavior_categories=None):
     Returns:
         out (dictionary): returns a dictionary of the data that has been separated
     """
+    def split(neural, train_idx, test_idx):
+        if type(neural) is pd.core.frame.DataFrame: 
+            return neural.iloc[train_idx].to_numpy(), neural.iloc[test_idx].to_numpy()
+        else:
+            return neural[train_idx], neural[test_idx]
+        
+
     train_idx = behavior.loc[behavior['stimulus_set'] == 'train'].index
     test_idx = behavior.loc[behavior['stimulus_set'] == 'test'].index
 
     train = {}
     test = {}
     for key, neural in neurals.items():
-        if type(neural) is pd.core.frame.DataFrame: 
-            neural_train = neural.iloc[train_idx].to_numpy()
-            neural_test = neural.iloc[test_idx].to_numpy()
+        if type(neural) == dict:
+            train[key], test[key] = {}, {}
+            for inner_key, inner_neural in neural.items():
+                train[key][inner_key], test[key][inner_key] = split(inner_neural, train_idx, test_idx)
         else:
-            neural_train = neural[train_idx]
-            neural_test = neural[test_idx]
-        train[key], test[key] = neural_train, neural_test
+            train[key], test[key] = split(neural, train_idx, test_idx)
 
     if behavior_categories is None:
         cols = [col for col in behavior.columns if 'rating-' in col]
@@ -159,7 +165,6 @@ def pca_rotation(X_train, X_test, groups=None):
             else:
                 n_components = int(torch.sum(idx))
 
-            print(f'{n_components=}')
             pca = PCA(n_components=n_components)
             X_train_.append(pca.fit_transform(X_train[:, idx]))
             X_test_.append(pca.transform(X_test[:, idx]))
