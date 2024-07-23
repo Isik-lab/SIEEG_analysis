@@ -5,11 +5,11 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import corr2d_gpu
-from src.regression import regression_model, feature_scaler
+from src.stats import corr2d_gpu, perm3d_gpu, bootstrap3d_gpu
+from src.regression import ridge, feature_scaler
 import json
 from tqdm import tqdm
-from sklearn.model_selection import KFold
+from sklearn.model_selection import LeaveOneOut
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -37,20 +37,19 @@ class Back2Back:
         self.y_names = json.loads(args.y_names)
         self.x1 = json.loads(args.x1)
         self.x2 = json.loads(args.x2)
-        self.regression_method = args.regression_method
         self.roi_mean = args.roi_mean
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
-        self.rotate_x = args.rotate_x
         self.scoring = args.scoring
+        self.n_perm = args.n_perm
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
+        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.csv')[0]}.csv.gz'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet
-        self.out_dir = args.out_dir
-        self.out_name = f'{self.out_dir}/x2-{'-'.join(self.x2)}.csv.gz'
         valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
         valid_err_msg = f"One or more x1 are not valid. Valid options are {valid_names}"
         assert all(name in valid_names for name in self.x1), valid_err_msg
@@ -96,63 +95,90 @@ class Back2Back:
         apply_feature_scaler(train, test, device=self.device)
         return train, test
 
+    def compute_stats(self, yhat_test, y_test):
+        y_test_repeated = y_test.unsqueeze(2).repeat(1, 1, yhat_test.size()[-1])
+        score_null = perm3d_gpu(yhat_test, y_test_repeated, n_perm=self.n_perm)
+        score_var = bootstrap3d_gpu(yhat_test, y_test_repeated, n_perm=self.n_perm)
+        print(f'{score_null.size()=}')
+        return score_null, score_var
+
+    def reorganize_results(self, score, score_null, score_var, fmri_meta, time_map):
+        results = pd.DataFrame(score).transpose()
+        temp_cols = [f'col{i}' for i in range(len(results.columns))]
+        results.columns = temp_cols
+        results = results.rename(index=time_map).reset_index()
+        results = pd.melt(results, id_vars='index')
+        results['fmri_subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
+        results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
+        results = results.rename(columns={'index': 'time'}).drop(columns='variable')
+
+        score_null_df = pd.DataFrame(score_null.numpy().reshape(self.n_perm, -1).transpose(),
+                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+        score_var_df = pd.DataFrame(score_var.numpy().reshape(self.n_perm, -1).transpose(),
+                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+        score_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        score_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        score_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        score_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+
+        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(score_null_df).join(score_var_df).reset_index()
+        return results
+    
+    def b2b_regression(self, train, test):
+        #Define y
+        y_train, y_test = train['fmri'], test['fmri']
+
+        #Define x2
+        train['alexnet'], test['alexnet'], _ = regression.pca_rotation(train['alexnet'], test['alexnet'])
+        train['moten'], test['moten'], _ = regression.pca_rotation(train['moten'], test['moten'])
+        print(f'AlexNet PCs: {train["alexnet"].size()[1]}')
+        print(f'Motion energy PCs: {train["moten"].size()[1]}')
+        X2_train, X2_test, group2 = dict_to_tensor(train, test, self.x2)
+
+        score = {}
+        yhat_test = []
+        outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
+                              desc='Back to back regression', leave=True)
+        for time_ind in outer_iterator:
+            # First predict the variance in the fMRI by the EEG and predict the result
+            X1_train = train['eeg'][time_ind]
+            yhat_train = []
+            for train_index, test_index in LeaveOneOut().split(X1_train):
+                result1 = ridge(X1_train[train_index],
+                                y_train[train_index],
+                                X1_train[test_index],
+                                alpha_start=self.alpha_start,
+                                alpha_stop=self.alpha_stop,
+                                device=self.device,
+                                rotate_x=True)
+                yhat_train.append(result1['yhat'])
+            yhat_train = torch.cat(yhat_train, dim=0)
+
+            # Next predict yhat by the features
+            result2 = ridge(X2_train, yhat_train, X2_test,  
+                            alpha_start=self.alpha_start,
+                            alpha_stop=self.alpha_stop,
+                            device=self.device,
+                            rotate_x=False)
+
+            # Evaluate against y
+            score[time_ind] = corr2d_gpu(result2['yhat'], y_test)
+            yhat_test.append(result2['yhat'])
+        yhat_test = torch.stack(yhat_test, dim=2)
+        return score, y_test, yhat_test
+
     def save_results(self, results):
         results.to_csv(self.out_name, index=False)
 
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
-    def get_kwargs(self, groups):
-        out = vars(self).copy()
-        out['groups'] = groups
-        return out
-
     def run(self):
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split_and_norm(behavior, other_data)
-
-        #Define y
-        y_train, y_test = train['fmri'], test['fmri']
-
-        #Define x2
-        X2_train, X2_test, group2 = dict_to_tensor(train, test, self.x2)
-
-        results = {}
-        outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
-                              desc='Back to back regression', leave=True)
-        for time_ind in outer_iterator:
-            # First predict the variance in the fMRI by the EEG and predict the result
-            X1_train = train['eeg'][time_ind]
-            group1 = torch.zeros(X1_train.size()[1])
-            yhat = []
-            for train_index, test_index in KFold(n_splits=4).split(X1_train):
-                result1 = regression.ridge(X1_train[train_index],
-                                           y_train[train_index],
-                                           X1_train[test_index], group1, 
-                                           alpha_start=self.alpha_start,
-                                           alpha_stop=self.alpha_stop,
-                                           device=self.device,
-                                           rotate_x=self.rotate_x)
-                yhat.append(result1['yhat'])
-            yhat = torch.cat(yhat, dim=0)
-
-            # Next predict yhat by the features
-            result2 = regression.ridge(X2_train, yhat,
-                                       X2_test, group2, 
-                                       alpha_start=self.alpha_start,
-                                       alpha_stop=self.alpha_stop,
-                                       device=self.device,
-                                       rotate_x=self.rotate_x)
-            results[time_ind] = corr2d_gpu(result2['yhat'], y_test)
-
-        results = pd.DataFrame(results).transpose()
-        temp_cols = [f'col{i}' for i in range(len(results.columns))]
-        results.columns = temp_cols
-        results = results.rename(index=time_map).reset_index()
-        results = pd.melt(results, id_vars='index')
-        results['subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
-        results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
-        results = results.rename(columns={'index': 'time'}).drop(columns='variable')
+        score, y_test, yhat_test = self.b2b_regression(train, test)
+        score_null, score_var = self.compute_stats(yhat_test, y_test)
+        results = self.reorganize_results(score, score_null, score_var, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
         self.save_results(results)
@@ -177,18 +203,16 @@ def main():
                         help='a list of data names for fitting the first regression')
     parser.add_argument('--x2', '-x2', type=str, default='["alexnet", "moten", "scene", "primitive", "social", "affective"]',
                         help='a list of data names for fitting the second regression')
-    parser.add_argument('--rotate_x', action=argparse.BooleanOptionalAction, default=True,
-                        help='rotate the values of X by performing PCA before regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
-    parser.add_argument('--regression_method', '-r', type=str, default='ridge',
-                        help='whether to perform ridge or ols regression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
+    parser.add_argument('--n_perm', type=int, default=5000,
+                        help='the number of permutations for stats')
     args = parser.parse_args()
     Back2Back(args).run()
 

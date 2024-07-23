@@ -194,10 +194,10 @@ def sign_square(a):
         raise ValueError("Input must be a NumPy array or a PyTorch tensor.")
 
 
-def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
+def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
     import torch
     g = torch.Generator()
-    dim = y_hat.shape
+    dim = y_hat.size()
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
@@ -212,14 +212,43 @@ def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
+        if square:
+            r_null[i, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
+        else:
+            r_null[i, :] = corr2d_gpu(y_hat, y_true[inds])
     return r_null
 
 
-def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
+def perm3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
     import torch
     g = torch.Generator()
-    dim = y_hat.shape
+    dim = y_hat.size()
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
+    else:
+        iterator = range(n_perm)
+
+    r_null = torch.zeros((n_perm, dim[-2], dim[-1]))
+    for i in iterator:
+        g.manual_seed(i) # Set the random seed
+
+        # Permute the indices
+        inds = torch.randperm(dim[0], generator=g)
+        
+        # Compute the correlation
+        if square:
+            r_null[i, :, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
+        else:
+            r_null[i, :, :] = corr2d_gpu(y_hat, y_true[inds])
+    return r_null
+
+
+
+def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
+    import torch
+    g = torch.Generator()
+    dim = y_hat.size()
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
@@ -234,7 +263,35 @@ def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False):
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
+        if square:
+            r_var[i, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
+        else:
+            r_var[i, :] = corr2d_gpu(y_hat[inds], y_true[inds])
+    return r_var
+
+
+def bootstrap3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
+    import torch
+    g = torch.Generator()
+    dim = y_hat.size()
+
+    if verbose:
+        iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
+    else:
+        iterator = range(n_perm)
+
+    r_var = torch.zeros((n_perm, dim[-2], dim[-1]))
+    for i in iterator:
+        g.manual_seed(i) # Set the random seed
+
+        # Generate a random sample of indices
+        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
+
+        # Compute the correlation
+        if square:
+            r_var[i, :, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
+        else:
+            r_var[i, :, :] = corr2d_gpu(y_hat[inds], y_true[inds])
     return r_var
 
 

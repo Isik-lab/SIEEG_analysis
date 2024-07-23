@@ -150,13 +150,14 @@ $(back_to_back)/.done:
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=back_to_back\n\
-#SBATCH --time=2:00:00\n\
+#SBATCH --time=4:00:00\n\
 #SBATCH --cpus-per-task=12\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz -x2 '[\"scene\"]'\n\
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz -x2 '[\"social\"]'\n\" | sbatch; \
 	done
 	touch $(back_to_back)/.done
 

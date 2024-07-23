@@ -171,8 +171,20 @@ def pca_rotation(X_train, X_test, groups=None):
             groups_.append(torch.ones(n_components)*group)
         return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1), torch.cat(groups_)
     else:
-        pca = PCA(n_components=X_train.size()[1])
-        return pca.fit_transform(X_train), pca.transform(X_test)
+
+        if X_train.size()[0] < X_train.size()[1]: 
+            pca = PCA()
+            pca.fit(X_train)
+            ev_ratio = pca.explained_variance_ratio_
+            kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
+                                    curve="convex", direction="decreasing",
+                                    interp_method="polynomial")
+            n_components = kneedle.knee
+        else:
+            n_components = X_train.size()[1]
+
+        pca = PCA(n_components=n_components)
+        return pca.fit_transform(X_train), pca.transform(X_test), groups
 
 
 def regression_model(method_name, X_train, y_train, X_test, **kwargs):
@@ -238,7 +250,7 @@ def banded_ridge(X_train, y_train, X_test, groups,
     return out
 
 
-def ridge(X_train, y_train, X_test, groups, 
+def ridge(X_train, y_train, X_test, groups=None, 
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
           rotate_x=True,
@@ -250,6 +262,7 @@ def ridge(X_train, y_train, X_test, groups,
         X_train (torch.Tensor): training X data
         y_train (torch.Tensor): training y data
         X_test (torch.Tensor): testing X data
+        groups (torch.Tensor): defines groups for performing PCA rotation
         alpha_start (int, optional): smallest power for alpha. Defaults to -2.
         alpha_stop (int, optional): largest power for alpha. Defaults to 5.
         scoring (str, optional): type of scoring function. Defaults to 'pearsonr'.
