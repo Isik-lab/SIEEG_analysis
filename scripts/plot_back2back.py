@@ -6,8 +6,10 @@ from glob import glob
 from tqdm import tqdm 
 from src.stats import calculate_p, cluster_correction
 
+feature = 'alexnet'
+
 df = []
-files = glob('data/interim/Back2Back/*.csv.gz')
+files = glob(f'data/interim/Back2Back/*{feature}*.csv.gz')
 for i_file, file in tqdm(enumerate(files), total=len(files), desc='loading files'):
     subj_df = pd.read_csv(file)
     subj_df['eeg_subj_id'] = i_file

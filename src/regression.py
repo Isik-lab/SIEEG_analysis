@@ -112,6 +112,7 @@ def feature_scaler(train, test, dim=0, device='cpu'):
         train_mean = torch.mean(train_, dim=dim, keepdim=True)
         train_std = torch.std(train_, dim=dim, keepdim=True)
     else:
+        train_, test_ = torch.clone(train), torch.clone(test)
         train_mean = torch.mean(train)
         train_std = torch.std(train)
 
