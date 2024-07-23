@@ -86,16 +86,16 @@ def feature_scaler(train, test, dim=0, device='cpu'):
     If the input is a numpy array, it is converted to a torch tensor to perform normalization. 
 
     Args:
-        train (torch.Tensor or np.ndarray): 2D tensor of samples x features (or reversed).
+        train (torch.Tensor or np.ndarray): 1 or 2D tensor of samples x features (or reversed).
                                             If np.ndarray, output will be a torch tensor. 
-        test (torch.Tensor or np.ndarray): 2D tensor of samples x features (or reversed).
+        test (torch.Tensor or np.ndarray): 1 or 2D tensor of samples x features (or reversed).
                                             If np.ndarray, output will be a torch tensor. 
         dim (int, optional): The dimension over which to calculate the mean and std. Defaults to 0.
         device (str, optional): whether on cpu or cuda. Default is cpu.
 
     Returns:
-        train_scored (torch.Tensor): 2D tensor of samples x features normalized by train mean and std
-        test_scored (torch.Tensor): 2D tensor of samples x features normalized by train mean and std
+        train_scored (torch.Tensor): 1 or 2D tensor of samples x features normalized by train mean and std
+        test_scored (torch.Tensor): 1 or 2D tensor of samples x features normalized by train mean and std
     """
     if type(train) == np.ndarray:
         # If the input is a numpy array, first convert to torch tensor
@@ -103,13 +103,17 @@ def feature_scaler(train, test, dim=0, device='cpu'):
 
     # First make sure that there are no features that are the same for all videos.
     # If there are, remove those features from the train and test data. 
-    idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
-    train_ = train[:, idx]
-    test_ = test[:, idx]
+    if train.ndim > 1: 
+        idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
+        train_ = train[:, idx]
+        test_ = test[:, idx]
 
-    # Calculate the mean and std of the modified train data
-    train_mean = torch.mean(train_, dim=dim, keepdim=True)
-    train_std = torch.std(train_, dim=dim, keepdim=True)
+        # Calculate the mean and std of the modified train data
+        train_mean = torch.mean(train_, dim=dim, keepdim=True)
+        train_std = torch.std(train_, dim=dim, keepdim=True)
+    else:
+        train_mean = torch.mean(train)
+        train_std = torch.std(train)
 
     train_normed = (train_-train_mean)/train_std
     test_normed = (test_-train_mean)/train_std

@@ -2,6 +2,7 @@ user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
 neptune_api_token=eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLmVwdHVuZS5haSIsImFwaV9rZXkiOiI1YTQxNWI5MS0wZjk4LTQ2Y2YtYWVmMC1kNzM1ZWVmZGFhOWUifQ==
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
+features := alexnet moten expanse agent_distance facingness joint_action communication valence arousal
 
 # Dependencies
 videos=$(project_folder)/data/raw/videos_3000ms
@@ -145,19 +146,20 @@ python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 back_to_back: $(back_to_back)/.done $(eeg_preprocess)
 $(back_to_back)/.done: 
 	mkdir -p $(back_to_back)
+	for x in $(features); do \
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=back_to_back\n\
-#SBATCH --time=4:00:00\n\
+#SBATCH --time=2:00:00\n\
 #SBATCH --cpus-per-task=12\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz -x2 '[\"scene\"]'\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz -x2 '[\"social\"]'" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).csv.gz -x2 '[\"$${x}\"]'" | sbatch; \
+	done; \
 	done
 	touch $(back_to_back)/.done
 
