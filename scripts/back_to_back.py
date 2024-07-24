@@ -124,7 +124,7 @@ class Back2Back:
         results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(score_null_df).join(score_var_df).reset_index()
         return results
     
-    def b2b_regression(self, train, test, fmri_meta):
+    def b2b_regression(self, train, test):
         #Define y
         y_train, y_test = train['fmri'], test['fmri']
 
