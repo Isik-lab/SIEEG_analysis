@@ -5,7 +5,7 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import corr2d_gpu, perm3d_gpu, bootstrap3d_gpu
+from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
@@ -102,15 +102,8 @@ class Back2Back:
         apply_feature_scaler(train, test, device=self.device)
         return train, test
 
-    def compute_stats(self, yhat_test, y_test):
-        y_test_repeated = y_test.unsqueeze(2).repeat(1, 1, yhat_test.size()[-1])
-        score_null = perm3d_gpu(yhat_test, y_test_repeated, n_perm=self.n_perm)
-        score_var = bootstrap3d_gpu(yhat_test, y_test_repeated, n_perm=self.n_perm)
-        print(f'{score_null.size()=}')
-        return score_null, score_var
-
-    def reorganize_results(self, score, score_null, score_var, fmri_meta, time_map):
-        results = pd.DataFrame(score).transpose()
+    def reorganize_results(self, scores, scores_null, scores_var, fmri_meta, time_map):
+        results = pd.DataFrame(scores).transpose()
         temp_cols = [f'col{i}' for i in range(len(results.columns))]
         results.columns = temp_cols
         results = results.rename(index=time_map).reset_index()
@@ -119,9 +112,9 @@ class Back2Back:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        score_null_df = pd.DataFrame(score_null.numpy().reshape(self.n_perm, -1).transpose(),
+        score_null_df = pd.DataFrame(score_null.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        score_var_df = pd.DataFrame(score_var.numpy().reshape(self.n_perm, -1).transpose(),
+        score_var_df = pd.DataFrame(score_var.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'var_perm_{i}' for i in range(self.n_perm)])
         score_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
         score_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
@@ -131,7 +124,7 @@ class Back2Back:
         results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(score_null_df).join(score_var_df).reset_index()
         return results
     
-    def b2b_regression(self, train, test):
+    def b2b_regression(self, train, test, fmri_meta):
         #Define y
         y_train, y_test = train['fmri'], test['fmri']
 
@@ -142,8 +135,7 @@ class Back2Back:
         print(f'Motion energy PCs: {train["moten"].size()[1]}')
         X2_train, X2_test, group2 = dict_to_tensor(train, test, self.x2)
 
-        score = {}
-        yhat_test = []
+        scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc='Back to back regression', leave=True)
         for time_ind in outer_iterator:
@@ -151,32 +143,39 @@ class Back2Back:
             X1_train = train['eeg'][time_ind]
             yhat_train = []
             for train_index, test_index in LeaveOneOut().split(X1_train):
-                result1 = ridge(X1_train[train_index],
-                                y_train[train_index],
-                                X1_train[test_index],
-                                alpha_start=self.alpha_start,
-                                alpha_stop=self.alpha_stop,
-                                device=self.device,
-                                rotate_x=True)
-                yhat_train.append(result1['yhat'])
-            yhat_train = torch.cat(yhat_train, dim=0)
-            
-            if X2_train.size()[-1] > 1: 
-            # Next predict yhat by the features
-                result2 = ridge(X2_train, yhat_train, X2_test,  
-                                alpha_start=self.alpha_start,
-                                alpha_stop=self.alpha_stop,
-                                device=self.device,
-                                rotate_x=False)
-            else:
-                result2 = ols(X2_train, yhat_train, X2_test,  
-                              rotate_x=False)
+                result1 = ols(X1_train[train_index],
+                              y_train[train_index],
+                              X1_train[test_index],  
+                              rotate_x=True)
+                # result1 = ridge(X1_train[train_index],
+                #                 y_train[train_index],
+                #                 X1_train[test_index],
+                #                 alpha_start=self.alpha_start,
+                #                 alpha_stop=self.alpha_stop,
+                #                 device=self.device,
+                #                 rotate_x=True)
+                yhat_train.append(torch.unsqueeze(result1['yhat'], 1))
+            yhat_train = torch.cat(yhat_train, 1).T
 
-            # Evaluate against y
-            score[time_ind] = corr2d_gpu(result2['yhat'], y_test)
-            yhat_test.append(result2['yhat'])
-        yhat_test = torch.stack(yhat_test, dim=2)
-        return score, y_test, yhat_test
+            # Next predict yhat by the features
+            # if X2 is more than 1 dimension perform Ridge regression, else OLS
+            # 
+            # if X2_train.size()[-1] > 1: 
+            #     result2 = ridge(X2_train, yhat_train, X2_test,  
+            #                     alpha_start=self.alpha_start,
+            #                     alpha_stop=self.alpha_stop,
+            #                     device=self.device,
+            #                     rotate_x=False)
+            # else:
+            result2 = ols(X2_train, yhat_train, X2_test,  
+                            rotate_x=False)
+            yhat = result2['yhat']
+
+            # Evaluate against y and compute stats
+            scores[time_ind] = corr2d_gpu(yhat, y_test)
+            scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+            scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+        return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -187,9 +186,8 @@ class Back2Back:
     def run(self):
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split_and_norm(behavior, other_data)
-        score, y_test, yhat_test = self.b2b_regression(train, test)
-        score_null, score_var = self.compute_stats(yhat_test, y_test)
-        results = self.reorganize_results(score, score_null, score_var, fmri_meta, time_map)
+        scores, scores_null, scores_var = self.b2b_regression(train, test)
+        results = self.reorganize_results(scores, scores_null, scores_var, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
         self.save_results(results)
@@ -212,7 +210,7 @@ def main():
                         help='a list of data names to be used as regression target')
     parser.add_argument('--x1', '-x1', type=str, default='["eeg"]',
                         help='a list of data names for fitting the first regression')
-    parser.add_argument('--x2', '-x2', type=str, default='["alexnet", "moten", "scene", "primitive", "social", "affective"]',
+    parser.add_argument('--x2', '-x2', type=str, default='["alexnet"]',
                         help='a list of data names for fitting the second regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')

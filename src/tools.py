@@ -6,7 +6,7 @@ def to_torch(arrays, device):
     if isinstance(arrays, list):
         return [to_torch(array, device) for array in arrays]
     else:
-        return torch.from_numpy(arrays).to(device)
+        return torch.from_numpy(arrays).type(torch.DoubleTensor).to(device)
 
 
 def to_numpy(tensors):

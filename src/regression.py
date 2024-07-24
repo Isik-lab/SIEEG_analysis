@@ -320,7 +320,7 @@ def ols(X_train, y_train, X_test, rotate_x=True):
         X_test = torch.cat(X_test, dim=0)
 
     if rotate_x:
-        X_train, X_test = pca_rotation(X_train, X_test)
+        X_train, X_test, _ = pca_rotation(X_train, X_test)
     
     coeffs = torch.linalg.lstsq(X_train, y_train).solution
     y_pred = X_test @ coeffs

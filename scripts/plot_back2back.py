@@ -8,7 +8,7 @@ from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
 
 
-for feature in ['moten', 'alexnet']:
+for feature in ['expanse']:#['moten', 'alexnet']:
     #Load data
     df = []
     files = glob(f'data/interim/Back2Back/*{feature}*.parquet')
