@@ -147,26 +147,10 @@ class Back2Back:
                               y_train[train_index],
                               X1_train[test_index],  
                               rotate_x=True)
-                # result1 = ridge(X1_train[train_index],
-                #                 y_train[train_index],
-                #                 X1_train[test_index],
-                #                 alpha_start=self.alpha_start,
-                #                 alpha_stop=self.alpha_stop,
-                #                 device=self.device,
-                #                 rotate_x=True)
                 yhat_train.append(torch.unsqueeze(result1['yhat'], 1))
             yhat_train = torch.cat(yhat_train, 1).T
 
             # Next predict yhat by the features
-            # if X2 is more than 1 dimension perform Ridge regression, else OLS
-            # 
-            # if X2_train.size()[-1] > 1: 
-            #     result2 = ridge(X2_train, yhat_train, X2_test,  
-            #                     alpha_start=self.alpha_start,
-            #                     alpha_stop=self.alpha_stop,
-            #                     device=self.device,
-            #                     rotate_x=False)
-            # else:
             result2 = ols(X2_train, yhat_train, X2_test,  
                             rotate_x=False)
             yhat = result2['yhat']
