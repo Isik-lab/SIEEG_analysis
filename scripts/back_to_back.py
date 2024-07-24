@@ -6,7 +6,7 @@ import torch
 from pathlib import Path
 import numpy as np
 from src.stats import corr2d_gpu, perm3d_gpu, bootstrap3d_gpu
-from src.regression import ridge, feature_scaler
+from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import LeaveOneOut
@@ -16,14 +16,17 @@ def dict_to_tensor(train_dict, test_dict, keys):
     def list_to_tensor(l):
         return torch.hstack(tuple(l))
 
-    def group_vec(array, i):
-        return torch.ones(array.size()[1])*i_group
-
     train_out, test_out, groups = [], [], []
     for i_group, key in enumerate(keys):
-        train_out.append(train_dict[key])
-        test_out.append(test_dict[key])
-        groups.append(group_vec(train_dict[key], i_group))
+        if train_dict[key].ndim > 1: 
+            train_out.append(train_dict[key])
+            test_out.append(test_dict[key])
+            group_vec = torch.ones(test_dict[key].size()[1])*i_group
+        else: 
+            train_out.append(torch.unsqueeze(train_dict[key], 1))
+            test_out.append(torch.unsqueeze(test_dict[key], 1))
+            group_vec = torch.tensor([i_group])
+        groups.append(group_vec)
     return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
 
 
@@ -157,13 +160,17 @@ class Back2Back:
                                 rotate_x=True)
                 yhat_train.append(result1['yhat'])
             yhat_train = torch.cat(yhat_train, dim=0)
-
+            
+            if X2_train.size()[-1] > 1: 
             # Next predict yhat by the features
-            result2 = ridge(X2_train, yhat_train, X2_test,  
-                            alpha_start=self.alpha_start,
-                            alpha_stop=self.alpha_stop,
-                            device=self.device,
-                            rotate_x=False)
+                result2 = ridge(X2_train, yhat_train, X2_test,  
+                                alpha_start=self.alpha_start,
+                                alpha_stop=self.alpha_stop,
+                                device=self.device,
+                                rotate_x=False)
+            else:
+                result2 = ols(X2_train, yhat_train, X2_test,  
+                              rotate_x=False)
 
             # Evaluate against y
             score[time_ind] = corr2d_gpu(result2['yhat'], y_test)
