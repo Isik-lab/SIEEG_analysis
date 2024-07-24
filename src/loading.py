@@ -79,7 +79,10 @@ def load_eeg(file_path):
     Returns:
         eeg_data (pandas.core.frame.DataFrame): preproceesed EEG data
     """
-    return pd.read_csv(file_path)
+    if 'csv' in file_path:
+        return pd.read_csv(file_path)
+    elif 'parquet' in file_path:
+        return pd.read_parquet(file_path)
 
 
 def load_model_activations(file_path):

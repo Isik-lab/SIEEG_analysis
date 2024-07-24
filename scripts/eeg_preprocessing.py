@@ -123,19 +123,19 @@ class eegPreprocessing:
 
     def save(self, df, name):
         print('saving...')
-        df.to_csv(f'{self.out_dir}/{name}', compression='gzip', index=False)
+        df.to_parquet(f'{self.out_dir}/{name}', index=False)
         print('Finished!')
 
     def save_time_df(self, df):
         for time_ind, time_df in df.groupby('time_ind'):
-            time_df.to_csv(f'{self.out_dir}/{self.sid}_time-{str(int(time_ind)).zfill(3)}.csv')
+            time_df.to_parquet(f'{self.out_dir}/{self.sid}_time-{str(int(time_ind)).zfill(3)}.parquet')
 
     def run(self):
         trials = self.load_trials()
         eeg_dict = self.load_eeg(trials)
         eeg_df = self.reorganize_and_resample(eeg_dict, trials)
         print(eeg_df.head())
-        self.save(eeg_df, f'all_trials/{self.sid}.csv.gz')
+        self.save(eeg_df, f'all_trials/{self.sid}.parquet')
         eeg_averaged = self.average_repetitions(eeg_df)
         self.save_time_df(eeg_averaged)
 

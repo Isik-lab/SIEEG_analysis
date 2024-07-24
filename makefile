@@ -2,7 +2,7 @@ user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
 neptune_api_token=eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLmVwdHVuZS5haSIsImFwaV9rZXkiOiI1YTQxNWI5MS0wZjk4LTQ2Y2YtYWVmMC1kNzM1ZWVmZGFhOWUifQ==
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
-features := expanse agent_distance facingness joint_action communication valence arousal
+features := alexnet moten expanse agent_distance facingness joint_action communication valence arousal
 
 # Dependencies
 videos=$(project_folder)/data/raw/videos_3000ms

@@ -48,24 +48,15 @@ class Back2Back:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.csv')[0]}_x2-{'-'.join(self.x2)}.parquet'
+        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x2-{'-'.join(self.x2)}.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet
-        # valid_names = ['fmri', 'eeg', 'alexnet', 'moten', 'scene', 'primitive', 'social', 'affective']
-        # valid_err_msg = f"One or more x1 are not valid. Valid options are {valid_names}"
-        # assert all(name in valid_names for name in self.x1), valid_err_msg
-        # assert all(name in valid_names for name in self.x2), valid_err_msg.replace('x1', 'x2')
-        # assert all(name in valid_names for name in self.y_names), valid_err_msg
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
                                     'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
-        # self.behavior_categories = {'scene': ['rating-indoor', 'rating-expanse', 'rating-object'],
-        #                             'primitive': ['rating-agent_distance', 'rating-facingness'],
-        #                             'social': ['rating-joint_action', 'rating-communication'],
-        #                             'affective': ['rating-valence', 'rating-arousal']}
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
@@ -112,16 +103,16 @@ class Back2Back:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        score_null_df = pd.DataFrame(score_null.reshape(self.n_perm, -1).transpose(),
+        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        score_var_df = pd.DataFrame(score_var.reshape(self.n_perm, -1).transpose(),
+        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        score_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        score_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        score_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-        score_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
 
-        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(score_null_df).join(score_var_df).reset_index()
+        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def b2b_regression(self, train, test):
@@ -183,7 +174,7 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='data/interim/eegPreprocessing/all_trials/sub-01.csv.gz')
+                        default='data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
     parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
