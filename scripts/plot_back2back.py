@@ -8,10 +8,11 @@ from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
 
 
-for feature in ['alexnet']:#['moten', 'alexnet']:
+for feature in ['communication']:
+    print(feature)
     #Load data
     df = []
-    files = glob(f'data/interim/Back2Back/sub-06_x2-{feature}*.parquet')
+    files = glob(f'data/interim/Back2Back/*{feature}*.parquet')
     for i_file, file in tqdm(enumerate(files), total=len(files), desc='loading files'):
         subj_df = pd.read_parquet(file)
         subj_df['eeg_subj_id'] = i_file

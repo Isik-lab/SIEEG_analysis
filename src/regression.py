@@ -80,7 +80,7 @@ def train_test_split(behavior, neurals, behavior_categories=None):
     return train, test
 
 
-def feature_scaler(train, test, dim=0, device='cpu'):
+def feature_scaler(train, test=None, dim=0, device='cpu'):
     """Calculate the mean and std of the train set. 
     Normalize the train and test by this mean and std. 
     If the input is a numpy array, it is converted to a torch tensor to perform normalization. 
@@ -99,26 +99,35 @@ def feature_scaler(train, test, dim=0, device='cpu'):
     """
     if type(train) == np.ndarray:
         # If the input is a numpy array, first convert to torch tensor
-        [train, test] = to_torch([train, test], device=device)
+        [train] = to_torch([train], device=device)
+
+    if (test is not None) and (type(test) == np.ndarray):
+        [test] = to_torch([test], device=device)
 
     # First make sure that there are no features that are the same for all videos.
     # If there are, remove those features from the train and test data. 
     if train.ndim > 1: 
         idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
         train_ = train[:, idx]
-        test_ = test[:, idx]
+        if test is not None: 
+            test_ = test[:, idx]
 
         # Calculate the mean and std of the modified train data
         train_mean = torch.mean(train_, dim=dim, keepdim=True)
         train_std = torch.std(train_, dim=dim, keepdim=True)
     else:
-        train_, test_ = torch.clone(train), torch.clone(test)
+        train_ = torch.clone(train)
+        if test is not None:
+            test_ = torch.clone(test)
         train_mean = torch.mean(train)
         train_std = torch.std(train)
 
     train_normed = (train_-train_mean)/train_std
-    test_normed = (test_-train_mean)/train_std
-    return train_normed, test_normed
+    if test is not None: 
+        test_normed = (test_-train_mean)/train_std
+        return train_normed, test_normed
+    else:
+        return train_normed
 
 
 def preprocess(X_train, X_test, y_train, y_test):
