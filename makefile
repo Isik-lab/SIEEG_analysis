@@ -152,7 +152,7 @@ $(back_to_back)/.done:
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=back_to_back\n\
-#SBATCH --time=2:00:00\n\
+#SBATCH --time=2:45:00\n\
 #SBATCH --cpus-per-task=12\n\
 set -e\n\
 ml anaconda\n\
