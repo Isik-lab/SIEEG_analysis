@@ -7,12 +7,19 @@ from tqdm import tqdm
 from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
 
+if swapped: 
+    fpattern = f'data/interim/Back2Back_swapped/*{feature}*.parquet'
+    out_file_prefix = 'data/interim/PlotBack2Back/swapped_'
+else:
+    fpattern = f'data/interim/Back2Back/*{feature}*.parquet'
+    out_file_prefix = 'data/interim/PlotBack2Back/'
 
-for feature in ['alexnet', 'moten', 'expanse', 'object', 'agent_distance', 'facingness', 'communication', 'valence', 'arousal']:
+
+for feature in ['alexnet', 'moten', 'expanse', 'object', 'agent_distance', 'facingness', 'communication', 'joint_action', 'valence', 'arousal']:
     print(feature)
     #Load data
     df = []
-    files = glob(f'data/interim/Back2Back/*{feature}*.parquet')
+    files = glob(fpattern)
     for i_file, file in tqdm(enumerate(files), total=len(files), desc='loading files'):
         subj_df = pd.read_parquet(file)
         subj_df['eeg_subj_id'] = i_file
@@ -65,4 +72,4 @@ for feature in ['alexnet', 'moten', 'expanse', 'object', 'agent_distance', 'faci
             ax.set_title(f'{roi_name} ({onset_time:.0f} ms)')
         else:
             ax.set_title(roi_name)
-    plt.savefig(f'data/interim/PlotBack2Back/{feature}.pdf')
+    plt.savefig(f'{out_file_prefix}{feature}.pdf')

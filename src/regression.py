@@ -108,17 +108,17 @@ def feature_scaler(train, test=None, dim=0, device='cpu'):
     # If there are, remove those features from the train and test data. 
     if train.ndim > 1: 
         idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
-        train_ = train[:, idx]
+        train_ = train[:, idx].to(torch.float64)
         if test is not None: 
-            test_ = test[:, idx]
+            test_ = test[:, idx].to(torch.float64)
 
         # Calculate the mean and std of the modified train data
         train_mean = torch.mean(train_, dim=dim, keepdim=True)
         train_std = torch.std(train_, dim=dim, keepdim=True)
     else:
-        train_ = torch.clone(train)
+        train_ = torch.clone(train).to(torch.float64)
         if test is not None:
-            test_ = torch.clone(test)
+            test_ = torch.clone(test).to(torch.float64)
         train_mean = torch.mean(train)
         train_std = torch.std(train)
 
