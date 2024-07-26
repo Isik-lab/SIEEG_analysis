@@ -177,11 +177,10 @@ $(back_to_back_swapped)/.done:
 #SBATCH --job-name=back_to_back_swapped\n\
 #SBATCH --time=2:45:00\n\
 #SBATCH --cpus-per-task=12\n\
-set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 '[\"$${x}\"]'" | sbatch; \
+python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x1 '[\"$${x}\"]'" | sbatch; \
 	done; \
 	done
 	touch $(back_to_back_swapped)/.done
