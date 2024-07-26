@@ -8,7 +8,7 @@ from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
 
 
-for feature in ['communication']:
+for feature in ['alexnet', 'moten', 'expanse', 'object', 'agent_distance', 'facingness', 'communication', 'valence', 'arousal']:
     print(feature)
     #Load data
     df = []
