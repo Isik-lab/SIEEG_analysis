@@ -14,16 +14,14 @@ from sklearn.model_selection import LeaveOneOut
 
 def dict_to_tensor(train_dict, test_dict, keys):
     def list_to_tensor(l):
-        if type(l[0]) == torch.Tensor: 
-            return torch.hstack(tuple(l)).to(torch.float64)
-        else:
-            return torch.from_numpy(np.hstack(l)).to(torch.float64)
+        return torch.hstack(tuple(l)).to(torch.float64)
 
     train_out, test_out, groups = [], [], []
     for i_group, key in enumerate(keys):
-        print(f'{key=}')
-        print(f'{train_dict[key].shape=}')
-        print(f'{test_dict[key].shape=}')
+        if type(train_dict[key]) != torch.Tensor:
+            train_dict[key] = torch.from_numpy(train_dict[key]).to(torch.float64)
+            test_dict[key] = torch.from_numpy(test_dict[key]).to(torch.float64)
+
         if train_dict[key].ndim > 1: 
             train_out.append(train_dict[key])
             test_out.append(test_dict[key])
@@ -68,7 +66,6 @@ class Back2Back_swapped:
         fmri, fmri_meta = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
         moten = loading.load_model_activations(self.motion_energy)
         alexnet = loading.load_model_activations(self.alexnet)
-        print(f'{alexnet.shape=}')
         
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
@@ -121,25 +118,33 @@ class Back2Back_swapped:
         for train_index, test_index in iterator:
             # Scale X and reduce dimensionality if necessary
             X1_train, X1_test = feature_scaler(X1[train_index], X1[test_index])
-            if self.x1 == 'alexnet' or self.x1 == 'moten':
+            if ('alexnet' in self.x1) or ('moten' in self.x1):
                 X1_train, X1_test, _ = regression.pca_rotation(X1_train, X1_test)
 
             # Scale y 
             y_train = feature_scaler(train['fmri'][train_index])
-
             #Fit regression and generate prediction
-            if X1_train.size()[-1] > 1:
-                yhat_loo = ridge(X1_train, y_train, X1_test,
-                                 alpha_start=self.alpha_start,
-                                 alpha_stop=self.alpha_stop,
-                                 device=self.device,
-                                 rotate_x=False)['yhat']
+            if (X1_train.ndim > 1):
+                if (X1_train.size()[1] > 1): 
+                    yhat_loo = ridge(X1_train, y_train, X1_test,
+                                    alpha_start=self.alpha_start,
+                                    alpha_stop=self.alpha_stop,
+                                    device=self.device,
+                                    rotate_x=False)['yhat']
+                else:
+                    yhat_loo = ols(X1_train, y_train, X1_test,
+                                   rotate_x=False)['yhat']
+                    yhat_loo = torch.unsqueeze(yhat_loo, 0)
             else:
+                X1_train = torch.unsqueeze(X1_train, 1)
+                X1_test = torch.unsqueeze(X1_test, 1)
                 yhat_loo = ols(X1_train, y_train, X1_test,
-                           rotate_x=False)['yhat']
+                               rotate_x=False)['yhat']
+                yhat_loo = torch.unsqueeze(yhat_loo, 0)
+
             #Append prediction
             yhat_train.append(yhat_loo)
-        yhat_train = torch.cat(yhat_train)
+        yhat_train = torch.vstack(yhat_train)
 
         # Regression 2 
         scores, scores_null, scores_var = {}, [], []
@@ -147,11 +152,11 @@ class Back2Back_swapped:
                         desc='Regression 2', leave=True)
         for time_ind in iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
-            X1_train, X1_test = feature_scaler(train['eeg'][time_ind],
+            X2_train, X2_test = feature_scaler(train['eeg'][time_ind],
                                                test['eeg'][time_ind],
                                                device=self.device)
 
-            yhat = ridge(X1_train, yhat_train, X1_test,  
+            yhat = ridge(X2_train, yhat_train, X2_test,  
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,

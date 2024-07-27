@@ -16,8 +16,11 @@ else:
     in_file_prefix = f'data/interim/Back2Back'
     out_file_prefix = 'data/interim/PlotBack2Back/'
 
-
-for feature in ['alexnet']:#, 'moten', 'expanse', 'object', 'agent_distance', 'facingness', 'communication', 'joint_action', 'valence', 'arousal']:
+features = ['moten', 'alexnet', 'expanse', 'object',
+            'agent_distance', 'facingness',
+            'communication', 'joint_action',
+            'valence', 'arousal']
+for feature in features:
     print(feature)
     #Load data
     df = []
