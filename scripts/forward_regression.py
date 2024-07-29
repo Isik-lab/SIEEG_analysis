@@ -121,7 +121,7 @@ class ForwardRegression:
 
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
-                              desc='Back to back regression', leave=True)
+                              desc=f'Regression {" ".join(self.y)} on {" ".join(self.x)}', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
