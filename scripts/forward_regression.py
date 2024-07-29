@@ -49,9 +49,9 @@ class ForwardRegression:
         self.eeg_file = args.eeg_file
         self.smoothing = args.smoothing
         if ('fmri' not in self.y) or self.roi_mean:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.x)}.parquet'
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.y)}.parquet'
         elif ('fmri' in self.y) and (not self.roi_mean):
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.x)}-smoothed.parquet'
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.y)}-smoothed.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -92,17 +92,20 @@ class ForwardRegression:
         apply_feature_scaler(train, test, device=self.device)
         return train, test
 
-    def reorganize_results(self, scores, scores_null, scores_var, fmri_meta, time_map):
+    def reorganize_results(self, scores, fmri_meta, time_map, scores_null=None, scores_var=None):
         results = pd.DataFrame(scores).transpose()
         temp_cols = [f'col{i}' for i in range(len(results.columns))]
         results.columns = temp_cols
         results = results.rename(index=time_map).reset_index()
         results = pd.melt(results, id_vars='index')
         results['fmri_subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
-        results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
+        if ('fmri' not in self.y) or self.roi_mean:
+            results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
+        else:
+            results['voxel_id'] = results.variable.replace({temp_col: voxel_id for voxel_id, temp_col in zip(fmri_meta.voxel_id, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        if self.roi_mean: 
+        if ('fmri' not in self.y) or self.roi_mean:
             scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
                                     columns=[f'null_perm_{i}' for i in range(self.n_perm)])
             scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
@@ -135,10 +138,12 @@ class ForwardRegression:
 
             # Evaluate against y and compute stats
             scores[time_ind] = corr2d_gpu(yhat, y_test)
-            if self.roi_mean: 
+            if ('fmri' not in self.y) or self.roi_mean:
                 scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
                 scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-        return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+                return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+            else:
+                return scores
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -149,8 +154,12 @@ class ForwardRegression:
     def run(self):
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split_and_norm(behavior, other_data)
-        scores, scores_null, scores_var = self.standard_regression(train, test)
-        results = self.reorganize_results(scores, scores_null, scores_var, fmri_meta, time_map)
+        if ('fmri' not in self.y) or self.roi_mean:
+            scores, scores_null, scores_var = self.standard_regression(train, test)
+            results = self.reorganize_results(scores, fmri_meta, time_map, scores_null, scores_var)
+        else:
+            scores = self.standard_regression(train, test)
+            results = self.reorganize_results(scores, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
         self.save_results(results)
@@ -175,7 +184,7 @@ def main():
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=10,
+    parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')      
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')         

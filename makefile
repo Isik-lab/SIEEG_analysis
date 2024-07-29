@@ -177,9 +177,9 @@ python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_
 
 
 #Compute the channel-wise EEG reliability
-full_brain: $(full_brain)/.done $(eeg_preprocess)
-$(full_brain)/.done: 
-	mkdir -p $(full_brain)
+full_brain: $(forward_regression)/.full_brain $(eeg_preprocess)
+$(forward_regression)/.full_brain: 
+	mkdir -p $(forward_regression)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=a100\n\
@@ -187,12 +187,12 @@ $(full_brain)/.done:
 #SBATCH --job-name=full_brain\n\
 #SBATCH --time=4:00:00\n\
 #SBATCH --cpus-per-task=12\n\
-#SBATCH #SBATCH --gres=gpu:1\n\
+#SBATCH --gres=gpu:1\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
+python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]' --no-roi_mean --smoothing" | sbatch; \
 	done
-	touch $(back_to_back_swapped)/.done
+	touch $(forward_regression)/.full_brain
 
 clean:
 	rm *.out
