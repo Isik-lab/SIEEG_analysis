@@ -1,6 +1,5 @@
 user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
-neptune_api_token=eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLmVwdHVuZS5haSIsImFwaV9rZXkiOiI1YTQxNWI5MS0wZjk4LTQ2Y2YtYWVmMC1kNzM1ZWVmZGFhOWUifQ==
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
 yfeatures := expanse object agent_distance facingness joint_action communication valence arousal
@@ -18,7 +17,7 @@ eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
-forward_regression=$(project_folder)/data/interim/ForwardRegression
+fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 
 
@@ -71,7 +70,6 @@ $(eeg_preprocess)/.preprocess_done:
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
 python $(project_folder)/scripts/eeg_preprocessing.py -s $$s" | sbatch; \
 	done
 	touch $(eeg_preprocess)/.preprocess_done
@@ -90,7 +88,6 @@ $(eeg_reliability)/.done:
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
 python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	done
 	touch $(eeg_reliability)/.done
@@ -111,7 +108,6 @@ $(back_to_back)/.done:
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
 python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 '[\"$${x}\"]'" | sbatch; \
 	done; \
 	done
@@ -142,29 +138,24 @@ python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/al
 feature_decoding: $(feature_regression)/.feature_decoding $(eeg_preprocess)
 $(feature_regression)/.feature_decoding: 
 	mkdir -p $(feature_regression)
-	for y in $(yfeatures); do \
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=feature_decoding\n\
 #SBATCH --time=2:45:00\n\
-#SBATCH --cpus-per-task=24\n\
-#SBATCH -–mem-per-cpu=4GB\n\
-set -e\n\
+#SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"$${y}\"]'" | sbatch; \
-	done; \
+python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
 	touch $(feature_regression)/.feature_decoding
 
 
 #Compute the channel-wise EEG reliability
-roi_decoding: $(forward_regression)/.done $(eeg_preprocess)
-$(forward_regression)/.done: 
-	mkdir -p $(forward_regression)
+roi_decoding: $(fmri_regression)/.done $(eeg_preprocess)
+$(fmri_regression)/.done: 
+	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
@@ -174,28 +165,27 @@ $(forward_regression)/.done:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]'" | sbatch; \
+python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]'" | sbatch; \
 	done
-	touch $(forward_regression)/.roi_decoding
-
+	touch $(fmri_regression)/.roi_decoding
 
 #Compute the channel-wise EEG reliability
-full_brain: $(forward_regression)/.full_brain $(eeg_preprocess)
-$(forward_regression)/.full_brain: 
-	mkdir -p $(forward_regression)
+full_brain: $(fmri_regression)/.full_brain $(eeg_preprocess)
+$(fmri_regression)/.full_brain: 
+	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=a100\n\
 #SBATCH --account=lisik3_gpu\n\
 #SBATCH --job-name=full_brain\n\
-#SBATCH --time=4:00:00\n\
+#SBATCH --time=45:00\n\
 #SBATCH --cpus-per-task=12\n\
 #SBATCH --gres=gpu:1\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]' --no-roi_mean --smoothing" | sbatch; \
+python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]' --no-roi_mean --smoothing" | sbatch; \
 	done
-	touch $(forward_regression)/.full_brain
+	touch $(fmri_regression)/.full_brain
 
 clean:
 	rm *.out

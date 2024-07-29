@@ -34,12 +34,9 @@ def are_all_elements_present(list1, list2):
     return all(elem in list2 for elem in list1)
 
 
-class ForwardRegression:
+class FeatureRegression:
     def __init__(self, args):
-        self.process = 'ForwardRegression'
-        self.y = json.loads(args.y)
-        self.x = json.loads(args.x)
-        self.roi_mean = args.roi_mean
+        self.process = 'FeatureRegression'
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
@@ -47,11 +44,7 @@ class ForwardRegression:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.smoothing = args.smoothing
-        if ('fmri' not in self.y) or self.roi_mean:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.y)}.parquet'
-        elif ('fmri' in self.y) and (not self.roi_mean):
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_full-brain.parquet'
+        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_features.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -61,12 +54,11 @@ class ForwardRegression:
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
-        fmri, fmri_meta = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean, smoothing=self.smoothing)
         
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
-        eeg_filtered, behavior, [fmri] = loading.check_videos(eeg_raw, behavior, [fmri])
+        eeg_filtered, behavior = loading.check_videos(eeg_raw, behavior)
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
@@ -74,7 +66,7 @@ class ForwardRegression:
         for time_ind, time_df in iterator:
             eeg[time_ind] = loading.strip_eeg(time_df)
             time_map[time_ind] = time_df.time.unique()[0]
-        return behavior, {'eeg': eeg, 'fmri': fmri}, fmri_meta, time_map
+        return behavior, {'eeg': eeg}, time_map
 
     def split_and_norm(self, behavior, data):
         def apply_feature_scaler(train_dict, test_dict, device):
@@ -92,36 +84,35 @@ class ForwardRegression:
         apply_feature_scaler(train, test, device=self.device)
         return train, test
 
-    def reorganize_results(self, scores, fmri_meta, time_map, scores_null=None, scores_var=None):
+    def reorganize_results(self, scores, time_map, scores_null, scores_var):
         results = pd.DataFrame(scores).transpose()
         temp_cols = [f'col{i}' for i in range(len(results.columns))]
         results.columns = temp_cols
         results = results.rename(index=time_map).reset_index()
         results = pd.melt(results, id_vars='index')
-        results['fmri_subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
-        if ('fmri' not in self.y) or self.roi_mean:
-            results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
+        cols = list(self.behavior_categories.keys())
+        results['feature'] = results.variable.replace({temp_col: feature for feature, temp_col in zip(cols, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
         scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'null_perm_{i}' for i in range(self.n_perm)])
         scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        scores_null_df[['feature', 'time']] = results[['feature', 'time']]
+        scores_var_df[['feature', 'time']] = results[['feature', 'time']]
+        scores_null_df.set_index(['feature', 'time'], inplace=True)
+        scores_var_df.set_index(['feature', 'time'], inplace=True)
 
-        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
+        results = results.set_index(['feature', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def standard_regression(self, train, test):
         #Define y
-        y_train, y_test, group2 = dict_to_tensor(train, test, self.y)
+        y_train, y_test, group2 = dict_to_tensor(train, test, list(self.behavior_categories.keys()))
 
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
-                              desc=f'Regression {" ".join(self.y)} on {" ".join(self.x)}', leave=True)
+                              desc=f'Predict features from EEG', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
@@ -135,14 +126,9 @@ class ForwardRegression:
 
             # Evaluate against y and compute stats
             scores[time_ind] = corr2d_gpu(yhat, y_test)
-            if ('fmri' not in self.y) or self.roi_mean:
-                scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-                scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-
-        if ('fmri' not in self.y) or self.roi_mean:
-            return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
-        else:
-            return scores
+            scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+            scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+        return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
 
     def save_df(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -151,17 +137,14 @@ class ForwardRegression:
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def run(self):
-        behavior, other_data, fmri_meta, time_map = self.load_and_validate()
+        behavior, other_data, time_map = self.load_and_validate()
+        print(behavior.head())
         train, test = self.split_and_norm(behavior, other_data)
-        if ('fmri' not in self.y) or self.roi_mean:
-            scores, scores_null, scores_var = self.standard_regression(train, test)
-            results = self.reorganize_results(scores, fmri_meta, time_map, scores_null, scores_var)
-            print(results.head())
-            self.mk_out_dir()
-            self.save_df(results)
-        else:
-            scores = self.standard_regression(train, test)
-            results = self.save_brain_plots(scores, fmri_meta, time_map)
+        scores, scores_null, scores_var = self.standard_regression(train, test)
+        results = self.reorganize_results(scores, time_map, scores_null, scores_var)
+        print(results.head())
+        self.mk_out_dir()
+        self.save_df(results)
         print('finished')
 
 
@@ -172,15 +155,7 @@ def main():
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
                         default='data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ForwardRegression')
-    parser.add_argument('--y', '-y', type=str, default='["fmri"]',
-                        help='a list of data names to be used as regression target')
-    parser.add_argument('--x', '-x', type=str, default='["eeg"]',
-                        help='a list of data names for fitting the first regression')
-    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
-                        help='predict the roi mean response instead of voxelwise responses')
-    parser.add_argument('--smoothing', action=argparse.BooleanOptionalAction, default=False,
-                        help='predict the roi mean response instead of voxelwise responses')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureRegression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
@@ -190,7 +165,7 @@ def main():
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     args = parser.parse_args()
-    ForwardRegression(args).run()
+    FeatureRegression(args).run()
 
 
 if __name__ == '__main__':

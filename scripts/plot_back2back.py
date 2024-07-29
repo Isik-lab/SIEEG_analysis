@@ -100,8 +100,8 @@ for feature, mean_df in back2back_df.groupby('feature'):
 
 rois = ['EVC', 'EBA', 'aSTS']
 title_names = ['EVC', 'EBA', 'aSTS-SI']
-features = ['alexnet', 'agent_distance', 'communication']
-legend_names = ['AlexNet conv2', 'agent distance', 'communication']
+features = ['alexnet', 'expanse', 'agent_distance', 'communication']
+legend_names = ['AlexNet conv2', 'spatial expanse', 'agent distance', 'communication']
 back2back_df = back2back_df.loc[back2back_df['roi_name'].isin(rois)].reset_index(drop=True)
 back2back_df = back2back_df.loc[back2back_df['feature'].isin(features)].reset_index(drop=True)
 
@@ -113,8 +113,8 @@ stats_pos_start = {'EVC': -.2, 'EBA':  -.12, 'aSTS': -.12}
 sns.set_context('poster')
 _, axes = plt.subplots(len(title_names), 1, figsize=(19, 13.25), sharex=True)
 axes = axes.flatten()
-smooth_kernel = np.ones(15)/15
-colors = ['#404040', '#8558F4', '#73D2DF']
+smooth_kernel = np.ones(30)/30
+colors = ['#404040', '#F5DD40', '#8558F4', '#73D2DF']
 for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.groupby('roi_name')):
     order_counter = 0
     stats_pos = stats_pos_start[roi_name]
@@ -166,4 +166,4 @@ for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.
         ax.legend(custom_lines, legend_names, loc='upper right')
 
 ax.set_xlabel('Time (ms)')
-plt.savefig(f'{out_file_prefix}roi_plot.pdf')
+plt.savefig(f'{out_file_prefix}feature-roi_plot.pdf')
