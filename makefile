@@ -3,6 +3,7 @@ project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
 neptune_api_token=eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLmVwdHVuZS5haSIsImFwaV9rZXkiOiI1YTQxNWI5MS0wZjk4LTQ2Y2YtYWVmMC1kNzM1ZWVmZGFhOWUifQ==
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
+yfeatures := expanse object agent_distance facingness joint_action communication valence arousal
 
 # Dependencies
 videos=$(project_folder)/data/raw/videos_3000ms
@@ -15,15 +16,12 @@ plot_encoding=$(project_folder)/data/interim/PlotROI
 matlab_eeg_path=$(project_folder)/data/interim/SIdyads_EEG
 eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_reliability=$(project_folder)/data/interim/eegReliability
-eeg_decoding=$(project_folder)/data/interim/encodeDecode/eeg
-eeg_stats=$(project_folder)/data/interim/eegStats
-plot_decoding=$(project_folder)/data/interim/PlotTimeCourse
-plot_shared_variance=$(project_folder)/data/interim/PlotSharedVariance
 back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
+forward_regression=$(project_folder)/data/interim/ForwardRegression
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability full_brain back_to_back back_to_back_swapped
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back back_to_back_swapped
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -96,7 +94,7 @@ python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	touch $(eeg_reliability)/.done
 
 
-#Compute the channel-wise EEG reliability
+#Compute b2b regression with EEG first then annotated features
 back_to_back: $(back_to_back)/.done $(eeg_preprocess)
 $(back_to_back)/.done: 
 	mkdir -p $(back_to_back)
@@ -118,7 +116,7 @@ python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials
 	touch $(back_to_back)/.done
 
 
-#Compute the channel-wise EEG reliability
+#Compute b2b regression with annotated features first then EEG 
 back_to_back_swapped: $(back_to_back_swapped)/.done $(eeg_preprocess)
 $(back_to_back_swapped)/.done: 
 	mkdir -p $(back_to_back_swapped)
@@ -138,6 +136,46 @@ python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/al
 	touch $(back_to_back_swapped)/.done
 
 
+#Compute b2b regression with EEG first then annotated features
+feature_decoding: $(forward_regression)/.feature_decoding $(eeg_preprocess)
+$(forward_regression)/.feature_decoding: 
+	mkdir -p $(forward_regression)
+	for y in $(yfeatures); do \
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=feature_decoding\n\
+#SBATCH --time=2:45:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
+python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"$${y}\"]'" | sbatch; \
+	done; \
+	done
+	touch $(forward_regression)/.feature_decoding
+
+
+#Compute the channel-wise EEG reliability
+roi_decoding: $(forward_regression)/.done $(eeg_preprocess)
+$(forward_regression)/.done: 
+	mkdir -p $(forward_regression)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=roi_decoding\n\
+#SBATCH --time=2:45:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]'" | sbatch; \
+	done
+	touch $(forward_regression)/.roi_decoding
+
+
 #Compute the channel-wise EEG reliability
 full_brain: $(full_brain)/.done $(eeg_preprocess)
 $(full_brain)/.done: 
@@ -151,7 +189,7 @@ $(full_brain)/.done:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/eeg_decode.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
+python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
 	done
 	touch $(back_to_back_swapped)/.done
 
