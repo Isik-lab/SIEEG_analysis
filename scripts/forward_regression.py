@@ -48,10 +48,10 @@ class ForwardRegression:
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
         self.smoothing = args.smoothing
-        if self.y != 'fmri' or self.roi_mean:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x-{'-'.join(self.x)}.parquet'
-        else:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x-{'-'.join(self.x)}-smoothed.parquet'
+        if ('fmri' not in self.y) or self.roi_mean:
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.x)}.parquet'
+        elif ('fmri' in self.y) and (not self.roi_mean):
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.x)}-smoothed.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',

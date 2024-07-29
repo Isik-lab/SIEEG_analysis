@@ -187,6 +187,7 @@ $(full_brain)/.done:
 #SBATCH --job-name=full_brain\n\
 #SBATCH --time=4:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH #SBATCH --gres=gpu:1\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
