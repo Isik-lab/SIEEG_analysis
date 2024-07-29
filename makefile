@@ -19,6 +19,8 @@ eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
 forward_regression=$(project_folder)/data/interim/ForwardRegression
+feature_regression=$(project_folder)/data/interim/FeatureRegression
+
 
 # Steps to run
 all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back back_to_back_swapped
@@ -137,9 +139,9 @@ python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/al
 
 
 #Compute b2b regression with EEG first then annotated features
-feature_decoding: $(forward_regression)/.feature_decoding $(eeg_preprocess)
-$(forward_regression)/.feature_decoding: 
-	mkdir -p $(forward_regression)
+feature_decoding: $(feature_regression)/.feature_decoding $(eeg_preprocess)
+$(feature_regression)/.feature_decoding: 
+	mkdir -p $(feature_regression)
 	for y in $(yfeatures); do \
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
@@ -147,15 +149,16 @@ $(forward_regression)/.feature_decoding:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=feature_decoding\n\
 #SBATCH --time=2:45:00\n\
-#SBATCH --cpus-per-task=12\n\
+#SBATCH --cpus-per-task=24\n\
+#SBATCH -–mem-per-cpu=4GB\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/forward_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"$${y}\"]'" | sbatch; \
+python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"$${y}\"]'" | sbatch; \
 	done; \
 	done
-	touch $(forward_regression)/.feature_decoding
+	touch $(feature_regression)/.feature_decoding
 
 
 #Compute the channel-wise EEG reliability

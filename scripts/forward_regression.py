@@ -51,7 +51,7 @@ class ForwardRegression:
         if ('fmri' not in self.y) or self.roi_mean:
             self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.y)}.parquet'
         elif ('fmri' in self.y) and (not self.roi_mean):
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_y-{'-'.join(self.y)}-smoothed.parquet'
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_full-brain.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -101,21 +101,18 @@ class ForwardRegression:
         results['fmri_subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
         if ('fmri' not in self.y) or self.roi_mean:
             results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
-        else:
-            results['voxel_id'] = results.variable.replace({temp_col: voxel_id for voxel_id, temp_col in zip(fmri_meta.voxel_id, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        if ('fmri' not in self.y) or self.roi_mean:
-            scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
-                                    columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-            scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
-                                    columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-            scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-            scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-            scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-            scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
 
-            results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
+        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def standard_regression(self, train, test):
@@ -141,11 +138,13 @@ class ForwardRegression:
             if ('fmri' not in self.y) or self.roi_mean:
                 scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
                 scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-                return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
-            else:
-                return scores
 
-    def save_results(self, results):
+        if ('fmri' not in self.y) or self.roi_mean:
+            return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+        else:
+            return scores
+
+    def save_df(self, results):
         results.to_parquet(self.out_name, index=False)
 
     def mk_out_dir(self):
@@ -157,12 +156,12 @@ class ForwardRegression:
         if ('fmri' not in self.y) or self.roi_mean:
             scores, scores_null, scores_var = self.standard_regression(train, test)
             results = self.reorganize_results(scores, fmri_meta, time_map, scores_null, scores_var)
+            print(results.head())
+            self.mk_out_dir()
+            self.save_df(results)
         else:
             scores = self.standard_regression(train, test)
-            results = self.reorganize_results(scores, fmri_meta, time_map)
-        print(results.head())
-        self.mk_out_dir()
-        self.save_results(results)
+            results = self.save_brain_plots(scores, fmri_meta, time_map)
         print('finished')
 
 
