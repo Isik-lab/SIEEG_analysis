@@ -62,8 +62,8 @@ else:
     stats_df = pd.read_csv(f'{out_path}/roi_plot.csv')
 
 # Make categorical for plotting
-rois = ['EVC', 'LOC', 'aSTS']
-title_names = ['EVC', 'LOC', 'aSTS-SI']
+rois = ['EVC', 'EBA', 'aSTS']
+title_names = ['EVC', 'EBA', 'aSTS-SI']
 stats_df = stats_df.loc[stats_df['roi_name'].isin(rois)].reset_index(drop=True)
 stats_df['roi_name'] = pd.Categorical(stats_df['roi_name'], categories=rois, ordered=True)
 
