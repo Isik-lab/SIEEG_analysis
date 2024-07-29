@@ -23,7 +23,7 @@ back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
 
 # Steps to run
-all: motion_energy alexnet fmri_encoding eeg_preprocess eeg_reliability eeg_decode eeg_stats plot_decoding plot_shared_variance back_to_back back_to_back_swapped
+all: motion_energy alexnet eeg_preprocess eeg_reliability full_brain back_to_back back_to_back_swapped
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -56,53 +56,6 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/alexnet_activations.py " | sbatch
 	touch $(alexnet)/.done
-
-# Perform fMRI encoding with features
-fmri_encoding: $(fmri_encoding)/.encoding_done $(fmri_data)
-$(fmri_encoding)/.encoding_done: 
-	mkdir -p $(fmri_encoding)
-	printf "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=fmri_encoding\n\
-#SBATCH --ntasks=1\n\
-#SBATCH --time=1:00:00\n\
-#SBATCH --cpus-per-task=6\n\
-ml anaconda\n\
-conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(token)\n\
-#Encode all the features\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/encode_decode.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
-#Plot the results\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_roi.py \
--x '[\"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_fmri_variance.py" | sbatch
-	touch $(fmri_encoding)/.encoding_done
 
 # Preprocess EEG data for regression
 eeg_preprocess: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
@@ -185,127 +138,22 @@ python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/al
 	touch $(back_to_back_swapped)/.done
 
 
-# Decode EEG data
-submit_file=submit_decoding_jobs.sh
-batch_file=batch_decoding.sh
-eeg_decode: $(eeg_decoding)/.decode_done $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
-$(eeg_decoding)/.decode_done: 
-	mkdir -p $(eeg_decoding)
-	@echo "#!/bin/bash" > $(submit_file)
-	@echo "eeg_preprocess=$(eeg_preprocess)" >> $(submit_file)
-	@echo "num_files=\$$(echo \$$eeg_preprocess/*.csv | wc -w)" >> $(submit_file)
-	@echo "echo \$$num_files" >> $(submit_file)
-	@echo "sbatch --array=0-\$$((num_files-1))%47 $(batch_file) \$$eeg_preprocess" >> $(submit_file)
-	@chmod +x $(submit_file)
-
-	@echo "#!/bin/bash" > $(batch_file)
-	@echo "#SBATCH --partition=shared" >> $(batch_file)
-	@echo "#SBATCH --account=lisik33" >> $(batch_file)
-	@echo "#SBATCH --job-name=eeg_decoding" >> $(batch_file)
-	@echo "#SBATCH --ntasks=1" >> $(batch_file)
-	@echo "#SBATCH --time=30:00" >> $(batch_file)
-	@echo "#SBATCH --cpus-per-task=6" >> $(batch_file)
-	@echo "set -e" >> $(batch_file)
-	@echo "ml anaconda" >> $(batch_file)
-	@echo "conda activate eeg" >> $(batch_file)
-	@echo "project_folder=$(project_folder)" >> $(batch_file)
-	@echo "eeg_preprocess=\$$1" >> $(batch_file)
-	@echo "eeg_files=(\$$eeg_preprocess/*.csv)" >> $(batch_file)
-	@echo "file=\$${eeg_files[\$${SLURM_ARRAY_TASK_ID}]}" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	# @echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\"]' -y '[\"fmri\"]'" >> $(batch_file)
-	@echo "python \$$project_folder/scripts/encode_decode.py -e \$$file -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'" >> $(batch_file)
-	@chmod +x $(batch_file)
-
-	@echo $(submit_file) 
-	./$(submit_file)
-	# touch $(eeg_decoding)/.decode_done
-
-
 #Compute the channel-wise EEG reliability
-eeg_stats: $(eeg_stats)/.done $(eeg_decoding)
-$(eeg_stats)/.done: 
-	mkdir -p $(eeg_stats)
-	echo -e "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=eeg_stats\n\
-#SBATCH --time=15:00\n\
-#SBATCH --cpus-per-task=6\n\
-set -e\n\
-ml anaconda\n\
-conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/eeg_stats.py -p '$(fmri_encoding)/*x-alexnet-moten-scene-primitive-social-affective_y-fmri_yhat.csv.gz" | sbatch
-
+full_brain: $(full_brain)/.done $(eeg_preprocess)
+$(full_brain)/.done: 
+	mkdir -p $(full_brain)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=eeg_stats\n\
-#SBATCH --time=2:00:00\n\
+#SBATCH --partition=a100\n\
+#SBATCH --account=lisik3_gpu\n\
+#SBATCH --job-name=full_brain\n\
+#SBATCH --time=4:00:00\n\
 #SBATCH --cpus-per-task=12\n\
-set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(neptune_api_token)\n\
-python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-fmri_yhat.csv.gz'\n\
-python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg-alexnet-moten-scene-primitive-social-affective_y-fmri_yhat.csv.gz'\n\
-python $(project_folder)/scripts/eeg_stats.py -p '$(eeg_decoding)/sub-$$(printf '%02d' $${s})*_x-eeg_y-scene-primitive-social-affective_yhat.csv.gz'" | sbatch; \
+python $(project_folder)/scripts/eeg_decode.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
 	done
-	touch $(eeg_stats)/.done
-
-
-#Plot the eeg decoding results
-plot_decoding: $(plot_decoding)/.done $(eeg_decoding)
-$(plot_decoding)/.done: 
-	mkdir -p $(plot_decoding)
-	printf "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=plot_decoding\n\
-#SBATCH --ntasks=1\n\
-#SBATCH --time=45:00\n\
-#SBATCH --cpus-per-task=6\n\
-ml anaconda\n\
-conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(token)\n\
-python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\"]' -y '[\"scene\", \"primitive\", \"social\", \"affective\"]'\n\
-python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"moten\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"scene\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"primitive\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"social\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"affective\"]' -y '[\"fmri\"]'\n\
-# python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\", \"alexnet\", \"moten\", \"scene\", \"primitive\", \"social\"]' -y '[\"fmri\"]'\n\
-python $(project_folder)/scripts/plot_timecourse.py -x '[\"eeg\"]' -y '[\"fmri\"]'"| sbatch
-
-#Plot the Unique Shared variance between features, EEG, and fMRI
-plot_shared_variance: $(plot_shared_variance)/.done $(eeg_decoding) $(plot_decoding)
-$(plot_shared_variance)/.done: 
-	mkdir -p $(plot_shared_variance)
-	printf "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=plot_shared_variance\n\
-#SBATCH --ntasks=1\n\
-#SBATCH --time=5:00\n\
-ml anaconda\n\
-conda activate eeg\n\
-export NEPTUNE_API_TOKEN=$(token)\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u alexnet\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u moten\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u scene\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u primitive\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u social\n\
-# python $(project_folder)/scripts/plot_shared_variance.py -u affective\n\
-python $(project_folder)/scripts/plot_shared_variance.py" | sbatch
+	touch $(back_to_back_swapped)/.done
 
 clean:
 	rm *.out

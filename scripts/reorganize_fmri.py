@@ -7,6 +7,7 @@ import nibabel as nib
 from tqdm import tqdm
 from src.mri import gen_mask
 from glob import glob
+from nilearn.image import smooth_img
 
 
 class ReorganizefMRI:
@@ -15,6 +16,7 @@ class ReorganizefMRI:
         self.data_dir = args.data_dir
         Path(f'{self.data_dir}/interim/{self.process}').mkdir(parents=True, exist_ok=True)
         print(vars(self))
+        self.fwhm = args.fwhm
         self.rois = ['EVC', 'MT', 'EBA', 'LOC', 'FFA',
                      'PPA', 'pSTS', 'face-pSTS', 'aSTS']
         self.streams = ['evc']
@@ -25,14 +27,20 @@ class ReorganizefMRI:
         all_betas = []
         for sub in tqdm(range(4)):
             sub = str(sub+1).zfill(2)
-            reliability_mask = nib.load(f'{self.data_dir}/raw/reliability_mask/sub-{sub}_space-T1w_desc-test-fracridge_reliability-mask.nii.gz').get_fdata().astype('bool')
+            reliability_mask = np.load(f'{self.data_dir}/raw/reliability_mask/sub-{sub}_space-T1w_desc-test-fracridge_reliability-mask.npy').astype('bool')
             reliability = nib.load(f'{self.data_dir}/raw/reliability_mask/sub-{sub}_space-T1w_desc-test-fracridge_stat-r_statmap.nii.gz').get_fdata()
+            reliability_mask = reliability_mask.reshape(reliability.shape)
+            print(f'{reliability_mask.shape=}')
 
             # Beta files
             betas_arr = []
             for dataset in ['train', 'test']:
                 betas_file = f'{self.data_dir}/raw/fmri_betas/sub-{sub}_space-T1w_desc-{dataset}-fracridge_data.nii.gz'
-                betas_arr.append(nib.load(betas_file).get_fdata())
+                betas_img = nib.load(betas_file)
+                if self.fwhm is not None: 
+                    betas_img = smooth_img(betas_img, fwhm=self.fwhm)
+
+                betas_arr.append(betas_img.get_fdata())
             betas_arr = np.concatenate(betas_arr, axis=-1)
             betas_arr = betas_arr[..., sort_idx] #resort by the stimulus_data frame
             all_betas.append(betas_arr[reliability_mask].reshape((-1, betas_arr.shape[-1]))) # Only save the reliable voxels
@@ -98,13 +106,17 @@ class ReorganizefMRI:
         metadata, response_data = self.generate_benchmark(sort_idx)
         stimulus_data.to_csv(f'{self.data_dir}/interim/{self.process}/stimulus_data.csv', index=False)
         metadata.to_csv(f'{self.data_dir}/interim/{self.process}/metadata.csv', index=False)
-        response_data.to_csv(f'{self.data_dir}/interim/{self.process}/response_data.csv.gz', index=False, compression='gzip')
-
+        if self.fwhm is None: 
+            response_data.to_csv(f'{self.data_dir}/interim/{self.process}/response_data.csv.gz', index=False, compression='gzip')
+        else:
+            response_data.to_csv(f'{self.data_dir}/interim/{self.process}/response_data_smoothed.csv.gz', index=False, compression='gzip')
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', '-data', type=str,
                          default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
+    parser.add_argument('--fwhm', type=int, default=None,
+                        help='smoothing fwhm')        
     args = parser.parse_args()
     ReorganizefMRI(args).run()
 

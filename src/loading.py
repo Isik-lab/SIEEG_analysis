@@ -53,12 +53,13 @@ def roi_fmri_summary(path):
     return out_response, pd.DataFrame(out_meta)
 
 
-def load_fmri(path, roi_mean=True):
+def load_fmri(path, roi_mean=True, smoothing=False):
     """load fMRI data
 
     Args:
         path (str): fMRI benchmark directory
         roi_mean (bool, optional): Return the average ROI response instead of voxelwise response. Default is False
+        smoothing (bool, optional): Load the fMRI data with smoothed betas. Only valid if roi_mean is False. Default is False
 
     Returns:
         response data (pandas.core.frame.DataFrame): reorganized fMRI responses
@@ -67,7 +68,11 @@ def load_fmri(path, roi_mean=True):
     if roi_mean:
         return roi_fmri_summary(path)
     else:
-        return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
+        if not smoothing:
+            return pd.read_csv(f'{path}/response_data.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
+        else:
+            return pd.read_csv(f'{path}/response_data_smoothed.csv.gz').T, pd.read_csv(f'{path}/metadata.csv')
+
 
 
 def load_eeg(file_path):

@@ -34,11 +34,11 @@ def are_all_elements_present(list1, list2):
     return all(elem in list2 for elem in list1)
 
 
-class Back2Back:
+class ForwardRegression:
     def __init__(self, args):
-        self.process = 'Back2Back'
-        self.y = json.loads(args.y_names)
-        self.x = json.loads(args.x1)
+        self.process = 'ForwardRegression'
+        self.y = json.loads(args.y)
+        self.x = json.loads(args.x)
         self.roi_mean = args.roi_mean
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
@@ -47,7 +47,11 @@ class Back2Back:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x-{'-'.join(self.x2)}.parquet'
+        self.smoothing = args.smoothing
+        if self.y != 'fmri' or self.roi_mean:
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x-{'-'.join(self.x)}.parquet'
+        else:
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x-{'-'.join(self.x)}-smoothed.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -57,12 +61,12 @@ class Back2Back:
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
-        fmri, fmri_meta = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean)
+        fmri, fmri_meta = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean, smoothing=self.smoothing)
         
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
-        eeg_filtered, behavior, [fmri, alexnet, moten] = loading.check_videos(eeg_raw, behavior, [fmri, alexnet, moten])
+        eeg_filtered, behavior, [fmri] = loading.check_videos(eeg_raw, behavior, [fmri])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
@@ -98,16 +102,17 @@ class Back2Back:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        if self.roi_mean: 
+            scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+            scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+            scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+            scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+            scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+            scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
 
-        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
+            results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def standard_regression(self, train, test):
@@ -119,17 +124,20 @@ class Back2Back:
                               desc='Back to back regression', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
-            X_train, X_test = train['eeg'][time_ind], train['eeg'][time_ind]
+            X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
 
             # Next predict yhat by the features
-            result2 = ols(X_train, y_train, X_test,  
-                            rotate_x=True)
-            yhat = result2['yhat']
+            yhat = ridge(X_train, y_train, X_test,
+                         alpha_start=self.alpha_start,
+                         alpha_stop=self.alpha_stop,
+                         device=self.device,
+                         rotate_x=False)['yhat']
 
             # Evaluate against y and compute stats
             scores[time_ind] = corr2d_gpu(yhat, y_test)
-            scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-            scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+            if self.roi_mean: 
+                scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+                scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
         return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
@@ -156,17 +164,25 @@ def main():
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
                         default='data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ForwardRegression')
     parser.add_argument('--y', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
     parser.add_argument('--x', '-x', type=str, default='["eeg"]',
                         help='a list of data names for fitting the first regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
+    parser.add_argument('--smoothing', action=argparse.BooleanOptionalAction, default=False,
+                        help='predict the roi mean response instead of voxelwise responses')
+    parser.add_argument('--alpha_start', type=int, default=-5,
+                        help='starting value in log space for the ridge alpha penalty')
+    parser.add_argument('--alpha_stop', type=int, default=10,
+                        help='stopping value in log space for the ridge alpha penalty')      
+    parser.add_argument('--scoring', type=str, default='pearsonr',
+                        help='scoring function. see DeepJuice TorchRidgeGV for options')         
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     args = parser.parse_args()
-    Back2Back(args).run()
+    ForwardRegression(args).run()
 
 
 if __name__ == '__main__':
