@@ -183,7 +183,7 @@ $(fmri_regression)/.full_brain:
 #SBATCH --gres=gpu:1\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]' --no-roi_mean --smoothing" | sbatch; \
+python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
 	done
 	touch $(fmri_regression)/.full_brain
 

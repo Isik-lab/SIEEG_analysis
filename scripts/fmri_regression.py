@@ -114,7 +114,7 @@ class fMRIRegression:
     
     def standard_regression(self, train, test):
         #Define y
-        y_train, y_test, group2 = dict_to_tensor(train, test, 'fMRI')
+        y_train, y_test, group2 = dict_to_tensor(train, test, ['fmri'])
 
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
@@ -149,7 +149,9 @@ class fMRIRegression:
 
     def save_indiv_times(self, scores, fmri_meta):
         for time_ind, score in scores.items():
-            results = pd.DataFrame(score, index=fmri_meta['voxel_id'], columns=['value'])
+            results = pd.DataFrame(score.cpu().detach().numpy(),
+                                   index=fmri_meta['voxel_id'],
+                                   columns=['value'])
             if time_ind == 0:
                 print(results.head())
             results.to_parquet(f'{self.out_name}_time-{str(time_ind).zfill(3)}.parquet')
@@ -165,7 +167,7 @@ class fMRIRegression:
             self.save_df(results)
         else:
             scores = self.standard_regression(train, test)
-            results = self.save_indiv_times(scores, fmri_meta, time_map)
+            results = self.save_indiv_times(scores, fmri_meta)
         print('finished')
 
 
