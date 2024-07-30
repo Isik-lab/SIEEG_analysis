@@ -64,7 +64,7 @@ colors = ['#F5DD40', '#8558F4', '#73D2DF']
 order_counter = 0
 stats_pos = -.12
 custom_lines = []
-smooth_kernel = np.ones(30)/30
+smooth_kernel = np.ones(10)/10
 for (feature, feature_df), color in zip(stats_df.groupby('feature'), colors):
     order_counter +=1
     alpha = 0.1 if color == 'black' else 0.2

@@ -113,7 +113,7 @@ stats_pos_start = {'EVC': -.2, 'EBA':  -.12, 'aSTS': -.12}
 sns.set_context('poster')
 _, axes = plt.subplots(len(title_names), 1, figsize=(19, 13.25), sharex=True)
 axes = axes.flatten()
-smooth_kernel = np.ones(30)/30
+smooth_kernel = np.ones(10)/10
 colors = ['#404040', '#F5DD40', '#8558F4', '#73D2DF']
 for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.groupby('roi_name')):
     order_counter = 0

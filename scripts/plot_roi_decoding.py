@@ -70,11 +70,11 @@ stats_df['roi_name'] = pd.Categorical(stats_df['roi_name'], categories=rois, ord
 # Plot the results
 sns.set_context('poster')
 _, ax = plt.subplots(figsize=(19, 9.5))
-colors = ['black', '#976A9A', '#254860']
+colors = ['black', '#976A9A', '#407FAA']
 order_counter = 0
 stats_pos = -.12
 custom_lines = []
-smooth_kernel = np.ones(30)/30
+smooth_kernel = np.ones(10)/10
 for (roi_name, roi_df), color in zip(stats_df.groupby('roi_name'), colors):
     order_counter +=1
     alpha = 0.1 if color == 'black' else 0.2
