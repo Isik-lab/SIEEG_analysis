@@ -110,7 +110,7 @@ back2back_df['feature'] = pd.Categorical(back2back_df['feature'], categories=fea
 
 stats_pos_start = {'EVC': -.2, 'EBA':  -.12, 'aSTS': -.12}
 # Plot the results
-sns.set_context('poster')
+sns.set_context(context='poster', font_scale=1.25)
 _, axes = plt.subplots(len(title_names), 1, figsize=(19, 13.25), sharex=True)
 axes = axes.flatten()
 smooth_kernel = np.ones(10)/10
@@ -143,9 +143,10 @@ for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
             if icluster == 1:
                 onset_time = time_cluster.min()
-                shift = 55 if onset_time < 100 else 70
-                ax.text(x=onset_time-shift, y=stats_pos-.007,
-                        s=f'{onset_time:.0f} ms', fontsize=14)
+                shift = 60 if onset_time < 100 else 75
+                ax.text(x=onset_time-shift, y=stats_pos-.006,
+                        s=f'{onset_time:.0f} ms',
+                        fontsize=15.5)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
                     color=color, zorder=0, linewidth=4)
@@ -162,8 +163,9 @@ for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.
     ax.spines[['right', 'top']].set_visible(False)
     ax.set_ylim([ymin, ymax])
     ax.set_title(title)
-    if roi_name == 'EVC':
-        ax.legend(custom_lines, legend_names, loc='upper right')
 
+
+axes[0].legend(custom_lines, legend_names,
+            loc='upper right', fontsize='18')
 ax.set_xlabel('Time (ms)')
 plt.savefig(f'{out_file_prefix}feature-roi_plot.pdf')

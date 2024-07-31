@@ -68,7 +68,7 @@ stats_df = stats_df.loc[stats_df['roi_name'].isin(rois)].reset_index(drop=True)
 stats_df['roi_name'] = pd.Categorical(stats_df['roi_name'], categories=rois, ordered=True)
 
 # Plot the results
-sns.set_context('poster')
+sns.set_context(context='poster', font_scale=1.5)
 _, ax = plt.subplots(figsize=(19, 9.5))
 colors = ['black', '#976A9A', '#407FAA']
 order_counter = 0
@@ -98,25 +98,27 @@ for (roi_name, roi_df), color in zip(stats_df.groupby('roi_name'), colors):
         time_cluster = roi_df['time'].to_numpy()[label == icluster]
         if icluster == 1:
             onset_time = time_cluster.min()
-            shift = 55 if onset_time < 100 else 70
-            ax.text(x=onset_time-shift, y=stats_pos-.007,
-                    s=f'{onset_time:.0f} ms', fontsize=14)
+            shift = 75 if onset_time < 100 else 90
+            ax.text(x=onset_time-shift, y=stats_pos-.006,
+                    s=f'{onset_time:.0f} ms',
+                    fontsize=20)
         ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                   xmax=time_cluster.max(),
                   color=color, zorder=0, linewidth=4)
-    stats_pos -= 0.02
+    stats_pos -= 0.05
 
 ax.legend(custom_lines, title_names, loc='upper right')
 ymin, ymax = ax.get_ylim()
 ax.set_xlim([-200, 1000])
 ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
             linestyles='dashed', colors='grey',
-            linewidth=5, zorder=0)
+            linewidth=5, zorder=0, alpha=0.5)
 ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
-            linewidth=5, zorder=0)
+            linewidth=5, zorder=0, alpha=0.5)
 ax.set_ylabel('Prediction ($r$)')
 ax.set_xlabel('Time (ms)')
 ax.spines[['right', 'top']].set_visible(False)
 ax.set_ylim([ymin, ymax])
 
+plt.tight_layout()
 plt.savefig(f'{out_path}/roi_plot.pdf')

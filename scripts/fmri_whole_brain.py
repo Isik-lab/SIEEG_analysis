@@ -19,7 +19,7 @@ class fMRIWholeBrain:
 
     def load_files(self):
         df = None
-        for time_ind in tqdm(range(0, self.n_eeg_samples, 4), desc='Time loop', leave=True):
+        for time_ind in tqdm(range(0, self.n_eeg_samples, 2), desc='Time loop', leave=True):
             files = glob(f'{self.data_dir}/interim/fMRIRegression/sub-*_full-brain_time-{str(time_ind).zfill(3)}.parquet')
             time_df = []
             for file in files:

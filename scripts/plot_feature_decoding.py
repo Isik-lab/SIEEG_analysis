@@ -58,7 +58,7 @@ stats_df = stats_df.loc[stats_df['feature'].isin(features)].reset_index(drop=Tru
 stats_df['feature'] = pd.Categorical(stats_df['feature'], categories=features, ordered=True)
 
 # Plot the results
-sns.set_context('poster')
+sns.set_context(context='poster', font_scale=1.5)
 _, ax = plt.subplots(figsize=(19, 9.5))
 colors = ['#F5DD40', '#8558F4', '#73D2DF']
 order_counter = 0
@@ -88,9 +88,10 @@ for (feature, feature_df), color in zip(stats_df.groupby('feature'), colors):
         time_cluster = feature_df['time'].to_numpy()[label == icluster]
         if icluster == 1:
             onset_time = time_cluster.min()
-            shift = 55 if onset_time < 100 else 70
-            ax.text(x=onset_time-shift, y=stats_pos-.007,
-                    s=f'{onset_time:.0f} ms', fontsize=14)
+            shift = 75 if onset_time < 100 else 90
+            ax.text(x=onset_time-shift, y=stats_pos-.006,
+                    s=f'{onset_time:.0f} ms',
+                    fontsize=20)
         ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                   xmax=time_cluster.max(),
                   color=color, zorder=0, linewidth=4)
@@ -109,4 +110,5 @@ ax.set_xlabel('Time (ms)')
 ax.spines[['right', 'top']].set_visible(False)
 ax.set_ylim([ymin, ymax])
 
+plt.tight_layout()
 plt.savefig(f'{out_path}/feature_plot.pdf')
