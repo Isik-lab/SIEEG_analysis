@@ -97,7 +97,7 @@ for roi, (roi_name, roi_df) in zip(roi_titles, full_stats_df.groupby('roi_name',
     sns.set_context(context='paper', font_scale=2)
     fig, axes = plt.subplots(5, 2, figsize=(19, 15.83), sharex=True, sharey=True)
     axes = axes.flatten()
-    ymax = 0.3 if roi != 'EVC' else 0.75
+    ymax = 0.4 if roi != 'EVC' else 0.75
 
     order_counter = 0
     stats_pos = -.12
@@ -124,7 +124,7 @@ for roi, (roi_name, roi_df) in zip(roi_titles, full_stats_df.groupby('roi_name',
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
             if icluster == 1:
                 onset_time = time_cluster.min()
-                shift = 100 if onset_time < 100 else 125
+                shift = 100 if onset_time < 100 else 110
                 ax.text(x=onset_time-shift, y=stats_pos-.006,
                         s=f'{onset_time:.0f} ms',
                         fontsize=12)
