@@ -12,8 +12,6 @@ from matplotlib.lines import Line2D
 
 
 swapped = False
-rois = ['EVC', 'LOC', 'EBA', 'pSTS', 'aSTS']
-
 if swapped: 
     in_file_prefix = f'data/interim/Back2Back_swapped'
     out_file_prefix = 'data/interim/PlotBack2Back/swapped_'
@@ -21,10 +19,27 @@ else:
     in_file_prefix = f'data/interim/Back2Back'
     out_file_prefix = 'data/interim/PlotBack2Back/'
 
+rois = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS', 'aSTS']
 features = ['alexnet', 'moten', 'expanse', 'object',
             'agent_distance', 'facingness',
-            'communication', 'joint_action',
+            'joint_action','communication', 
             'valence', 'arousal']
+roi_titles = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
+feature_titles = ['AlexNet-conv2', 'motion energy', 
+                  'spatial expanse', 'object directedness',
+                  'agent distance', 'facingness',
+                  'joint action', 'communication', 'valence', 'arousal']
+colors = ['#404040', '#404040', '#F5DD40', '#F5DD40', '#8558F4', '#8558F4', '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
+
+
+reduced_rois = ['EVC', 'LOC', 'aSTS']
+reduced_features = ['alexnet', 'expanse', 'agent_distance', 'communication']
+reduced_rois_titles = ['EVC', 'LOC', 'aSTS-SI']
+reduced_features_legends = ['AlexNet conv2', 'spatial expanse', 'agent distance', 'communication']
+reduced_colors = ['#404040', '#F5DD40', '#8558F4', '#73D2DF']
+
+smooth_kernel = np.ones(10)/10
+
 if not os.path.isfile(f'{out_file_prefix}plot.csv'):
     back2back_df = []
     for feature in tqdm(features, desc='Feature group summary', leave=True):
@@ -71,55 +86,88 @@ else:
     back2back_df = pd.read_csv(f'{out_file_prefix}plot.csv')
 
 
-# Plot the results
-for feature, mean_df in back2back_df.groupby('feature'):
-    _, axes = plt.subplots(3, 2, sharex=True, sharey=True)
-    axes = axes.flatten()
-    for ax, (roi_name, roi_df) in zip(axes, mean_df.groupby('roi_name')):
-        sns.lineplot(x='time', y='value', data=roi_df, ax=ax,
-                    zorder=1, color='black')
-        ax.fill_between(x=roi_df['time'], 
-                        y1=roi_df['low_ci'], y2=roi_df['high_ci'],
-                        zorder=0, color='gray', alpha=0.5)
+full_stats_df = back2back_df.loc[back2back_df['feature'].isin(features)].reset_index(drop=True)
+full_stats_df['feature'] = pd.Categorical(full_stats_df['feature'], categories=features, ordered=True)
+full_stats_df = full_stats_df.loc[full_stats_df['roi_name'].isin(rois)].reset_index(drop=True)
+full_stats_df['roi_name'] = pd.Categorical(full_stats_df['roi_name'], categories=rois, ordered=True)
 
-        label, n = ndimage.label(roi_df['p'] < 0.05)
-        print(f'{n=}')
+# Plot the results
+ymin = -0.2
+for roi, (roi_name, roi_df) in zip(roi_titles, full_stats_df.groupby('roi_name', observed=True)):
+    sns.set_context(context='paper', font_scale=2)
+    fig, axes = plt.subplots(5, 2, figsize=(19, 15.83), sharex=True, sharey=True)
+    axes = axes.flatten()
+    ymax = 0.3 if roi != 'EVC' else 0.75
+
+    order_counter = 0
+    stats_pos = -.12
+    for ifeature, (feature_name, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
+        feature, color, ax = feature_titles[ifeature], colors[ifeature], axes[ifeature]
+        alpha = 0.1 if color == 'black' else 0.2
+        alpha += 0.2 if color == '#F5DD40' else 0
+        smoothed_data = {}
+        for key in ['low_ci', 'high_ci', 'value']:
+            smoothed_data[key] = np.convolve(feature_df[key], smooth_kernel, mode='same')
+
+        ax.fill_between(x=feature_df['time'], 
+                    y1=smoothed_data['low_ci'], y2=smoothed_data['high_ci'],
+                    edgecolor=None, color=color, alpha=alpha, 
+                    zorder=order_counter)
+        order_counter +=1
+        ax.plot(feature_df['time'], smoothed_data['value'],
+                color=color, zorder=order_counter,
+                linewidth=5)
+
+        label, n = ndimage.label(feature_df['p'] < 0.05)
         onset_time = np.nan
         for icluster in range(1, n+1):
-            time_cluster = roi_df['time'].to_numpy()[label == icluster]
+            time_cluster = feature_df['time'].to_numpy()[label == icluster]
             if icluster == 1:
                 onset_time = time_cluster.min()
-            ax.hlines(y=-0.01, xmin=time_cluster.min(),
+                shift = 100 if onset_time < 100 else 125
+                ax.text(x=onset_time-shift, y=stats_pos-.006,
+                        s=f'{onset_time:.0f} ms',
+                        fontsize=12)
+            ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
-                    color='black', zorder=0, linewidth=2)
-        if not np.isnan(onset_time):
-            ax.set_title(f'{roi_name} ({onset_time:.0f} ms)')
-        else:
-            ax.set_title(roi_name)
-    plt.savefig(f'{out_file_prefix}{feature}.pdf')
+                    color=color, zorder=0, linewidth=2)
 
-rois = ['EVC', 'EBA', 'aSTS']
-title_names = ['EVC', 'EBA', 'aSTS-SI']
-features = ['alexnet', 'expanse', 'agent_distance', 'communication']
-legend_names = ['AlexNet conv2', 'spatial expanse', 'agent distance', 'communication']
-back2back_df = back2back_df.loc[back2back_df['roi_name'].isin(rois)].reset_index(drop=True)
-back2back_df = back2back_df.loc[back2back_df['feature'].isin(features)].reset_index(drop=True)
+        ax.set_title(feature)
+        ax.set_xlim([-200, 1000])
+        ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
+                    linestyles='dashed', colors='grey',
+                    linewidth=3, zorder=0)
+        ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
+                    linewidth=3, zorder=0)
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.set_ylim([ymin, ymax])
+        if ifeature % 2 == 0:
+            ax.set_ylabel('Prediction ($r$)')
 
-back2back_df['roi_name'] = pd.Categorical(back2back_df['roi_name'], categories=rois, ordered=True)
-back2back_df['feature'] = pd.Categorical(back2back_df['feature'], categories=features, ordered=True)
+        if ifeature >= 8:
+            ax.set_xlabel('Time (ms)')
 
-stats_pos_start = {'EVC': -.2, 'EBA':  -.12, 'aSTS': -.12}
+    fig.suptitle(roi)
+    plt.tight_layout()
+    plt.savefig(f'{out_file_prefix}{roi}.pdf')
+
+back2back_df = back2back_df.loc[back2back_df['roi_name'].isin(reduced_rois)].reset_index(drop=True)
+back2back_df = back2back_df.loc[back2back_df['feature'].isin(reduced_features)].reset_index(drop=True)
+
+back2back_df['roi_name'] = pd.Categorical(back2back_df['roi_name'], categories=reduced_rois, ordered=True)
+back2back_df['feature'] = pd.Categorical(back2back_df['feature'], categories=reduced_features, ordered=True)
+
+stats_pos_start = {'EVC': -.2, 'LOC':  -.12, 'aSTS': -.12}
 # Plot the results
 sns.set_context(context='poster', font_scale=1.25)
-_, axes = plt.subplots(len(title_names), 1, figsize=(19, 13.25), sharex=True)
+_, axes = plt.subplots(len(reduced_rois_titles), 1, figsize=(19, 13.25), sharex=True)
 axes = axes.flatten()
-smooth_kernel = np.ones(10)/10
-colors = ['#404040', '#F5DD40', '#8558F4', '#73D2DF']
-for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.groupby('roi_name')):
+for iroi, (roi_name, cur_df) in enumerate(back2back_df.groupby('roi_name', observed=True)):
+    ax, title = axes[iroi], reduced_rois_titles[iroi]
     order_counter = 0
     stats_pos = stats_pos_start[roi_name]
     custom_lines = []
-    for color, (feature, feature_df) in zip(colors, cur_df.groupby('feature')):
+    for color, (feature, feature_df) in zip(reduced_colors, cur_df.groupby('feature', observed=True)):
         order_counter +=1
 
         smoothed_data = {}
@@ -165,7 +213,7 @@ for (ax, title), (roi_name, cur_df) in zip(zip(axes, title_names), back2back_df.
     ax.set_title(title)
 
 
-axes[0].legend(custom_lines, legend_names,
+axes[0].legend(custom_lines, reduced_features_legends,
             loc='upper right', fontsize='18')
 ax.set_xlabel('Time (ms)')
 plt.savefig(f'{out_file_prefix}feature-roi_plot.pdf')

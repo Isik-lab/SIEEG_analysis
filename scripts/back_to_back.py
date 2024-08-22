@@ -9,7 +9,7 @@ from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
-from sklearn.model_selection import LeaveOneOut
+from sklearn.model_selection import KFold
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -118,23 +118,26 @@ class Back2Back:
             print(f'{feature} PCs: {train[feature].size()[1]}')
         X2_train, X2_test, group2 = dict_to_tensor(train, test, self.x2)
 
-        scores, scores_null, scores_var = {}, [], []
+        reg1_scores = []
+        reg2_scores, reg2_scores_null, reg2_scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc='Back to back regression', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X1 = train['eeg'][time_ind]
-            yhat_train = []
-            for train_index, test_index in LeaveOneOut().split(X1):
+            yhat_train, scores_cv = [], []
+            for train_index, test_index in KFold(n_splits=5).split(X1):
                 X1_train, X1_test = feature_scaler(X1[train_index], X1[test_index])
-                y_train = feature_scaler(train['fmri'][train_index])
-                yhat_loo = ridge(X1_train, y_train, X1_test,  
+                y_train_cv, y_test_cv = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
+                yhat_cv = ridge(X1_train, y_train_cv, X1_test,  
                                  alpha_start=self.alpha_start,
                                  alpha_stop=self.alpha_stop,
                                  device=self.device,
                                  rotate_x=True)['yhat']
-                yhat_train.append(yhat_loo)#torch.unsqueeze(yhat_loo, 1))
-            yhat_train = torch.cat(yhat_train)#, 1).T
+                scores_cv.append(corr2d_gpu(yhat_cv, y_test_cv))
+                yhat_train.append(yhat_cv)
+            yhat_train = torch.cat(yhat_train)
+            reg1_scores.append(torch.nanmean(torch.stack(scores_cv), dim=0))
 
             # Next predict yhat by the features
             if X2_train.size()[-1] > 1:
@@ -148,10 +151,10 @@ class Back2Back:
                            rotate_x=False)['yhat']
 
             # Evaluate against y and compute stats
-            scores[time_ind] = corr2d_gpu(yhat, y_test)
-            scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-            scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-        return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+            reg2_scores[time_ind] = corr2d_gpu(yhat, y_test)
+            reg2_scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+            reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+        return reg1_scores, reg2_scores, torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -162,7 +165,7 @@ class Back2Back:
     def run(self):
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split(behavior, other_data)
-        scores, scores_null, scores_var = self.b2b_regression(train, test)
+        _, scores, scores_null, scores_var = self.b2b_regression(train, test)
         results = self.reorganize_results(scores, scores_null, scores_var, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
