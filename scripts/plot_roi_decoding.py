@@ -82,7 +82,7 @@ if simplified_plotting:
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for (roi_name, roi_df), color in zip(stats_df.groupby('roi_name'), colors):
+    for (roi_name, roi_df), color in zip(stats_df.groupby('roi_name', observed=True), colors):
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2
         smoothed_data = {}
@@ -133,13 +133,13 @@ else:
     sns.set_context(context='paper', font_scale=2)
     _, axes = plt.subplots(3, 2, figsize=(19, 9.5), sharex=True, sharey=True)
     axes = axes.flatten()
-    ymin, ymax = -0.15, 0.5
+    ymin, ymax = -0.15, 0.6
 
     order_counter = 0
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for iroi, (_, roi_df) in enumerate(stats_df.groupby('roi_name')):
+    for iroi, (_, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
         ax, color, roi = axes[iroi], colors[iroi], title_names[iroi]
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2
