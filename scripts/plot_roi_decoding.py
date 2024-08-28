@@ -17,9 +17,9 @@ if simplified_plotting:
     title_names = ['EVC', 'LOC', 'aSTS-SI']
     colors = ['black', '#976A9A', '#407FAA']
 else:
-    rois = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS', 'aSTS']
-    title_names = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
-    colors = ['black', 'black', '#976A9A', '#976A9A', '#407FAA', '#407FAA']
+    rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
+    title_names = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
+    colors = ['black', 'black', '#497059', '#497059', '#976A9A', '#976A9A', '#407FAA', '#407FAA']
 
 out_path = 'data/interim/PlotROIDecoding'
 Path(out_path).mkdir(exist_ok=True, parents=True)
@@ -131,7 +131,7 @@ if simplified_plotting:
     plt.savefig(f'{out_path}/roi_plot.pdf')
 else:
     sns.set_context(context='paper', font_scale=2)
-    _, axes = plt.subplots(3, 2, figsize=(19, 9.5), sharex=True, sharey=True)
+    _, axes = plt.subplots(4, 2, figsize=(19, 12.67), sharex=True, sharey=True)
     axes = axes.flatten()
     ymin, ymax = -0.15, 0.6
 
@@ -139,8 +139,9 @@ else:
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for iroi, (_, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
+    for iroi, (roi_name, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
         ax, color, roi = axes[iroi], colors[iroi], title_names[iroi]
+        print(roi_name, roi)
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2
         smoothed_data = {}
@@ -183,7 +184,7 @@ else:
         if iroi % 2 == 0:
             ax.set_ylabel('Prediction ($r$)')
 
-        if iroi >= 4:
+        if iroi >= 6:
             ax.set_xlabel('Time (ms)')
 
     plt.tight_layout()

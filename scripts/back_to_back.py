@@ -124,20 +124,13 @@ class Back2Back:
                               desc='Back to back regression', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
-            X1 = train['eeg'][time_ind]
-            yhat_train, scores_cv = [], []
-            for train_index, test_index in KFold(n_splits=5).split(X1):
-                X1_train, X1_test = feature_scaler(X1[train_index], X1[test_index])
-                y_train_cv, y_test_cv = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
-                yhat_cv = ridge(X1_train, y_train_cv, X1_test,  
-                                 alpha_start=self.alpha_start,
-                                 alpha_stop=self.alpha_stop,
-                                 device=self.device,
-                                 rotate_x=True)['yhat']
-                scores_cv.append(corr2d_gpu(yhat_cv, y_test_cv))
-                yhat_train.append(yhat_cv)
-            yhat_train = torch.cat(yhat_train)
-            reg1_scores.append(torch.nanmean(torch.stack(scores_cv), dim=0))
+            X1 = feature_scaler(train['eeg'][time_ind])
+            y1 = feature_scaler(train['fmri'])
+            yhat_train = ridge(X1, y1, X1,  
+                               alpha_start=self.alpha_start,
+                               alpha_stop=self.alpha_stop,
+                               device=self.device,
+                               rotate_x=True)['yhat']
 
             # Next predict yhat by the features
             if X2_train.size()[-1] > 1:

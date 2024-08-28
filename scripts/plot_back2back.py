@@ -19,12 +19,12 @@ else:
     in_file_prefix = f'data/interim/Back2Back'
     out_file_prefix = 'data/interim/PlotBack2Back/'
 
-rois = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS', 'aSTS']
+rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
 features = ['alexnet', 'moten', 'expanse', 'object',
             'agent_distance', 'facingness',
             'joint_action','communication', 
             'valence', 'arousal']
-roi_titles = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
+roi_titles = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
 feature_titles = ['AlexNet-conv2', 'motion energy', 
                   'spatial expanse', 'object directedness',
                   'agent distance', 'facingness',
