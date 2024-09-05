@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 from matplotlib.lines import Line2D
 
-simplified_plotting = False 
+simplified_plotting = True 
 if simplified_plotting:
     features = ['expanse', 'agent_distance', 'communication']
     title_names = ['spatial expanse', 'agent distance', 'communication']
@@ -75,7 +75,7 @@ if simplified_plotting:
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for (feature, feature_df), color in zip(stats_df.groupby('feature'), colors):
+    for (feature, feature_df), color in zip(stats_df.groupby('feature', observed=True), colors):
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2
         smoothed_data = {}
@@ -132,7 +132,7 @@ else:
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for ifeature, (_, feature_df) in enumerate(stats_df.groupby('feature')):
+    for ifeature, (_, feature_df) in enumerate(stats_df.groupby('feature', observed=True)):
         ax, color, feature = axes[ifeature], colors[ifeature], title_names[ifeature]
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2

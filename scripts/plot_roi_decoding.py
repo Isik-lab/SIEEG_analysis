@@ -11,7 +11,7 @@ import os
 from matplotlib.lines import Line2D
 
 
-simplified_plotting = False
+simplified_plotting = True
 if simplified_plotting:
     rois = ['EVC', 'LOC', 'aSTS']
     title_names = ['EVC', 'LOC', 'aSTS-SI']
