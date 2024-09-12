@@ -9,6 +9,23 @@ from scipy import ndimage
 import torch
 
 
+def r2_score_gpu(y, y_hat, dim=0):    
+    # Calculate the mean of actual values
+    y_mean = torch.mean(y, dim=dim, keepdim=True)
+    
+    # Calculate the total sum of squares (proportional to variance of the data)
+    total_sum_of_squares = torch.sum((y - y_mean) ** 2, dim=dim)
+    
+    # Calculate the residual sum of squares (how far off the predictions are)
+    residual_sum_of_squares = torch.sum((y - y_hat) ** 2, dim=dim)
+    
+    # Calculate R^2
+    r2 = 1 - (residual_sum_of_squares / total_sum_of_squares)
+    
+    return r2
+
+
+
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
     rs_out = rs.copy()
     if correct:

@@ -33,10 +33,10 @@ colors = ['#404040', '#404040', '#F5DD40', '#F5DD40', '#8558F4', '#8558F4', '#73
 
 
 reduced_rois = ['EVC', 'LOC', 'aSTS']
-reduced_features = ['alexnet', 'expanse', 'agent_distance', 'communication']
+reduced_features = ['alexnet', 'agent_distance', 'communication']
 reduced_rois_titles = ['EVC', 'LOC', 'aSTS-SI']
-reduced_features_legends = ['AlexNet conv2', 'spatial expanse', 'agent distance', 'communication']
-reduced_colors = ['#404040', '#F5DD40', '#8558F4', '#73D2DF']
+reduced_features_legends = ['AlexNet conv2', 'agent distance', 'communication']
+reduced_colors = ['#404040', '#8558F4', '#73D2DF']
 
 smooth_kernel = np.ones(10)/10
 
