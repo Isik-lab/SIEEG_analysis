@@ -19,10 +19,11 @@ back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
+feature_bin_regression=$(project_folder)/data/interim/FeatureBinRegression
 
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back back_to_back_swapped
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back back_to_back_swapped feature_bin_decoding
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -150,6 +151,23 @@ conda activate eeg\n\
 python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
 	touch $(feature_regression)/.feature_decoding
+
+#Compute b2b regression with EEG first then annotated features
+feature_bin_decoding: $(feature_bin_regression)/.feature_decoding $(eeg_preprocess)
+$(feature_bin_regression)/.feature_decoding: 
+	mkdir -p $(feature_bin_regression)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=feature_decoding\n\
+#SBATCH --time=2:45:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/feature_bin_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
+	done
+	touch $(feature_bin_regression)/.feature_decoding
 
 
 #Compute the channel-wise EEG reliability
