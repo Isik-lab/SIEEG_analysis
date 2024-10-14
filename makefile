@@ -18,12 +18,12 @@ eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 back_to_back_swapped=$(project_folder)/data/interim/Back2Back_swapped
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
+fmri_bin_regression=$(project_folder)/data/interim/fMRIBinRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 feature_bin_regression=$(project_folder)/data/interim/FeatureBinRegression
 
-
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back back_to_back_swapped feature_bin_decoding
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding roi_bin_decoding full_brain back_to_back back_to_back_swapped feature_bin_decoding
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -183,9 +183,26 @@ $(fmri_regression)/.done:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -y '[\"fmri\"]'" | sbatch; \
+python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
 	touch $(fmri_regression)/.roi_decoding
+
+#Compute the channel-wise EEG reliability
+roi_bin_decoding: $(fmri_bin_regression)/.done $(eeg_preprocess)
+$(fmri_bin_regression)/.done: 
+	mkdir -p $(fmri_bin_regression)
+	for s in $(eeg_subs); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=roi_decoding\n\
+#SBATCH --time=2:45:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/fmri_bin_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
+	done
+	touch $(fmri_bin_regression)/.roi_decoding
 
 #Compute the channel-wise EEG reliability
 full_brain: $(fmri_regression)/.full_brain $(eeg_preprocess)
