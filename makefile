@@ -148,9 +148,9 @@ $(feature_regression)/.feature_decoding:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
+python $(project_folder)/scripts/feature_b2b_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
-	touch $(feature_regression)/.feature_decoding
+	# touch $(feature_regression)/.feature_decoding
 
 #Compute b2b regression with EEG first then annotated features
 feature_bin_decoding: $(feature_bin_regression)/.feature_decoding $(eeg_preprocess)

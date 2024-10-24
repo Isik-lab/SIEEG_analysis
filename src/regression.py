@@ -264,11 +264,11 @@ def banded_ridge(X_train, y_train, X_test, groups,
     return out
 
 
-def ridge(X_train, y_train, X_test, groups=None, 
+def ridge(X, y,
+          X_test=None, groups=None, 
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
-          rotate_x=True,
-          return_alpha=False, return_betas=False):
+          rotate_x=False, return_alpha=False, return_betas=False):
     """Use deepjuice TorchRidgeGCV to perform the regression 
     and predict the response in the held out data
 
@@ -288,8 +288,8 @@ def ridge(X_train, y_train, X_test, groups=None,
     Returns: 
         y_hat (torch.Tensor): predicted y values
     """
-    if rotate_x:
-        X_train, X_test, _ = pca_rotation(X_train, X_test, groups)
+    if rotate_x and X_test is not None:
+        X_train, X_test, _ = pca_rotation(X, X_test, groups)
 
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
@@ -297,14 +297,15 @@ def ridge(X_train, y_train, X_test, groups=None,
                         scale_X=False,
                         fit_intercept=False,
                         scoring=scoring)
+    pipe.fit(X, y)
 
-    pipe.fit(X_train, y_train)
-    out = {'yhat': pipe.predict(X_test)}
-
+    out = dict()
+    if X_test is not None: 
+        out['yhat'] = pipe.predict(X_test)
     if return_alpha:
         out['alpha'] = pipe.alpha_
     if return_betas:
-        out['betas'] = pipe.coef_
+        out['betas'] = pipe.coef_.T
     return out
 
 

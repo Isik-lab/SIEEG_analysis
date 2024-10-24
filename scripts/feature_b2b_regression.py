@@ -1,0 +1,224 @@
+import argparse
+import pandas as pd
+import matplotlib.pyplot as plt
+from src import loading, regression, tools, stats
+import torch
+from pathlib import Path
+import numpy as np
+from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
+from src.regression import ridge, feature_scaler, ols
+import json
+from tqdm import tqdm
+from sklearn.model_selection import LeaveOneOut
+from src.cca import CrossValidatedCCA
+
+
+def dict_to_numpy(train_dict, test_dict, keys):
+    def list_to_numpy(l):
+        return np.hstack(tuple(l))
+
+    train_out, test_out, groups = [], [], []
+    for i_group, key in enumerate(keys):
+        if train_dict[key].ndim > 1: 
+            train_out.append(train_dict[key])
+            test_out.append(test_dict[key])
+            group_vec = np.ones(test_dict[key].size()[1])*i_group
+        else: 
+            train_out.append(np.expand_dims(train_dict[key], 1))
+            test_out.append(np.expand_dims(test_dict[key], 1))
+            group_vec = np.array([i_group])
+        groups.append(group_vec)
+    return list_to_numpy(train_out), list_to_numpy(test_out), list_to_numpy(groups)
+
+
+def are_all_elements_present(list1, list2):
+    return all(elem in list2 for elem in list1)
+
+
+class FeatureRegression:
+    def __init__(self, args):
+        self.process = 'FeatureRegression'
+        self.alpha_start = args.alpha_start
+        self.alpha_stop = args.alpha_stop
+        self.scoring = args.scoring
+        self.n_perm = args.n_perm
+        self.resamples = args.resamples
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.out_dir = args.out_dir
+        self.eeg_file = args.eeg_file
+        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_features.parquet'
+        print(vars(self)) 
+        self.fmri_dir = args.fmri_dir
+        self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
+                                    'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
+                                    'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
+                                    'valence': 'rating-valence', 'arousal': 'rating-arousal'}
+
+    def load_and_validate(self):
+        behavior = loading.load_behavior(self.fmri_dir)
+        
+        eeg_raw = loading.load_eeg(self.eeg_file)
+        eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
+        eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
+        eeg_filtered, behavior = loading.check_videos(eeg_raw, behavior)
+        eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
+        eeg = {}
+        iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
+        time_map = {}
+        for time_ind, time_df in iterator:
+            eeg[time_ind] = loading.strip_eeg(time_df)
+            time_map[time_ind] = time_df.time.unique()[0]
+        return behavior, {'eeg': eeg}, time_map
+
+    def reorganize_results(self, scores, time_map, scores_null=None, scores_var=None):
+        results = pd.DataFrame(scores).transpose()
+        temp_cols = [f'col{i}' for i in range(len(results.columns))]
+        results.columns = temp_cols
+        results = results.rename(index=time_map).reset_index()
+        results = pd.melt(results, id_vars='index')
+        cols = list(self.behavior_categories.keys())
+        results['feature'] = results.variable.replace({temp_col: feature for feature, temp_col in zip(cols, temp_cols)})
+        results = results.rename(columns={'index': 'time'}).drop(columns='variable')
+
+        if scores_null is not None and scores_var is not None: 
+            scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+            scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+            scores_null_df[['feature', 'time']] = results[['feature', 'time']]
+            scores_var_df[['feature', 'time']] = results[['feature', 'time']]
+            scores_null_df.set_index(['feature', 'time'], inplace=True)
+            scores_var_df.set_index(['feature', 'time'], inplace=True)
+
+            results = results.set_index(['feature', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
+        return results
+    
+    def standard_regression(self, train, test):
+        #Define y
+        features = list(self.behavior_categories.keys())
+        y_train, y_test, _ = dict_to_numpy(train, test, features)
+        y_knockout = dict()
+        for feature in features:
+            feature_knockout = copy(features)
+            feature_knockout.remove(feature)
+            y_knockout['train'][feature], y_knockout['test'][feature] = dict_to_numpy(train, test, feature_knockout)
+
+        scores, scores_null, scores_var = {}, [], []
+        outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
+                              desc=f'Predict features from EEG', leave=True)
+        for time_ind in outer_iterator:
+            # First predict the variance in the fMRI by the EEG and predict the result
+            X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
+
+            # Fit the full CCA
+            cca = CrossValidatedCCA()
+            cca.fit(X_train, y_train)
+            R2_full = cca.score(X_test, y_test)
+            
+            # Fit CCA after knocking out a feature
+            R2_delta = []
+            for feature in features:
+                cca = CrossValidatedCCA()
+                cca.fit(X_train, y_knockout['train'][feature])
+                R2_knockout = cca.score(X_test, y_knockout['test'][feature])
+                R2_delta.append(R2_full - R2_knockout)
+            R2_delta = np.array(R2_delta)
+
+            # # Next predict yhat by the features
+            # G = torch.zeros((y_train.shape[1], X_train.shape[1]))
+            # H = torch.zeros((X_train.shape[1], X_train.shape[1]))
+
+            # inds = torch.arange(X_train.shape[0])
+            # n = int(X_train.shape[0] * .5)
+            # for resample in range(self.resamples):
+            #     inds = torch.randperm(X_train.shape[0])
+            #     sample1, sample2 = inds[:n], inds[n:]
+            #     G_current = ridge(y_train[sample1], X_train[sample1], 
+            #                   alpha_start=self.alpha_start,
+            #                   alpha_stop=self.alpha_stop,
+            #                   device=self.device,
+            #                   return_betas=True)['betas']
+            #     H = H + ridge(X_train[sample2], y_train[sample2] @ G_current,
+            #                   alpha_start=self.alpha_start,
+            #                   alpha_stop=self.alpha_stop,
+            #                   device=self.device,
+            #                   return_betas=True)['betas']
+            #     G = G + G_current
+            # # get the mean of G and H
+            # G = G / self.resamples
+            # H = H / self.resamples      
+            # print(f'{H.shape=}')
+            # scores[time_ind] = torch.diagonal(H)
+            
+            # YG = y_test @ G
+            # XH = X_test @ H
+            # R_full = corr2d_gpu(YH, y_test)
+            # print(f'{XG.shape=}')
+            # print(f'{YH.shape=}')
+
+            # R_delta = np.zeros_like(R_full)
+            # for i_feature in range(H.shape[0]):
+            #     H_ablated = H.clone()
+            #     H_ablated[:, i_feature] = 0 
+            #     # R_k = corr2d_gpu(X_test @ G, y_test @ H_ablated) 
+            #     YH_ablated = y_test @ H_ablated
+            #     print(f'{=}')
+            #     R_delta[i_feature] = R_full[i_feature] - R_k
+            # break 
+
+        #     # Evaluate against y and compute stats
+            # scores[time_ind] = corr2d_gpu(X_test @ h_hat, y_test @ g_hat)
+        #     scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+        #     scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+        return scores#, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+
+    def save_df(self, results):
+        results.to_parquet(self.out_name, index=False)
+
+    def mk_out_dir(self):
+        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
+
+    def run(self):
+        behavior, other_data, time_map = self.load_and_validate()
+        print('data loaded')
+        print(behavior.head())
+        train, test = regression.train_test_split(behavior, other_data,
+                                                  behavior_categories=self.behavior_categories)
+        print('data split')
+        # scores, scores_null, scores_var = self.standard_regression(train, test)
+        scores = self.standard_regression(train, test)
+        results = self.reorganize_results(scores, time_map)#, scores_null, scores_var)
+        feature = 'expanse'
+        fdf = results.loc[results.feature == feature].reset_index()
+        plt.plot(fdf.time.to_numpy(), fdf.value.to_numpy())
+        plt.savefig(f'{self.out_name.split('.')[0]}_{feature}.pdf')
+        print(results.head())
+        self.mk_out_dir()
+        self.save_df(results)
+        print('finished')
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Decoding behavior or fMRI from EEG responses')
+    parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+    parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
+                        default='data/interim/eegPreprocessing/all_trials/sub-06.parquet')
+    parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureB2BRegression')
+    parser.add_argument('--alpha_start', type=int, default=-5,
+                        help='starting value in log space for the ridge alpha penalty')
+    parser.add_argument('--alpha_stop', type=int, default=30,
+                        help='stopping value in log space for the ridge alpha penalty')      
+    parser.add_argument('--scoring', type=str, default='pearsonr',
+                        help='scoring function. see DeepJuice TorchRidgeGV for options')         
+    parser.add_argument('--n_perm', type=int, default=5000,
+                        help='the number of permutations for stats')
+    parser.add_argument('--resamples', type=float, default=100,
+                        help='resamples of the training set in fitting the B2B regression')
+    args = parser.parse_args()
+    FeatureRegression(args).run()
+
+
+if __name__ == '__main__':
+    main()
