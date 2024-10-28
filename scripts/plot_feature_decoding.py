@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 from matplotlib.lines import Line2D
 
-simplified_plotting = False 
+simplified_plotting = True 
 if simplified_plotting:
     features = ['expanse', 'agent_distance', 'communication']
     title_names = ['spatial expanse', 'agent distance', 'communication']

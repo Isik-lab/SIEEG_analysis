@@ -123,12 +123,12 @@ class fMRIRegression:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
 
-            # Next predict yhat by the features
             yhat = ridge(X_train, y_train, X_test,
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,
-                         rotate_x=True)['yhat']
+                         rotate_x=True,
+                         n_components=n_components)['yhat']
 
             # Evaluate against y and compute stats
             scores[time_ind] = corr2d_gpu(yhat, y_test)

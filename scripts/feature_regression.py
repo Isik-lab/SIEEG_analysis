@@ -9,7 +9,6 @@ from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
-from sklearn.model_selection import KFold
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -113,29 +112,10 @@ class FeatureRegression:
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict features from EEG', leave=True)
-        kf = KFold(n_splits=5, shuffle=True, random_state=0)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
 
-            # Determine the optimal number of components for the regression 
-            pc_scores = []
-            for n_components in range(1, X_train.shape[-1]+1):
-                comp_scores = []
-                for _, (train_index, test_index) in enumerate(kf.split(X_train)):
-                    yhat = ridge(X_train[train_index], y_train[train_index],
-                                X_train[test_index],
-                                alpha_start=self.alpha_start,
-                                alpha_stop=self.alpha_stop,
-                                device=self.device,
-                                rotate_x=True, 
-                                n_components=n_components)['yhat']
-                    comp_scores.append(corr2d_gpu(yhat, y_train[test_index]))
-                pc_scores.append(torch.vstack(comp_scores).mean(dim=0))
-            pc_scores = torch.vstack(pc_scores).mean(dim=1)
-            n_components = torch.argmax(pc_scores) + 1
-
-            # Next predict yhat by the features
             yhat = ridge(X_train, y_train, X_test,
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
