@@ -122,7 +122,7 @@ class FeatureRegression:
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,
-                         rotate_x=False)['yhat']
+                         rotate_x=True)['yhat']
 
             # Evaluate against y and compute stats
             scores[time_ind] = corr2d_gpu(yhat, y_test)

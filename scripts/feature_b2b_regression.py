@@ -97,11 +97,11 @@ class FeatureRegression:
         #Define y
         features = list(self.behavior_categories.keys())
         y_train, y_test, _ = dict_to_numpy(train, test, features)
-        y_knockout = dict()
+        y_knockout = {'train': dict(), 'test': dict()}
         for feature in features:
-            feature_knockout = copy(features)
+            feature_knockout = features.copy()
             feature_knockout.remove(feature)
-            y_knockout['train'][feature], y_knockout['test'][feature] = dict_to_numpy(train, test, feature_knockout)
+            y_knockout['train'][feature], y_knockout['test'][feature], _ = dict_to_numpy(train, test, feature_knockout)
 
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
@@ -122,49 +122,7 @@ class FeatureRegression:
                 cca.fit(X_train, y_knockout['train'][feature])
                 R2_knockout = cca.score(X_test, y_knockout['test'][feature])
                 R2_delta.append(R2_full - R2_knockout)
-            R2_delta = np.array(R2_delta)
-
-            # # Next predict yhat by the features
-            # G = torch.zeros((y_train.shape[1], X_train.shape[1]))
-            # H = torch.zeros((X_train.shape[1], X_train.shape[1]))
-
-            # inds = torch.arange(X_train.shape[0])
-            # n = int(X_train.shape[0] * .5)
-            # for resample in range(self.resamples):
-            #     inds = torch.randperm(X_train.shape[0])
-            #     sample1, sample2 = inds[:n], inds[n:]
-            #     G_current = ridge(y_train[sample1], X_train[sample1], 
-            #                   alpha_start=self.alpha_start,
-            #                   alpha_stop=self.alpha_stop,
-            #                   device=self.device,
-            #                   return_betas=True)['betas']
-            #     H = H + ridge(X_train[sample2], y_train[sample2] @ G_current,
-            #                   alpha_start=self.alpha_start,
-            #                   alpha_stop=self.alpha_stop,
-            #                   device=self.device,
-            #                   return_betas=True)['betas']
-            #     G = G + G_current
-            # # get the mean of G and H
-            # G = G / self.resamples
-            # H = H / self.resamples      
-            # print(f'{H.shape=}')
-            # scores[time_ind] = torch.diagonal(H)
-            
-            # YG = y_test @ G
-            # XH = X_test @ H
-            # R_full = corr2d_gpu(YH, y_test)
-            # print(f'{XG.shape=}')
-            # print(f'{YH.shape=}')
-
-            # R_delta = np.zeros_like(R_full)
-            # for i_feature in range(H.shape[0]):
-            #     H_ablated = H.clone()
-            #     H_ablated[:, i_feature] = 0 
-            #     # R_k = corr2d_gpu(X_test @ G, y_test @ H_ablated) 
-            #     YH_ablated = y_test @ H_ablated
-            #     print(f'{=}')
-            #     R_delta[i_feature] = R_full[i_feature] - R_k
-            # break 
+            scores[time_ind] = np.array(R2_delta)
 
         #     # Evaluate against y and compute stats
             # scores[time_ind] = corr2d_gpu(X_test @ h_hat, y_test @ g_hat)
