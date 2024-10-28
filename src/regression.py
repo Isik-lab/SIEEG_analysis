@@ -147,7 +147,7 @@ def preprocess(X_train, X_test, y_train, y_test):
     return X_train, X_test, y_train, y_test
 
 
-def pca_rotation(X_train, X_test, groups=None):
+def pca_rotation(X_train, X_test, groups=None, n_components=None):
     """_summary_
 
     Args:
@@ -156,6 +156,7 @@ def pca_rotation(X_train, X_test, groups=None):
         groups (numpy.array, optional ): if not None a 1D np.array with length equal to dim 1 of 
                                          X_train and X_test that defines the groups of the features
                                          Default is None
+        n_components: number of components to keeep from PCA
 
     Returns:
         X_train_rotated (torch.Tensor): rotated X train within group
@@ -168,16 +169,17 @@ def pca_rotation(X_train, X_test, groups=None):
 
             # In the regression, the # of features needs to differ from the # of samples
             # So this identifies the elbow if necessary with first PCA
-            if torch.sum(idx) > X_train.size()[0]: 
-                pca = PCA()
-                pca.fit(X_train[:, idx])
-                ev_ratio = pca.explained_variance_ratio_
-                kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
-                                      curve="convex", direction="decreasing",
-                                      interp_method="polynomial")
-                n_components = kneedle.knee
-            else:
-                n_components = int(torch.sum(idx))
+            if n_components is None: 
+                if torch.sum(idx) > X_train.size()[0]: 
+                    pca = PCA()
+                    pca.fit(X_train[:, idx])
+                    ev_ratio = pca.explained_variance_ratio_
+                    kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
+                                        curve="convex", direction="decreasing",
+                                        interp_method="polynomial")
+                    n_components = kneedle.knee
+                else:
+                    n_components = int(torch.sum(idx))
 
             pca = PCA(n_components=n_components)
             X_train_.append(pca.fit_transform(X_train[:, idx]))
@@ -185,17 +187,17 @@ def pca_rotation(X_train, X_test, groups=None):
             groups_.append(torch.ones(n_components)*group)
         return torch.cat(X_train_, dim=1), torch.cat(X_test_, dim=1), torch.cat(groups_)
     else:
-
-        if X_train.size()[0] < X_train.size()[1]: 
-            pca = PCA()
-            pca.fit(X_train)
-            ev_ratio = pca.explained_variance_ratio_
-            kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
-                                    curve="convex", direction="decreasing",
-                                    interp_method="polynomial")
-            n_components = kneedle.knee
-        else:
-            n_components = X_train.size()[1]
+        if n_components is None: 
+            if X_train.size()[0] < X_train.size()[1]: 
+                pca = PCA()
+                pca.fit(X_train)
+                ev_ratio = pca.explained_variance_ratio_
+                kneedle = KneeLocator(np.arange(len(ev_ratio))+1, ev_ratio,
+                                        curve="convex", direction="decreasing",
+                                        interp_method="polynomial")
+                n_components = kneedle.knee
+            else:
+                n_components = X_train.size()[1]
 
         pca = PCA(n_components=n_components)
         return pca.fit_transform(X_train), pca.transform(X_test), groups
@@ -268,6 +270,7 @@ def ridge(X, y,
           X_test=None, groups=None, 
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
+          n_components=None,
           rotate_x=False, return_alpha=False, return_betas=False):
     """Use deepjuice TorchRidgeGCV to perform the regression 
     and predict the response in the held out data
@@ -284,12 +287,13 @@ def ridge(X, y,
         rotate_x (bool, optional): rotate X using PCA prior to fitting regression
         return_alpha (bool, optional): return fitted alphas. Defaults to False.
         return_betas (bool, optional): return beta coefficients. Defaults to False.
+        n_components (int, optional): define the number of components to use in PCA. Defaults to None. 
     
     Returns: 
         y_hat (torch.Tensor): predicted y values
     """
     if rotate_x and X_test is not None:
-        X_train, X_test, _ = pca_rotation(X, X_test, groups)
+        X, X_test, _ = pca_rotation(X, X_test, groups, n_components)
 
     pipe = TorchRidgeGCV(alphas=np.logspace(alpha_start, alpha_stop),
                         alpha_per_target=True,
