@@ -5,11 +5,13 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
+from src.stats import perm_unique_variance_gpu as perm_uv
+from src.stats import bootstrap_unique_variance_gpu as boot_uv
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import KFold
+from torchmetrics.functional import r2_score, explained_variance
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -34,29 +36,42 @@ def are_all_elements_present(list1, list2):
     return all(elem in list2 for elem in list1)
 
 
+def get_scoring_method(score_type=None):
+    return SCORE_FUNCTIONS[score_type]
+
+
+SCORE_FUNCTIONS = {'r2_score': r2_score,
+                   'explained_variance': explained_variance}
+
+
 class Back2Back:
     def __init__(self, args):
         self.process = 'Back2Back'
-        self.y_names = json.loads(args.y_names)
-        self.x1 = json.loads(args.x1)
-        self.x2 = json.loads(args.x2)
         self.roi_mean = args.roi_mean
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
         self.n_perm = args.n_perm
+        self.feature_ablation = args.feature_to_ablate
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x2-{'-'.join(self.x2)}.parquet'
-        print(vars(self)) 
+        self.out_base = f'{str(Path(self.eeg_file).stem)}_feature-{self.feature_ablation}.parquet'
+        self.out_name = str(Path(self.out_dir).joinpath(self.out_base))
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
-        self.alexnet = args.alexnet
+        self.alexnet = args.alexnet        
+        self.random_state = args.random_state
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
                                     'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
+        self.X2_names_all = ['alexnet', 'moten'] + list(self.behavior_categories)
+        self.X2_name_ablate = self.X2_names_all.copy()
+        self.X2_name_ablate.remove(self.feature_ablation)
+        print(vars(self)) 
+        self.score_func = get_scoring_method(self.scoring)
+
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
@@ -116,45 +131,51 @@ class Back2Back:
             train[feature], test[feature] = feature_scaler(train[feature], test[feature], device=self.device)
             train[feature], test[feature], _ = regression.pca_rotation(train[feature], test[feature])
             print(f'{feature} PCs: {train[feature].size()[1]}')
-        X2_train, X2_test, group2 = dict_to_tensor(train, test, self.x2)
+        X2_train_all, X2_test_all, _ = dict_to_tensor(train, test, self.X2_names_all)
+        X2_train_ablate, X2_test_ablate, _ = dict_to_tensor(train, test, self.X2_name_ablate)
 
-        reg1_scores = []
-        reg2_scores, reg2_scores_null, reg2_scores_var = {}, [], []
+        reg1_scores, reg2_scores = {}, {}
+        reg2_scores_null, reg2_scores_var = [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc='Back to back regression', leave=True)
+        kf = KFold(n_splits=5, shuffle=True, random_state=self.random_state)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X1 = train['eeg'][time_ind]
             yhat_train, scores_cv = [], []
-            for train_index, test_index in KFold(n_splits=5).split(X1):
+            for train_index, test_index in kf.split(X1):
                 X1_train, X1_test = feature_scaler(X1[train_index], X1[test_index])
-                y_train_cv, y_test_cv = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
-                yhat_cv = ridge(X1_train, y_train_cv, X1_test,  
+                y_cv_train, y_cv_test = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
+                yhat_cv = ridge(X1_train, y_cv_train, X1_test,  
                                  alpha_start=self.alpha_start,
                                  alpha_stop=self.alpha_stop,
                                  device=self.device,
                                  rotate_x=True)['yhat']
-                scores_cv.append(corr2d_gpu(yhat_cv, y_test_cv))
+                scores_cv.append(self.score_func(yhat_cv, y_cv_test, multioutput='raw_values'))
                 yhat_train.append(yhat_cv)
             yhat_train = torch.cat(yhat_train)
-            reg1_scores.append(torch.nanmean(torch.stack(scores_cv), dim=0))
+            reg1_scores[time_ind] = torch.nanmean(torch.stack(scores_cv), dim=0)
 
-            # Next predict yhat by the features
-            if X2_train.size()[-1] > 1:
-                yhat = ridge(X2_train, yhat_train, X2_test,
-                            alpha_start=self.alpha_start,
-                            alpha_stop=self.alpha_stop,
-                            device=self.device,
-                            rotate_x=False)['yhat']
-            else:
-                yhat = ols(X2_train, yhat_train, X2_test,
-                           rotate_x=False)['yhat']
+            # Fit a second regression 
+            yhat_all = ridge(X2_train_all, yhat_train, X2_test_all,
+                        alpha_start=self.alpha_start,
+                        alpha_stop=self.alpha_stop,
+                        device=self.device,
+                        rotate_x=False)['yhat']
+            yhat_ablate = ridge(X2_train_ablate, yhat_train, X2_test_ablate,
+                        alpha_start=self.alpha_start,
+                        alpha_stop=self.alpha_stop,
+                        device=self.device,
+                        rotate_x=False)['yhat']
 
             # Evaluate against y and compute stats
-            reg2_scores[time_ind] = corr2d_gpu(yhat, y_test)
-            reg2_scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-            reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-        return reg1_scores, reg2_scores, torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
+            reg2_scores[time_ind] = self.score_func(yhat_all, y_test, multioutput='raw_values') -  self.score_func(yhat_ablate, y_test, multioutput='raw_values')
+            perm = perm_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
+            var = boot_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
+            reg2_scores_null.append(torch.unsqueeze(perm, 2))
+            reg2_scores_var.append(torch.unsqueeze(var, 2))
+        return reg1_scores, reg2_scores, \
+        torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -165,7 +186,7 @@ class Back2Back:
     def run(self):
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split(behavior, other_data)
-        _, scores, scores_null, scores_var = self.b2b_regression(train, test)
+        cv_scores, scores, scores_null, scores_var = self.b2b_regression(train, test)
         results = self.reorganize_results(scores, scores_null, scores_var, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
@@ -185,22 +206,20 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
     parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
-    parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
-                        help='a list of data names to be used as regression target')
-    parser.add_argument('--x1', '-x1', type=str, default='["eeg"]',
-                        help='a list of data names for fitting the first regression')
-    parser.add_argument('--x2', '-x2', type=str, default='["alexnet"]',
-                        help='a list of data names for fitting the second regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
-    parser.add_argument('--scoring', type=str, default='pearsonr',
-                        help='scoring function. see DeepJuice TorchRidgeGV for options')
+    parser.add_argument('--scoring', type=str, default='r2_score',
+                        help='scoring function. Options are r2_score or explained_variance')
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
+    parser.add_argument('--random_state', type=int, default=0,
+                        help='the random state for CV splitting in regression 1')
+    parser.add_argument('--feature_to_ablate', '-x', type=str, default='expanse',
+                        help='the feature that you want to calculate the unique variance for')
     args = parser.parse_args()
     Back2Back(args).run()
 

@@ -20,7 +20,7 @@ fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding roi_bin_decoding full_brain back_to_back back_to_back_swapped feature_bin_decoding
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -110,26 +110,6 @@ python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials
 	done; \
 	done
 	touch $(back_to_back)/.done
-
-
-#Compute b2b regression with annotated features first then EEG 
-back_to_back_swapped: $(back_to_back_swapped)/.done $(eeg_preprocess)
-$(back_to_back_swapped)/.done: 
-	mkdir -p $(back_to_back_swapped)
-	for x in $(features); do \
-	for s in $(eeg_subs); do \
-		echo -e "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
-#SBATCH --job-name=back_to_back_swapped\n\
-#SBATCH --time=45:00\n\
-#SBATCH --cpus-per-task=12\n\
-ml anaconda\n\
-conda activate eeg\n\
-python $(project_folder)/scripts/back_to_back_swapped.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x1 '[\"$${x}\"]'" | sbatch; \
-	done; \
-	done
-	touch $(back_to_back_swapped)/.done
 
 
 #Compute b2b regression with EEG first then annotated features

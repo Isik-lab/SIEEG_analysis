@@ -7,74 +7,7 @@ from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
 from scipy import ndimage
 import torch
-
-class CKA(object):
-    """inspired by
-    https://github.com/yuanli2333/CKA-Centered-Kernel-Alignment/blob/master/CKA.py
-    code taken from 
-    https://github.com/jayroxis/CKA-similarity/blob/main/CKA.py
-    
-    Args:
-        object (_type_): _description_
-    """
-    def __init__(self):
-        pass 
-    
-    def centering(self, K):
-        n = K.shape[0]
-        unit = np.ones([n, n])
-        I = np.eye(n)
-        H = I - unit / n
-        return np.dot(np.dot(H, K), H) 
-
-    def rbf(self, X, sigma=None):
-        GX = np.dot(X, X.T)
-        KX = np.diag(GX) - GX + (np.diag(GX) - GX).T
-        if sigma is None:
-            mdist = np.median(KX[KX != 0])
-            sigma = math.sqrt(mdist)
-        KX *= - 0.5 / (sigma * sigma)
-        KX = np.exp(KX)
-        return KX
- 
-    def kernel_HSIC(self, X, Y, sigma):
-        return np.sum(self.centering(self.rbf(X, sigma)) * self.centering(self.rbf(Y, sigma)))
-
-    def linear_HSIC(self, X, Y):
-        L_X = X @ X.T
-        L_Y = Y @ Y.T
-        return np.sum(self.centering(L_X) * self.centering(L_Y))
-
-    def linear_CKA(self, X, Y):
-        hsic = self.linear_HSIC(X, Y)
-        var1 = np.sqrt(self.linear_HSIC(X, X))
-        var2 = np.sqrt(self.linear_HSIC(Y, Y))
-
-        return hsic / (var1 * var2)
-
-    def kernel_CKA(self, X, Y, sigma=None):
-        hsic = self.kernel_HSIC(X, Y, sigma)
-        var1 = np.sqrt(self.kernel_HSIC(X, X, sigma))
-        var2 = np.sqrt(self.kernel_HSIC(Y, Y, sigma))
-
-        return hsic / (var1 * var2)
-
-
-def r2_score_gpu(y, y_hat, dim=0):    
-    # Calculate the mean of actual values
-    y_mean = torch.mean(y, dim=dim, keepdim=True)
-    
-    # Calculate the total sum of squares (proportional to variance of the data)
-    total_sum_of_squares = torch.sum((y - y_mean) ** 2, dim=dim)
-    
-    # Calculate the residual sum of squares (how far off the predictions are)
-    residual_sum_of_squares = torch.sum((y - y_hat) ** 2, dim=dim)
-    
-    # Calculate R^2
-    r2 = 1 - (residual_sum_of_squares / total_sum_of_squares)
-    
-    return r2
-
+from torchmetrics.functional import r2_score, explained_variance
 
 
 def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
@@ -363,7 +296,7 @@ def bootstrap3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False)
     return r_var
 
 
-def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
+def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
                              n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
@@ -382,14 +315,13 @@ def perm_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         inds = torch.randperm(dim[0], generator=g)
 
         # Compute the correlations
-        r2_a = sign_square(corr2d_gpu(y_hat_a, y_true[inds]))
-        r2_b = sign_square(corr2d_gpu(y_hat_b, y_true[inds]))
-        r2_ab = sign_square(corr2d_gpu(y_hat_ab, y_true[inds]))
-        r_null[i, :] = (r2_a + r2_b) - r2_ab
+        r2_ab = score_func(y_hat_ab, y_true[inds], multioutput='raw_values')
+        r2_a = score_func(y_hat_a, y_true[inds], multioutput='raw_values')
+        r_null[i, :] = r2_ab - r2_a
     return r_null
 
 
-def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
+def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
                                   n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
@@ -408,10 +340,9 @@ def bootstrap_shared_variance_gpu(y_hat_a, y_hat_b, y_hat_ab, y_true,
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
 
         # Compute the correlations
-        r2_a = sign_square(corr2d_gpu(y_hat_a[inds], y_true[inds]))
-        r2_b = sign_square(corr2d_gpu(y_hat_b[inds], y_true[inds]))
-        r2_ab = sign_square(corr2d_gpu(y_hat_ab[inds], y_true[inds]))
-        r_var[i, :] = (r2_a + r2_b) - r2_ab
+        r2_ab = score_func(y_hat_ab[inds], y_true[inds], multioutput='raw_values')
+        r2_a = score_func(y_hat_a[inds], y_true[inds], multioutput='raw_values')
+        r_var[i, :] = r2_ab - r2_a
     return r_var
 
 
