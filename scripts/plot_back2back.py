@@ -11,19 +11,15 @@ import os
 from matplotlib.lines import Line2D
 
 
-swapped = False
-if swapped: 
-    in_file_prefix = f'data/interim/Back2Back_swapped'
-    out_file_prefix = 'data/interim/PlotBack2Back/swapped_'
-else:
-    in_file_prefix = f'data/interim/Back2Back'
-    out_file_prefix = 'data/interim/PlotBack2Back/'
+in_file_prefix = f'data/interim/Back2Back'
+out_file_prefix = 'data/interim/PlotBack2Back/'
+Path(out_file_prefix).mkdir(exist_ok=True)
 
 rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
-features = ['alexnet', 'moten', 'expanse', 'object',
-            'agent_distance', 'facingness',
-            'joint_action','communication', 
-            'valence', 'arousal']
+features = ['alexnet']#, 'moten', 'expanse', 'object',
+            # 'agent_distance', 'facingness',
+            # 'joint_action','communication', 
+            # 'valence', 'arousal']
 roi_titles = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
 feature_titles = ['AlexNet-conv2', 'motion energy', 
                   'spatial expanse', 'object directedness',
@@ -81,9 +77,9 @@ if not os.path.isfile(f'{out_file_prefix}plot.csv'):
         stats_df['feature'] = feature
         back2back_df.append(stats_df)
     back2back_df = pd.concat(back2back_df, ignore_index=True).reset_index(drop=True)
-    back2back_df.to_csv(f'{out_file_prefix}plot.csv', index=False)
+    back2back_df.to_csv(f'{out_file_prefix}/plot.csv', index=False)
 else:
-    back2back_df = pd.read_csv(f'{out_file_prefix}plot.csv')
+    back2back_df = pd.read_csv(f'{out_file_prefix}/plot.csv')
 
 
 full_stats_df = back2back_df.loc[back2back_df['feature'].isin(features)].reset_index(drop=True)
@@ -149,7 +145,7 @@ for roi, (roi_name, roi_df) in zip(roi_titles, full_stats_df.groupby('roi_name',
 
     fig.suptitle(roi)
     plt.tight_layout()
-    plt.savefig(f'{out_file_prefix}{roi}.pdf')
+    plt.savefig(f'{out_file_prefix}/{roi}.pdf')
 
 back2back_df = back2back_df.loc[back2back_df['roi_name'].isin(reduced_rois)].reset_index(drop=True)
 back2back_df = back2back_df.loc[back2back_df['feature'].isin(reduced_features)].reset_index(drop=True)
@@ -216,4 +212,4 @@ for iroi, (roi_name, cur_df) in enumerate(back2back_df.groupby('roi_name', obser
 axes[0].legend(custom_lines, reduced_features_legends,
             loc='upper right', fontsize='18')
 ax.set_xlabel('Time (ms)')
-plt.savefig(f'{out_file_prefix}feature-roi_plot.pdf')
+plt.savefig(f'{out_file_prefix}/feature-roi_plot.pdf')

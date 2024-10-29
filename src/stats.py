@@ -195,7 +195,7 @@ def sign_square(a):
         raise ValueError("Input must be a NumPy array or a PyTorch tensor.")
 
 
-def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
+def perm_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
     dim = y_hat.size()
@@ -213,10 +213,7 @@ def perm_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        if square:
-            r_null[i, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
-        else:
-            r_null[i, :] = corr2d_gpu(y_hat, y_true[inds])
+        r_null[i, :] = score_func(y_hat, y_true[inds])
     return r_null
 
 
@@ -246,7 +243,7 @@ def perm3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
 
 
 
-def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
+def bootstrap_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False, square=False):
     import torch
     g = torch.Generator()
     dim = y_hat.size()
@@ -264,10 +261,7 @@ def bootstrap_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        if square:
-            r_var[i, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
-        else:
-            r_var[i, :] = corr2d_gpu(y_hat[inds], y_true[inds])
+        r_var[i, :] = sign_square(score_func(y_hat[inds], y_true[inds]))
     return r_var
 
 
