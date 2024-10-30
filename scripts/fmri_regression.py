@@ -5,11 +5,13 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
+from src.stats import perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import LeaveOneOut
+from torchmetrics.functional import r2_score, explained_variance
+
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -34,6 +36,14 @@ def are_all_elements_present(list1, list2):
     return all(elem in list2 for elem in list1)
 
 
+def get_scoring_method(score_type=None):
+    return SCORE_FUNCTIONS[score_type]
+
+
+SCORE_FUNCTIONS = {'r2_score': r2_score,
+                   'explained_variance': explained_variance}
+
+
 class fMRIRegression:
     def __init__(self, args):
         self.process = 'fMRIRegression'
@@ -56,16 +66,20 @@ class fMRIRegression:
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
                                     'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
+        self.score_func = get_scoring_method(self.scoring)
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
         fmri, fmri_meta = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean, smoothing=self.smoothing)
         
+        # Check EEG trials 
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
         eeg_filtered, behavior, [fmri] = loading.check_videos(eeg_raw, behavior, [fmri])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
+        
+        # Transform EEG to dict 
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
         time_map = {}
@@ -127,17 +141,21 @@ class fMRIRegression:
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,
-                         rotate_x=True,
-                         n_components=n_components)['yhat']
+                         rotate_x=True)['yhat']
 
-            # Evaluate against y and compute stats
-            scores[time_ind] = corr2d_gpu(yhat, y_test)
-            if self.roi_mean:
-                scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm), 2))
-                scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm), 2))
+            # Evaluate against y
+            scores[time_ind] = self.score_func(yhat, y_test, multioutput='raw_values')
 
-        if self.roi_mean:
-            return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+            # Compute states 
+            if self.roi_mean: 
+                perm = perm_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
+                var = bootstrap_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
+                scores_null.append(torch.unsqueeze(perm, 2))
+                scores_var.append(torch.unsqueeze(var, 2))
+        if self.roi_mean: 
+            scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
+            scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
+            return scores, scores_null, scores_var
         else:
             return scores
 
@@ -187,7 +205,7 @@ def main():
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')      
-    parser.add_argument('--scoring', type=str, default='pearsonr',
+    parser.add_argument('--scoring', type=str, default='r2_score',
                         help='scoring function. see DeepJuice TorchRidgeGV for options')         
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')

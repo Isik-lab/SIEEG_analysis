@@ -10,48 +10,6 @@ import torch
 from torchmetrics.functional import r2_score, explained_variance
 
 
-def filter_r(rs, ps, p_crit=0.05, correct=True, threshold=True):
-    rs_out = rs.copy()
-    if correct:
-        _, ps_corrected, _, _ = multipletests(ps, method='fdr_bh')
-    else:
-        ps_corrected = ps.copy()
-
-    if threshold:
-        rs_out[ps_corrected >= p_crit] = 0.
-    else:
-        rs_out[rs_out < 0.] = 0.
-    return rs_out, ps_corrected
-
-
-def corr(x, y):
-    x_m = x - np.nanmean(x)
-    y_m = y - np.nanmean(y)
-    numer = np.nansum(x_m * y_m)
-    denom = np.sqrt(np.nansum(x_m * x_m) * np.nansum(y_m * y_m))
-    if denom != 0:
-        return numer / denom
-    else:
-        return np.nan
-
-
-def corr2d(x, y):
-    x_m = x - np.nanmean(x, axis=0)
-    y_m = y - np.nanmean(y, axis=0)
-
-    numer = np.nansum((x_m * y_m), axis=0)
-    denom = np.sqrt(np.nansum((x_m * x_m), axis=0) * np.nansum((y_m * y_m), axis=0))
-    denom[denom == 0] = np.nan
-    return numer / denom
-
-
-def mantel_permutation(a, i):
-    a = squareform(a)
-    inds = np.random.permutation(a.shape[0])
-    a_shuffle = a[inds][:, inds]
-    return squareform(a_shuffle)
-
-
 def calculate_p(r_null, r_true, n_perm, H0):
     # Get the p-value depending on the type of test
     denominator = n_perm + 1
@@ -65,134 +23,6 @@ def calculate_p(r_null, r_true, n_perm, H0):
         numerator = np.sum(r_true < r_null, axis=0) + 1
         p_ = 1 - (numerator / denominator)
     return p_
-
-
-def bootstrap(a, b, n_perm=int(5e3), square=True, verbose=False):
-    # Randomly sample and recompute r^2 n_perm times
-    if verbose:
-        iter_loop = tqdm(range(n_perm), total=n_perm, desc='Bootstapped variance')
-    else:
-        iter_loop = range(n_perm)
-
-    if a.ndim > 1 :
-        r2_var = np.zeros((n_perm, a.shape[-1]))
-        for i in iter_loop:
-            inds = np.random.default_rng(i).choice(np.arange(a.shape[0]),
-                                                   size=a.shape[0])
-            if a.ndim == 3:
-                a_sample = a[inds, ...].reshape(a.shape[0] * a.shape[1], a.shape[-1])
-                b_sample = b[inds, ...].reshape(b.shape[0] * b.shape[1], b.shape[-1])
-            else:
-                a_sample = a[inds, :]
-                b_sample = b[inds, :]
-            r = corr2d(a_sample, b_sample)
-            r2_var[i, :] = sign_square(r) if square else r 
-    else:
-        r2_var = np.zeros((n_perm,))
-        for i in iter_loop:
-            inds = np.random.default_rng(i).choice(np.arange(a.shape[0]),
-                                                   size=a.shape[0])
-            r = corr(a[inds], b[inds])
-            r2_var[i] = sign_square(r) if square else r 
-    return r2_var
-
-
-def bootstrap_unique_variance(a, b, c, n_perm=int(5e3)):
-    # Randomly sample and recompute r^2 n_perm times
-    r2_var = np.zeros((n_perm, a.shape[-1]))
-    for i in tqdm(range(n_perm), total=n_perm):
-        inds = np.random.default_rng(i).choice(np.arange(a.shape[0]),
-                                               size=a.shape[0])
-        if a.ndim == 3:
-            a_sample = a[inds, ...].reshape(a.shape[0] * a.shape[1], a.shape[-1])
-            b_sample = b[inds, ...].reshape(b.shape[0] * b.shape[1], b.shape[-1])
-            c_sample = c[inds, ...].reshape(c.shape[0] * c.shape[1], c.shape[-1])
-        else:  # a.ndim == 2:
-            a_sample = a[inds, :]
-            b_sample = b[inds, :]
-            c_sample = c[inds, :]
-        r2_var[i, :] = corr2d(a_sample, b_sample)**2 - corr2d(a_sample, c_sample)**2
-    return r2_var
-
-
-def perm(a, b, n_perm=int(5e3), square=True, verbose=False):
-    if a.ndim > 1:
-        r2_null = np.zeros((n_perm, a.shape[-1]))
-        if a.ndim == 3:
-            a_not_shuffle = a.reshape(a.shape[0] * a.shape[1], a.shape[-1])
-            b = b.reshape(b.shape[0] * b.shape[1], b.shape[-1])
-    else: #a.ndim == 1:
-        r2_null = np.zeros((n_perm,))
-
-    if verbose:
-        iter_loop = tqdm(range(n_perm), total=n_perm, desc='Permutation null')
-    else:
-        iter_loop = range(n_perm)
-
-    for i in iter_loop:
-        inds = np.random.default_rng(i).permutation(a.shape[0])
-        if a.ndim == 3:
-            a_shuffle = a[inds, :, :].reshape(a.shape[0] * a.shape[1], a.shape[-1])
-        elif a.ndim == 2:
-            a_shuffle = a[inds, :]
-        else:# a.ndim == 1:
-            a_shuffle = a[inds]
-
-        if a.ndim > 1:
-            r = corr2d(a_shuffle, b)
-        else:
-            r = corr(a_shuffle, b)
-
-        if a.ndim > 1:
-            r2_null[i, :] = sign_square(r) if square else r 
-        else:
-            r2_null[i] = sign_square(r) if square else r 
-    return r2_null
-
-
-def perm_unique_variance(a, b, c, n_perm=int(5e3), H0='greater'):
-    if a.ndim == 3:
-        a_not_shuffle = a.reshape(a.shape[0] * a.shape[1], a.shape[-1])
-        b = b.reshape(b.shape[0] * b.shape[1], b.shape[-1])
-        c = c.reshape(c.shape[0] * c.shape[1], c.shape[-1])
-        r2 = corr2d(a_not_shuffle, b)**2 - corr2d(a_not_shuffle, c)**2
-    else:
-        r2 = corr2d(a, b)**2 - corr2d(a, c)**2
-
-    # Shuffle a and recompute r^2 n_perm times
-    r2_null = np.zeros((n_perm, a.shape[-1]))
-    for i in tqdm(range(n_perm), total=n_perm):
-        inds = np.random.default_rng(i).permutation(a.shape[0])
-        if a.ndim == 3:
-            a_shuffle = a[inds, :, :].reshape(a.shape[0] * a.shape[1], a.shape[-1])
-        else:  # a.ndim == 2:
-            a_shuffle = a[inds, :]
-        r2_null[i, :] = corr2d(a_shuffle, b)**2 - corr2d(a_shuffle, c)**2
-
-    p = calculate_p(r2_null, r2, n_perm, H0)
-    return r2, p, r2_null
-
-
-def corr2d_gpu(x, y, dim=0):
-    import torch
-    x_m = x - torch.nanmean(x, dim=dim)
-    y_m = y - torch.nanmean(y, dim=dim)
-
-    numer = torch.nansum((x_m * y_m), dim=dim)
-    denom = torch.sqrt(torch.nansum((x_m * x_m), dim=dim) * torch.nansum((y_m * y_m), dim=dim))
-    denom[denom == 0] = float('nan')
-    return numer / denom
-
-
-def sign_square(a):
-    if isinstance(a, np.ndarray):
-        # Use np.sign if a is a NumPy array
-        return np.sign(a) * (a ** 2)
-    elif torch.is_tensor(a):
-        # Use torch.sign if a is a PyTorch tensor
-        return torch.sign(a) * (a ** 2)
-    else:
-        raise ValueError("Input must be a NumPy array or a PyTorch tensor.")
 
 
 def perm_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False):
@@ -213,34 +43,8 @@ def perm_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = score_func(y_hat, y_true[inds])
+        r_null[i, :] = score_func(y_hat, y_true[inds], multioutput='raw_values')
     return r_null
-
-
-def perm3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
-    import torch
-    g = torch.Generator()
-    dim = y_hat.size()
-
-    if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
-    else:
-        iterator = range(n_perm)
-
-    r_null = torch.zeros((n_perm, dim[-2], dim[-1]))
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Permute the indices
-        inds = torch.randperm(dim[0], generator=g)
-        
-        # Compute the correlation
-        if square:
-            r_null[i, :, :] = sign_square(corr2d_gpu(y_hat, y_true[inds]))
-        else:
-            r_null[i, :, :] = corr2d_gpu(y_hat, y_true[inds])
-    return r_null
-
 
 
 def bootstrap_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False, square=False):
@@ -261,32 +65,7 @@ def bootstrap_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False, squ
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = sign_square(score_func(y_hat[inds], y_true[inds]))
-    return r_var
-
-
-def bootstrap3d_gpu(y_hat, y_true, n_perm=int(5e3), verbose=False, square=False):
-    import torch
-    g = torch.Generator()
-    dim = y_hat.size()
-
-    if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
-    else:
-        iterator = range(n_perm)
-
-    r_var = torch.zeros((n_perm, dim[-2], dim[-1]))
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Generate a random sample of indices
-        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
-
-        # Compute the correlation
-        if square:
-            r_var[i, :, :] = sign_square(corr2d_gpu(y_hat[inds], y_true[inds]))
-        else:
-            r_var[i, :, :] = corr2d_gpu(y_hat[inds], y_true[inds])
+        r_var[i, :] = score_func(y_hat[inds], y_true[inds], multioutput='raw_values')
     return r_var
 
 

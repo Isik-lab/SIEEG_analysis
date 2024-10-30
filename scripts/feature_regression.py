@@ -5,7 +5,7 @@ from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import corr2d_gpu, perm_gpu, bootstrap_gpu
+from src.stats import perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
@@ -64,11 +64,14 @@ class FeatureRegression:
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
         
+        # Check EEG trials 
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
         eeg_filtered, behavior = loading.check_videos(eeg_raw, behavior)
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
+
+        # Transform EEG to dict 
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
         time_map = {}
@@ -132,11 +135,17 @@ class FeatureRegression:
                          device=self.device,
                          rotate_x=True)['yhat']
 
-            # Evaluate against y and compute stats
-            scores[time_ind] = self.score_func(yhat, y_test)
-            scores_null.append(torch.unsqueeze(perm_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func), 2))
-            scores_var.append(torch.unsqueeze(bootstrap_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func), 2))
-        return scores, torch.cat(scores_null, 2).cpu().detach().numpy(), torch.cat(scores_var, 2).cpu().detach().numpy()
+            # Evaluate against y
+            scores[time_ind] = self.score_func(yhat, y_test, multioutput='raw_values')
+
+            # Compute states 
+            perm = perm_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
+            var = bootstrap_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
+            scores_null.append(torch.unsqueeze(perm, 2))
+            scores_var.append(torch.unsqueeze(var, 2))
+        scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
+        scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
+        return scores, scores_null, scores_var
 
     def save_df(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -149,6 +158,7 @@ class FeatureRegression:
         print(behavior.head())
         train, test = self.split_and_norm(behavior, other_data)
         scores, scores_null, scores_var = self.standard_regression(train, test)
+        print(f'{scores_null.shape=}')
         results = self.reorganize_results(scores, time_map, scores_null, scores_var)
         print(results.head())
         self.mk_out_dir()
