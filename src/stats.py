@@ -7,7 +7,25 @@ from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
 from scipy import ndimage
 import torch
-from torchmetrics.functional import r2_score, explained_variance
+from torchmetrics.functional import pearson_corrcoef, r2_score, explained_variance
+
+
+SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef, 
+                   'r2_score': r2_score,
+                   'explained_variance': explained_variance}
+
+
+def compute_score(y_true, y_pred, score_type='r2_score'):
+    if score_type == 'r2_score' or score_type == 'explained_variance':
+        kwargs = {'multioutput': 'raw_values'}
+    else:
+        kwargs = {}
+    
+    if score_type not in SCORE_FUNCTIONS:
+        raise ValueError(f'Unknown score_type: {score_type}; ' +
+                         f'Choose from: {SCORE_FUNCTIONS.keys()}')
+    
+    return SCORE_FUNCTIONS[score_type](y_pred, y_true, **kwargs)
 
 
 def calculate_p(r_null, r_true, n_perm, H0):
@@ -25,10 +43,10 @@ def calculate_p(r_null, r_true, n_perm, H0):
     return p_
 
 
-def perm_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False):
+def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
-    dim = y_hat.size()
+    dim = y_pred.size()
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
@@ -43,14 +61,14 @@ def perm_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = score_func(y_hat, y_true[inds], multioutput='raw_values')
+        r_null[i, :] = compute_score(y_true, y_pred[inds], score_type=score_type)
     return r_null
 
 
-def bootstrap_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False, square=False):
+def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, square=False):
     import torch
     g = torch.Generator()
-    dim = y_hat.size()
+    dim = y_pred.size()
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
@@ -65,7 +83,7 @@ def bootstrap_gpu(y_hat, y_true, score_func, n_perm=int(5e3), verbose=False, squ
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = score_func(y_hat[inds], y_true[inds], multioutput='raw_values')
+        r_var[i, :] = compute_score(y_true[inds], y_pred[inds], score_type=score_type)
     return r_var
 
 

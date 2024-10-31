@@ -136,7 +136,6 @@ def check_videos(eeg_df, annotation_df, other=None):
         return eeg_out, annot_out, other_out
 
 
-
 def strip_eeg(eeg_df):
     """_summary_
 

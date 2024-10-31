@@ -10,38 +10,8 @@ from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import LeaveOneOut
-from torchmetrics.functional import r2_score, explained_variance
-
-
-
-def dict_to_tensor(train_dict, test_dict, keys):
-    def list_to_tensor(l):
-        return torch.hstack(tuple(l))
-
-    train_out, test_out, groups = [], [], []
-    for i_group, key in enumerate(keys):
-        if train_dict[key].ndim > 1: 
-            train_out.append(train_dict[key])
-            test_out.append(test_dict[key])
-            group_vec = torch.ones(test_dict[key].size()[1])*i_group
-        else: 
-            train_out.append(torch.unsqueeze(train_dict[key], 1))
-            test_out.append(torch.unsqueeze(test_dict[key], 1))
-            group_vec = torch.tensor([i_group])
-        groups.append(group_vec)
-    return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
-
-
-def are_all_elements_present(list1, list2):
-    return all(elem in list2 for elem in list1)
-
-
-def get_scoring_method(score_type=None):
-    return SCORE_FUNCTIONS[score_type]
-
-
-SCORE_FUNCTIONS = {'r2_score': r2_score,
-                   'explained_variance': explained_variance}
+from src.stats import compute_score
+from src.tools import dict_to_tensor
 
 
 class fMRIRegression:
@@ -66,7 +36,6 @@ class fMRIRegression:
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
                                     'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
-        self.score_func = get_scoring_method(self.scoring)
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
@@ -114,21 +83,22 @@ class fMRIRegression:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+        if scores_null: 
+            scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+            scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+            scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+            scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+            scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+            scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+            results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
 
-        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def standard_regression(self, train, test):
         #Define y
-        y_train, y_test, group2 = dict_to_tensor(train, test, ['fmri'])
+        y_train, y_true, group2 = dict_to_tensor(train, test, ['fmri'])
 
         scores, scores_null, scores_var = {}, [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
@@ -137,19 +107,19 @@ class fMRIRegression:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_train, X_test = train['eeg'][time_ind], test['eeg'][time_ind]
 
-            yhat = ridge(X_train, y_train, X_test,
+            y_pred = ridge(X_train, y_train, X_test,
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,
                          rotate_x=True)['yhat']
 
             # Evaluate against y
-            scores[time_ind] = self.score_func(yhat, y_test, multioutput='raw_values')
+            scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring)
 
             # Compute states 
             if self.roi_mean: 
-                perm = perm_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
-                var = bootstrap_gpu(yhat, y_test, n_perm=self.n_perm, score_func=self.score_func)
+                perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring)
+                var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring)
                 scores_null.append(torch.unsqueeze(perm, 2))
                 scores_var.append(torch.unsqueeze(var, 2))
         if self.roi_mean: 
@@ -205,8 +175,8 @@ def main():
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')      
-    parser.add_argument('--scoring', type=str, default='r2_score',
-                        help='scoring function. see DeepJuice TorchRidgeGV for options')         
+    parser.add_argument('--scoring', type=str, default='pearsonr',
+                        help='scoring function. Options are pearsonr, r2_score, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     args = parser.parse_args()

@@ -2,6 +2,24 @@ import torch
 import numpy as np
 
 
+def dict_to_tensor(train_dict, test_dict, keys):
+    def list_to_tensor(l):
+        return torch.hstack(tuple(l))
+
+    train_out, test_out, groups = [], [], []
+    for i_group, key in enumerate(keys):
+        if train_dict[key].ndim > 1: 
+            train_out.append(train_dict[key])
+            test_out.append(test_dict[key])
+            group_vec = torch.ones(test_dict[key].size()[1])*i_group
+        else: 
+            train_out.append(torch.unsqueeze(train_dict[key], 1))
+            test_out.append(torch.unsqueeze(test_dict[key], 1))
+            group_vec = torch.tensor([i_group])
+        groups.append(group_vec)
+    return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
+
+
 def to_torch(arrays, device):
     if isinstance(arrays, list):
         return [to_torch(array, device) for array in arrays]

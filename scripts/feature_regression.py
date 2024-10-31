@@ -9,7 +9,7 @@ from src.stats import perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
-from torchmetrics.functional import r2_score, explained_variance
+from torchmetrics.functional import r2_score, explained_variance, pearson_corrcoef
 
 
 def dict_to_tensor(train_dict, test_dict, keys):
@@ -38,7 +38,8 @@ def get_scoring_method(score_type=None):
     return SCORE_FUNCTIONS[score_type]
 
 
-SCORE_FUNCTIONS = {'r2_score': r2_score,
+SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef, 
+                   'r2_score': r2_score,
                    'explained_variance': explained_variance}
 
 
@@ -179,7 +180,7 @@ def main():
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')      
     parser.add_argument('--scoring', type=str, default='r2_score',
-                        help='scoring function. Options are r2_score or explained_variance')     
+                        help='scoring function. Options are pearsonr, r2_score, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     args = parser.parse_args()
