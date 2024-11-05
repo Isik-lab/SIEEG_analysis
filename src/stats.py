@@ -12,11 +12,14 @@ from torchmetrics.functional import pearson_corrcoef, r2_score, explained_varian
 
 SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef, 
                    'r2_score': r2_score,
+                   'r2_adj': r2_score,
                    'explained_variance': explained_variance}
 
 
-def compute_score(y_true, y_pred, score_type='r2_score'):
-    if score_type == 'r2_score' or score_type == 'explained_variance':
+def compute_score(y_true, y_pred, score_type='r2_score', adjusted=0):
+    if score_type == 'r2_adj':
+        kwargs = {'multioutput': 'raw_values', 'adjusted': adjusted}
+    elif score_type == 'explained_variance' or score_type == 'r2_score':
         kwargs = {'multioutput': 'raw_values'}
     else:
         kwargs = {}
@@ -43,7 +46,7 @@ def calculate_p(r_null, r_true, n_perm, H0):
     return p_
 
 
-def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False):
+def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, adjusted=0):
     import torch
     g = torch.Generator()
     dim = y_pred.size()
@@ -61,11 +64,11 @@ def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False):
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = compute_score(y_true, y_pred[inds], score_type=score_type)
+        r_null[i, :] = compute_score(y_true, y_pred[inds], score_type=score_type, adjusted=adjusted)
     return r_null
 
 
-def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, square=False):
+def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, adjusted=0):
     import torch
     g = torch.Generator()
     dim = y_pred.size()
@@ -83,7 +86,7 @@ def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, sq
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = compute_score(y_true[inds], y_pred[inds], score_type=score_type)
+        r_var[i, :] = compute_score(y_true[inds], y_pred[inds], score_type=score_type, adjusted=adjusted)
     return r_var
 
 

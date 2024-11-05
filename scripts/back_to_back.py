@@ -11,37 +11,8 @@ from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import KFold
-from torchmetrics.functional import r2_score, explained_variance
-
-
-def dict_to_tensor(train_dict, test_dict, keys):
-    def list_to_tensor(l):
-        return torch.hstack(tuple(l))
-
-    train_out, test_out, groups = [], [], []
-    for i_group, key in enumerate(keys):
-        if train_dict[key].ndim > 1: 
-            train_out.append(train_dict[key])
-            test_out.append(test_dict[key])
-            group_vec = torch.ones(test_dict[key].size()[1])*i_group
-        else: 
-            train_out.append(torch.unsqueeze(train_dict[key], 1))
-            test_out.append(torch.unsqueeze(test_dict[key], 1))
-            group_vec = torch.tensor([i_group])
-        groups.append(group_vec)
-    return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
-
-
-def are_all_elements_present(list1, list2):
-    return all(elem in list2 for elem in list1)
-
-
-def get_scoring_method(score_type=None):
-    return SCORE_FUNCTIONS[score_type]
-
-
-SCORE_FUNCTIONS = {'r2_score': r2_score,
-                   'explained_variance': explained_variance}
+from src.stats import compute_score
+from src.tools import dict_to_tensor
 
 
 class Back2Back:
@@ -70,8 +41,6 @@ class Back2Back:
         self.X2_name_ablate = self.X2_names_all.copy()
         self.X2_name_ablate.remove(self.feature_ablation)
         print(vars(self)) 
-        self.score_func = get_scoring_method(self.scoring)
-
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
@@ -79,11 +48,15 @@ class Back2Back:
         moten = loading.load_model_activations(self.motion_energy)
         alexnet = loading.load_model_activations(self.alexnet)
         
+        # Check EEG trials 
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
         eeg_filtered, behavior, [fmri, alexnet, moten] = loading.check_videos(eeg_raw, behavior, [fmri, alexnet, moten])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
+        eeg_filtered = eeg_filtered.loc[eeg_filtered.time > 950].reset_index()
+
+        # Transform EEG to dict 
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
         time_map = {}
@@ -96,31 +69,39 @@ class Back2Back:
         train, test = regression.train_test_split(behavior, data, behavior_categories=self.behavior_categories)
         return train, test
 
-    def reorganize_results(self, scores, scores_null, scores_var, fmri_meta, time_map):
-        results = pd.DataFrame(scores).transpose()
-        temp_cols = [f'col{i}' for i in range(len(results.columns))]
-        results.columns = temp_cols
-        results = results.rename(index=time_map).reset_index()
-        results = pd.melt(results, id_vars='index')
-        results['fmri_subj_id'] = results.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
-        results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
-        results = results.rename(columns={'index': 'time'}).drop(columns='variable')
+    def reorg_stats(self, stats, results, col_name):
+        stats_df = pd.DataFrame(stats.reshape(self.n_perm, -1).transpose(),
+                                columns=[f'{col_name}_perm_{i}' for i in range(self.n_perm)])
+        stats_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        return stats_df.set_index(['fmri_subj_id', 'roi_name', 'time'])
 
-        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_var_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
-        scores_null_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
-        scores_var_df.set_index(['fmri_subj_id', 'roi_name', 'time'], inplace=True)
+    def reorg_scores(self, scores, fmri_meta, time_map, col_name):
+        scores_df = pd.DataFrame(scores).transpose()
+        temp_cols = [f'col{i}' for i in range(len(scores_df.columns))]
+        scores_df.columns = temp_cols
+        scores_df = scores_df.rename(index=time_map).reset_index()
+        scores_df = pd.melt(scores_df, id_vars='index')
+        scores_df['fmri_subj_id'] = scores_df.variable.replace({temp_col: subj_id for subj_id, temp_col in zip(fmri_meta.subj_id, temp_cols)})
+        scores_df['roi_name'] = scores_df.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
+        scores_df = scores_df.rename(columns={'index': 'time'}).drop(columns='variable')
+        return scores_df.rename(columns={'value': col_name}).set_index(['fmri_subj_id', 'roi_name', 'time'])
 
-        results = results.set_index(['fmri_subj_id', 'roi_name', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
-        return results
+    def reorganize_results(self, cv_scores, scores, scores_null, scores_var, fmri_meta, time_map): 
+        results = self.reorg_scores(scores, fmri_meta, time_map, 'eeg_score')
+        cv_scores = self.reorg_scores(cv_scores, fmri_meta, time_map, 'score')
+        results = results.join(cv_scores)
+        if type(scores_null) != list: 
+            scores_null = self.reorg_stats(scores_null, results, 'null')
+            results = results.join(scores_null)
+        
+        if type(scores_var) != list:
+            scores_var = self.reorg_stats(scores_var, results, 'var')
+            results = results.join(scores_var)
+        return results.reset_index()
     
     def b2b_regression(self, train, test):
         #Define y
-        _, y_test = feature_scaler(train['fmri'], test['fmri'], device=self.device)
+        _, y_true = feature_scaler(train['fmri'], test['fmri'], device=self.device)
 
         #Define x2
         # Normalize the behavior features
@@ -145,14 +126,14 @@ class Back2Back:
             yhat_train, scores_cv = [], []
             for train_index, test_index in kf.split(X1):
                 X1_train, X1_test = feature_scaler(X1[train_index], X1[test_index])
-                y_cv_train, y_cv_test = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
-                yhat_cv = ridge(X1_train, y_cv_train, X1_test,  
+                y_train_cv, y_true_cv = feature_scaler(train['fmri'][train_index], train['fmri'][test_index])
+                y_pred_cv = ridge(X1_train, y_train_cv, X1_test,  
                                  alpha_start=self.alpha_start,
                                  alpha_stop=self.alpha_stop,
                                  device=self.device,
                                  rotate_x=True)['yhat']
-                scores_cv.append(self.score_func(yhat_cv, y_cv_test, multioutput='raw_values'))
-                yhat_train.append(yhat_cv)
+                scores_cv.append(compute_score(y_true_cv, y_pred_cv, score_type=self.scoring))
+                yhat_train.append(y_pred_cv)
             yhat_train = torch.cat(yhat_train)
             reg1_scores[time_ind] = torch.nanmean(torch.stack(scores_cv), dim=0)
 
@@ -169,7 +150,10 @@ class Back2Back:
                         rotate_x=False)['yhat']
 
             # Evaluate against y and compute stats
-            reg2_scores[time_ind] = self.score_func(yhat_all, y_test, multioutput='raw_values') -  self.score_func(yhat_ablate, y_test, multioutput='raw_values')
+            r2_all = compute_score(y_true, yhat_all, score_type=self.scoring) ** 2
+            r2_ablate = compute_score(y_true, yhat_ablate, score_type=self.scoring) ** 2
+            reg2_scores[time_ind] = r2_all - r2_ablate
+                                               
             perm = perm_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
             var = boot_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
             reg2_scores_null.append(torch.unsqueeze(perm, 2))
@@ -187,7 +171,7 @@ class Back2Back:
         behavior, other_data, fmri_meta, time_map = self.load_and_validate()
         train, test = self.split(behavior, other_data)
         cv_scores, scores, scores_null, scores_var = self.b2b_regression(train, test)
-        results = self.reorganize_results(scores, scores_null, scores_var, fmri_meta, time_map)
+        results = self.reorganize_results(cv_scores, scores, scores_null, scores_var, fmri_meta, time_map)
         print(results.head())
         self.mk_out_dir()
         self.save_results(results)
@@ -212,8 +196,8 @@ def main():
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')
-    parser.add_argument('--scoring', type=str, default='r2_score',
-                        help='scoring function. Options are r2_score or explained_variance')
+    parser.add_argument('--scoring', type=str, default='pearsonr',
+                        help='scoring function. Options are pearsonr, r2_score, or explained_variance')   
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     parser.add_argument('--random_state', type=int, default=0,

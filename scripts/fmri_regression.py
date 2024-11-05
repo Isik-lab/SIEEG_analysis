@@ -9,7 +9,6 @@ from src.stats import perm_gpu, bootstrap_gpu
 from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
-from sklearn.model_selection import LeaveOneOut
 from src.stats import compute_score
 from src.tools import dict_to_tensor
 
@@ -83,7 +82,7 @@ class fMRIRegression:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        if scores_null: 
+        if type(scores_null) != list: 
             scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
                                     columns=[f'null_perm_{i}' for i in range(self.n_perm)])
             scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
@@ -114,12 +113,15 @@ class fMRIRegression:
                          rotate_x=True)['yhat']
 
             # Evaluate against y
-            scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring)
+            scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring,
+                                             adjusted=X_train.size()[1])
 
             # Compute states 
             if self.roi_mean: 
-                perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring)
-                var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring)
+                perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
+                                adjusted=X_train.size()[1])
+                var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
+                                    adjusted=X_train.size()[1])
                 scores_null.append(torch.unsqueeze(perm, 2))
                 scores_var.append(torch.unsqueeze(var, 2))
         if self.roi_mean: 
@@ -176,7 +178,7 @@ def main():
     parser.add_argument('--alpha_stop', type=int, default=30,
                         help='stopping value in log space for the ridge alpha penalty')      
     parser.add_argument('--scoring', type=str, default='pearsonr',
-                        help='scoring function. Options are pearsonr, r2_score, or explained_variance')     
+                        help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
     args = parser.parse_args()
