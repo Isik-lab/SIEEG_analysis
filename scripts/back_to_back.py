@@ -54,7 +54,6 @@ class Back2Back:
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
         eeg_filtered, behavior, [fmri, alexnet, moten] = loading.check_videos(eeg_raw, behavior, [fmri, alexnet, moten])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
-        eeg_filtered = eeg_filtered.loc[eeg_filtered.time > 950].reset_index()
 
         # Transform EEG to dict 
         eeg = {}
@@ -72,7 +71,7 @@ class Back2Back:
     def reorg_stats(self, stats, results, col_name):
         stats_df = pd.DataFrame(stats.reshape(self.n_perm, -1).transpose(),
                                 columns=[f'{col_name}_perm_{i}' for i in range(self.n_perm)])
-        stats_df[['fmri_subj_id', 'roi_name', 'time']] = results[['fmri_subj_id', 'roi_name', 'time']]
+        stats_df[['fmri_subj_id', 'roi_name', 'time']] = results.reset_index()[['fmri_subj_id', 'roi_name', 'time']]
         return stats_df.set_index(['fmri_subj_id', 'roi_name', 'time'])
 
     def reorg_scores(self, scores, fmri_meta, time_map, col_name):
@@ -150,9 +149,9 @@ class Back2Back:
                         rotate_x=False)['yhat']
 
             # Evaluate against y and compute stats
-            r2_all = compute_score(y_true, yhat_all, score_type=self.scoring) ** 2
-            r2_ablate = compute_score(y_true, yhat_ablate, score_type=self.scoring) ** 2
-            reg2_scores[time_ind] = r2_all - r2_ablate
+            r_all = compute_score(y_true, yhat_all, score_type=self.scoring)
+            r_ablate = compute_score(y_true, yhat_ablate, score_type=self.scoring)
+            reg2_scores[time_ind] = (torch.sign(r_all) * (r_all ** 2)) - (torch.sign(r_ablate) * (r_ablate ** 2))
                                                
             perm = perm_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)
             var = boot_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)

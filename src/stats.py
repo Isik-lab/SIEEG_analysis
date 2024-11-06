@@ -90,11 +90,11 @@ def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, ad
     return r_var
 
 
-def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
+def perm_unique_variance_gpu(y_hat_all, y_hat_ablate, y_true, score_type,
                              n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
-    dim = y_hat_a.shape
+    dim = y_hat_ablate.shape
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance permutation testing')
@@ -109,17 +109,17 @@ def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
         inds = torch.randperm(dim[0], generator=g)
 
         # Compute the correlations
-        r2_ab = compute_score(y_true, y_hat_ab[inds], score_type=score_type) ** 2
-        r2_a = compute_score(y_true, y_hat_a[inds], score_type=score_type) ** 2
-        r_null[i, :] = r2_ab - r2_a
+        r_all = compute_score(y_true, y_hat_all[inds], score_type=score_type)
+        r_ablate= compute_score(y_true, y_hat_ablate[inds], score_type=score_type)
+        r_null[i, :] = (torch.sign(r_all) * (r_all ** 2)) - (torch.sign(r_ablate) * (r_ablate ** 2))
     return r_null
 
 
-def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
+def bootstrap_unique_variance_gpu(y_hat_all, y_hat_ablate, y_true, score_type,
                                   n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
-    dim = y_hat_a.shape
+    dim = y_hat_ablate.shape
 
     if verbose:
         iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance bootstrapping')
@@ -134,9 +134,9 @@ def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
 
         # Compute the correlations
-        r2_ab = compute_score(y_true[inds], y_hat_ab[inds], score_type=score_type) ** 2
-        r2_a = compute_score(y_true[inds], y_hat_a[inds], score_type=score_type) ** 2
-        r_var[i, :] = r2_ab - r2_a
+        r_all = compute_score(y_true[inds], y_hat_all[inds], score_type=score_type)
+        r_ablate = compute_score(y_true[inds], y_hat_ablate[inds], score_type=score_type)
+        r_var[i, :] = (torch.sign(r_all) * (r_all ** 2)) - (torch.sign(r_ablate) * (r_ablate ** 2))
     return r_var
 
 

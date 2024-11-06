@@ -17,9 +17,11 @@ fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
 roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
+back2back_plotting=$(project_folder)/data/interim/PlotBack2Back
+
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -199,6 +201,23 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_feature_decoding.py --overwrite" | sbatch
 	# touch $(feature_plotting)/.plotted
+
+
+#Plot the Back2Back timecourses 
+plot_back2back: $(back2back_plotting)/.plotted $(back_to_back)
+$(back2back_plotting)/.plotted: 
+	mkdir -p $(back2back_plotting)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=back2back_plotting\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 3:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/plot_back2back.py --overwrite" | sbatch
+	# touch $(back2back_plotting)/.plotted
 
 clean:
 	rm *.out
