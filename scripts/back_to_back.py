@@ -154,8 +154,8 @@ class Back2Back:
             r2_ablate = compute_score(y_true, yhat_ablate, score_type=self.scoring) ** 2
             reg2_scores[time_ind] = r2_all - r2_ablate
                                                
-            perm = perm_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
-            var = boot_uv(yhat_all, yhat_ablate, y_test, n_perm=self.n_perm, score_func=self.score_func)
+            perm = perm_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)
+            var = boot_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)
             reg2_scores_null.append(torch.unsqueeze(perm, 2))
             reg2_scores_var.append(torch.unsqueeze(var, 2))
         return reg1_scores, reg2_scores, \

@@ -124,10 +124,7 @@ def feature_scaler(train, test=None, dim=0, device='cpu'):
 
     train_normed = (train_-train_mean)/train_std
     if test is not None: 
-        test_mean = torch.mean(test)
-        test_std = torch.std(test)
-        test_normed = (test_-test_mean)/test_std
-        return train_normed, test_normed
+        return train_normed, (test_-train_mean)/train_std
     else:
         return train_normed
 

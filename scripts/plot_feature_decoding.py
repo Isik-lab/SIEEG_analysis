@@ -1,3 +1,4 @@
+import argparse
 import pandas as pd
 import numpy as np
 import seaborn as sns 
@@ -10,24 +11,8 @@ from pathlib import Path
 import os
 from matplotlib.lines import Line2D
 
-simplified_plotting = True 
-if simplified_plotting:
-    features = ['expanse', 'agent_distance', 'communication']
-    title_names = ['spatial expanse', 'agent distance', 'communication']
-    colors = ['#F5DD40', '#8558F4', '#73D2DF']
-else:
-    features = ['expanse', 'object', 'agent_distance', 'facingness',
-                'joint_action', 'communication', 'valence', 'arousal']
-    title_names = ['spatial expanse', 'object directedness', 'agent distance', 'facingness',
-                   'joint action', 'communication', 'valence', 'arousal']
-    colors = ['#F5DD40', '#F5DD40', '#8558F4', '#8558F4', '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
 
-
-out_path = 'data/interim/PlotFeatureDecoding'
-Path(out_path).mkdir(exist_ok=True, parents=True)
-files = glob('data/interim/FeatureRegression/sub*.parquet')
-
-if not os.path.isfile(f'{out_path}/feature_plot.csv'):
+def load_and_summarize(files):
     #Load data
     df = []
     for file in tqdm(files, desc='loading files'):
@@ -58,17 +43,10 @@ if not os.path.isfile(f'{out_path}/feature_plot.csv'):
                                             desc=f'{feature} cluster correction')
         feature_df.drop(columns=null_cols, inplace=True)
         stats_df.append(feature_df)
-    stats_df = pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
-    stats_df.to_csv(f'{out_path}/feature_plot.csv', index=False)
-else:
-    stats_df = pd.read_csv(f'{out_path}/feature_plot.csv')
-
-# Make categorical for plotting
-stats_df = stats_df.loc[stats_df['feature'].isin(features)].reset_index(drop=True)
-stats_df['feature'] = pd.Categorical(stats_df['feature'], categories=features, ordered=True)
+    return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
 
 # Plot the results
-if simplified_plotting: 
+def plot_simple(out_file, stats_df, features, colors, title_names): 
     sns.set_context(context='poster', font_scale=1.5)
     _, ax = plt.subplots(figsize=(19, 9.5))
     order_counter = 0
@@ -121,8 +99,12 @@ if simplified_plotting:
     ax.set_ylim([ymin, ymax])
 
     plt.tight_layout()
-    plt.savefig(f'{out_path}/feature_plot.pdf')
-else: 
+
+    plt.tight_layout()
+    plt.savefig(out_file)
+
+
+def plot_full(out_file, stats_df, features, colors, title_names):
     sns.set_context(context='paper', font_scale=2)
     _, axes = plt.subplots(4, 2, figsize=(19, 12.67), sharex=True, sharey=True)
     axes = axes.flatten()
@@ -180,7 +162,69 @@ else:
         if ifeature >= 6:
             ax.set_xlabel('Time (ms)')
 
-
-
     plt.tight_layout()
-    plt.savefig(f'{out_path}/all_features_plot.pdf')
+    plt.savefig(out_file)
+
+
+class PlotFeatureDecoding:
+    def __init__(self, args):
+        self.out_dir = args.out_dir 
+        self.out_csv = args.out_csv
+        self.regression_dir = args.regression_dir 
+        Path(self.out_dir).mkdir(exist_ok=True, parents=True)
+        self.simplified_plotting = args.simplified_plotting
+        self.overwrite = args.overwrite 
+        print(vars(self))
+
+    def run(self):
+        if self.simplified_plotting:
+            features = ['expanse', 'agent_distance', 'communication']
+            title_names = ['spatial expanse', 'agent distance', 'communication']
+            colors = ['#F5DD40', '#8558F4', '#73D2DF']
+            out_plot = f'{self.out_dir}/feature_plot.pdf'
+        else:
+            features = ['expanse', 'object', 'agent_distance', 'facingness',
+                        'joint_action', 'communication', 'valence', 'arousal']
+            title_names = ['spatial expanse', 'object directedness',
+                        'agent distance', 'facingness',
+                        'joint action', 'communication', 'valence', 'arousal']
+            colors = ['#F5DD40', '#F5DD40', '#8558F4', '#8558F4',
+                      '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
+            out_plot = f'{self.out_dir}/all_features_plot.pdf'
+
+        if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
+            files = glob(f'{self.regression_dir}/*features.parquet')
+            df = load_and_summarize(files)
+            df.to_csv(f'{self.out_dir}/{self.out_csv}', index=False)
+        else:
+            df = pd.read_csv(f'{self.out_dir}/{self.out_csv}')
+
+        # Make categorical for plotting
+        df = df.loc[df['feature'].isin(features)].reset_index(drop=True)
+        df['feature'] = pd.Categorical(df['feature'], categories=features, ordered=True)
+        print(df.head())
+
+        if self.simplified_plotting:
+            plot_simple(out_plot, df, features, colors, title_names)
+        else: 
+            plot_full(out_plot, df, features, colors, title_names)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Plot the ROI regression results')
+    parser.add_argument('--simplified_plotting', action=argparse.BooleanOptionalAction, default=False,
+                        help='plot all or only select features')
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
+                        help='whether to redo the summary statistics')
+    parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotFeatureDecoding')
+    parser.add_argument('--out_csv', type=str, help='output csv',
+                        default='feature_plot.csv')
+    parser.add_argument('--regression_dir', '-r', type=str, help='directory for input',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureRegression')
+    args = parser.parse_args()
+    PlotFeatureDecoding(args).run()
+
+
+if __name__ == '__main__':
+    main()

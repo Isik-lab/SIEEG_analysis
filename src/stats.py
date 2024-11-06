@@ -90,7 +90,7 @@ def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, ad
     return r_var
 
 
-def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
+def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
                              n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
@@ -109,13 +109,13 @@ def perm_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
         inds = torch.randperm(dim[0], generator=g)
 
         # Compute the correlations
-        r2_ab = score_func(y_hat_ab, y_true[inds], multioutput='raw_values')
-        r2_a = score_func(y_hat_a, y_true[inds], multioutput='raw_values')
+        r2_ab = compute_score(y_true, y_hat_ab[inds], score_type=score_type) ** 2
+        r2_a = compute_score(y_true, y_hat_a[inds], score_type=score_type) ** 2
         r_null[i, :] = r2_ab - r2_a
     return r_null
 
 
-def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
+def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_type,
                                   n_perm=int(5e3), verbose=False):
     import torch
     g = torch.Generator()
@@ -134,8 +134,8 @@ def bootstrap_unique_variance_gpu(y_hat_ab, y_hat_a, y_true, score_func,
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
 
         # Compute the correlations
-        r2_ab = score_func(y_hat_ab[inds], y_true[inds], multioutput='raw_values')
-        r2_a = score_func(y_hat_a[inds], y_true[inds], multioutput='raw_values')
+        r2_ab = compute_score(y_true[inds], y_hat_ab[inds], score_type=score_type) ** 2
+        r2_a = compute_score(y_true[inds], y_hat_a[inds], score_type=score_type) ** 2
         r_var[i, :] = r2_ab - r2_a
     return r_var
 

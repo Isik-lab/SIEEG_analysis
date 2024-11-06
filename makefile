@@ -15,9 +15,11 @@ eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
+feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
+roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -146,7 +148,7 @@ python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_tri
 	# touch $(fmri_regression)/.roi_decoding
 
 
-#Compute the channel-wise EEG reliability
+#Full brain EEG to fMRI regression
 full_brain: $(fmri_regression)/.full_brain $(eeg_preprocess)
 $(fmri_regression)/.full_brain: 
 	mkdir -p $(fmri_regression)
@@ -163,6 +165,40 @@ conda activate eeg\n\
 python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
 	done
 	# touch $(fmri_regression)/.full_brain
+
+
+#Plot the ROI timecourses 
+plot_rois: $(roi_plotting)/.plotted $(fmri_regression)
+$(roi_plotting)/.plotted: 
+	mkdir -p $(roi_plotting)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=roi_plotting\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 1:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
+	# touch $(roi_plotting)/.plotted
+
+
+#Plot the ROI timecourses 
+plot_features: $(feature_plotting)/.plotted $(feature_decoding)
+$(feature_plotting)/.plotted: 
+	mkdir -p $(feature_plotting)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=feature_plotting\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 1:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/plot_feature_decoding.py --overwrite" | sbatch
+	# touch $(feature_plotting)/.plotted
 
 clean:
 	rm *.out
