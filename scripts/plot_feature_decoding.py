@@ -99,8 +99,6 @@ def plot_simple(out_file, stats_df, features, colors, title_names):
     ax.set_ylim([ymin, ymax])
 
     plt.tight_layout()
-
-    plt.tight_layout()
     plt.savefig(out_file)
 
 

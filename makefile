@@ -108,7 +108,7 @@ set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 echo $${x}\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x $${x}" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x $${x} --overwrite" | sbatch; \
 	done; \
 	done
 	# touch $(back_to_back)/.done

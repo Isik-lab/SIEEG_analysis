@@ -13,6 +13,8 @@ from tqdm import tqdm
 from sklearn.model_selection import KFold
 from src.stats import compute_score
 from src.tools import dict_to_tensor
+from src.stats import calculate_p, cluster_correction
+from scipy import ndimage
 
 
 class Back2Back:
@@ -22,13 +24,18 @@ class Back2Back:
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
+        self.overwrite = args.overwrite
         self.n_perm = args.n_perm
         self.feature_ablation = args.feature_to_ablate
+        self.plot_dist = args.plot_dist
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
+        Path(self.out_dir).joinpath('plots').joinpath(self.feature_ablation).mkdir(exist_ok=True, parents=True)
         self.eeg_file = args.eeg_file
-        self.out_base = f'{str(Path(self.eeg_file).stem)}_feature-{self.feature_ablation}.parquet'
-        self.out_name = str(Path(self.out_dir).joinpath(self.out_base))
+        self.out_base = f'{str(Path(self.eeg_file).stem)}_feature-{self.feature_ablation}'
+        self.out_name = str(Path(self.out_dir).joinpath(f'{self.out_base}.parquet'))
+        self.out_plot = str(Path(self.out_dir).joinpath('plots').joinpath(self.feature_ablation).joinpath(f'{self.out_base}.pdf'))
+        print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
         self.alexnet = args.alexnet        
@@ -40,7 +47,8 @@ class Back2Back:
         self.X2_names_all = ['alexnet', 'moten'] + list(self.behavior_categories)
         self.X2_name_ablate = self.X2_names_all.copy()
         self.X2_name_ablate.remove(self.feature_ablation)
-        print(vars(self)) 
+        if self.plot_dist: 
+            Path(f'{self.out_dir}/test_dists').mkdir(exist_ok=True, parents=True)
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
@@ -86,8 +94,8 @@ class Back2Back:
         return scores_df.rename(columns={'value': col_name}).set_index(['fmri_subj_id', 'roi_name', 'time'])
 
     def reorganize_results(self, cv_scores, scores, scores_null, scores_var, fmri_meta, time_map): 
-        results = self.reorg_scores(scores, fmri_meta, time_map, 'eeg_score')
-        cv_scores = self.reorg_scores(cv_scores, fmri_meta, time_map, 'score')
+        results = self.reorg_scores(scores, fmri_meta, time_map, 'score')
+        cv_scores = self.reorg_scores(cv_scores, fmri_meta, time_map, 'eeg_score')
         results = results.join(cv_scores)
         if type(scores_null) != list: 
             scores_null = self.reorg_stats(scores_null, results, 'null')
@@ -97,8 +105,58 @@ class Back2Back:
             scores_var = self.reorg_stats(scores_var, results, 'var')
             results = results.join(scores_var)
         return results.reset_index()
+
+    def plot_results(self, results):
+        mean_df = results.groupby(['time', 'roi_name']).mean(numeric_only=True).reset_index()
+        var_cols = [col for col in results.columns if 'var_perm_' in col]
+        null_cols = [col for col in results.columns if 'null_perm_' in col]
+        smooth_kernel = np.ones(10)/10
+        
+        n = mean_df.roi_name.nunique()
+        ymin, ymax = -0.1, 0.4
+        _, axes = plt.subplots(3, int(n/3), sharex=True, sharey=True)
+        axes = axes.flatten()
+        for iax, (ax, (roi, roi_df)) in enumerate(zip(axes, mean_df.groupby('roi_name'))): 
+            scores_var = roi_df[var_cols].to_numpy()
+            roi_df['low_ci'], roi_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
+            roi_df.drop(columns=var_cols, inplace=True)
+
+            scores_null = roi_df[null_cols].to_numpy()
+            roi_df['low_null'], roi_df['high_null'] = np.percentile(scores_null, [2.5, 97.5], axis=1)
+            roi_df.drop(columns=null_cols, inplace=True)
+
+            smoothed_data = {}
+            for key in ['low_ci', 'high_ci', 'score']:
+                smoothed_data[key] = np.convolve(roi_df[key], smooth_kernel, mode='same')
+
+            ax.fill_between(x=roi_df['time'], 
+                            y1=smoothed_data['low_ci'], y2=smoothed_data['high_ci'],
+                            edgecolor=None, color='black', alpha=0.1, zorder=0)
+            ax.fill_between(x=roi_df['time'], 
+                            y1=roi_df['low_null'], y2=roi_df['high_null'],
+                            edgecolor=None, color='blue', alpha=0.1, zorder=0)
+            ax.plot(roi_df['time'], smoothed_data['score'],
+                    color='black', zorder=1)
+
+            ax.set_ylim([ymin, ymax])
+            ax.set_xlim([-200, 1000])
+            ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
+                    linestyles='dashed', colors='grey',
+                    zorder=0)
+            ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
+                    zorder=0)
+            if iax%3 == 0: 
+                ax.set_ylabel('Prediction ($r$)')
+            if iax >= (2*3): 
+                ax.set_xlabel('Time (ms)')
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.set_title(roi)
+
+        plt.tight_layout()
+        plt.savefig(self.out_plot)
+
     
-    def b2b_regression(self, train, test):
+    def b2b_regression(self, train, test, time_map):
         #Define y
         _, y_true = feature_scaler(train['fmri'], test['fmri'], device=self.device)
 
@@ -155,10 +213,21 @@ class Back2Back:
                                                
             perm = perm_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)
             var = boot_uv(yhat_all, yhat_ablate, y_true, n_perm=self.n_perm, score_type=self.scoring)
+            if self.plot_dist: 
+                self.test_plot(reg2_scores[time_ind][0], {'perm': perm[:, 0], 'var': var[:, 0]}, time_map[time_ind])
             reg2_scores_null.append(torch.unsqueeze(perm, 2))
             reg2_scores_var.append(torch.unsqueeze(var, 2))
         return reg1_scores, reg2_scores, \
         torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
+
+    def test_plot(self, score, dists, name):
+        _, axes = plt.subplots(len(dists), sharex=True)
+        for ax, (key, dist) in zip(axes, dists.items()): 
+            ax.hist(dist, bins=30)
+            ax.axvline(x=dist.mean(), color='b')
+            ax.axvline(x=score, color='r')
+            ax.set_title(f'{key} ({len(dist)})')
+        plt.savefig(f'{self.out_dir}/test_dists/{name}.png')
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -167,14 +236,19 @@ class Back2Back:
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def run(self):
-        behavior, other_data, fmri_meta, time_map = self.load_and_validate()
-        train, test = self.split(behavior, other_data)
-        cv_scores, scores, scores_null, scores_var = self.b2b_regression(train, test)
-        results = self.reorganize_results(cv_scores, scores, scores_null, scores_var, fmri_meta, time_map)
-        print(results.head())
-        self.mk_out_dir()
-        self.save_results(results)
-        print('finished')
+        if not Path(self.out_name).is_file() or self.overwrite: 
+            behavior, other_data, fmri_meta, time_map = self.load_and_validate()
+            train, test = self.split(behavior, other_data)
+            cv_scores, scores, scores_null, scores_var = self.b2b_regression(train, test, time_map)
+            results = self.reorganize_results(cv_scores, scores, scores_null, scores_var, fmri_meta, time_map)
+            print(results.head())
+            self.mk_out_dir()
+            self.save_results(results)
+            print('finished')
+            self.plot_results(results)
+        else:
+            results = pd.read_parquet(self.out_name)
+            self.plot_results(results)
 
 
 def main():
@@ -191,6 +265,10 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
+    parser.add_argument('--plot_dist', action=argparse.BooleanOptionalAction, default=False,
+                        help='whether to plot the stat distributions')
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
+                        help='run regression even if output already exists')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
@@ -201,7 +279,7 @@ def main():
                         help='the number of permutations for stats')
     parser.add_argument('--random_state', type=int, default=0,
                         help='the random state for CV splitting in regression 1')
-    parser.add_argument('--feature_to_ablate', '-x', type=str, default='expanse',
+    parser.add_argument('--feature_to_ablate', '-x', type=str, default='alexnet',
                         help='the feature that you want to calculate the unique variance for')
     args = parser.parse_args()
     Back2Back(args).run()

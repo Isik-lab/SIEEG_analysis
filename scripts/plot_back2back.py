@@ -23,24 +23,24 @@ class PlotBack2Back:
         
         # Constants
         self.rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
-        self.features = ['alexnet']#, 'moten', 'expanse', 'object',
-                        # 'agent_distance', 'facingness',
-                        # 'joint_action', 'communication', 
-                        # 'valence', 'arousal']
+        self.features = ['alexnet', 'moten', 'expanse', 'object',
+                        'agent_distance', 'facingness',
+                        'joint_action', 'communication', 
+                        'valence', 'arousal']
         self.roi_titles = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
-        self.feature_titles = ['AlexNet-conv2']#, 'motion energy', 
-                            #  'spatial expanse', 'object directedness',
-                            #  'agent distance', 'facingness',
-                            #  'joint action', 'communication', 'valence', 'arousal']
-        self.colors = ['#404040']#, '#404040', '#F5DD40', '#F5DD40', '#8558F4', '#8558F4', 
-                    #   '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
+        self.feature_titles = ['AlexNet-conv2', 'motion energy', 
+                             'spatial expanse', 'object directedness',
+                             'agent distance', 'facingness',
+                             'joint action', 'communication', 'valence', 'arousal']
+        self.colors = ['#404040', '#404040', '#F5DD40', '#F5DD40', '#8558F4', '#8558F4', 
+                      '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
         
         # Reduced set constants
         self.reduced_rois = ['EVC', 'LOC', 'aSTS']
-        self.reduced_features = ['alexnet']#, 'agent_distance', 'communication']
+        self.reduced_features = ['alexnet', 'agent_distance', 'communication']
         self.reduced_rois_titles = ['EVC', 'LOC', 'aSTS-SI']
-        self.reduced_features_legends = ['AlexNet conv2']#, 'agent distance', 'communication']
-        self.reduced_colors = ['#404040']#, '#8558F4', '#73D2DF']
+        self.reduced_features_legends = ['AlexNet conv2', 'agent distance', 'communication']
+        self.reduced_colors = ['#404040', '#8558F4', '#73D2DF']
         
         self.smooth_kernel = np.ones(10)/10
         self.stats_pos_start = {'EVC': -.2, 'LOC': -.12, 'aSTS': -.12}
@@ -80,7 +80,7 @@ class PlotBack2Back:
         mean_df = df.groupby(['time', 'roi_name']).mean(numeric_only=True).reset_index()
         mean_df.sort_values(by=['roi_name', 'time'], inplace=True)
         
-        # Calculate varianceå
+        # Calculate variance
         var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
         scores_var = mean_df[var_cols].to_numpy()
         mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
@@ -99,8 +99,7 @@ class PlotBack2Back:
         scores_null = roi_df[null_cols].to_numpy().T
         scores = roi_df['score'].to_numpy().T
         ps = calculate_p(scores_null, scores, 5000, 'greater')
-        roi_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T,
-                                       verbose=True, desc=f'{roi_name} cluster correction')
+        roi_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T)
         roi_df.drop(columns=null_cols, inplace=True)
         return roi_df
 
