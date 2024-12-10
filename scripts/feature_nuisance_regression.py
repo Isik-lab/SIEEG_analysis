@@ -26,6 +26,8 @@ class FeatureNuisanceRegression:
         self.feature_to_predict = args.feature_to_predict
         self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_feature-{self.feature_to_predict}.parquet'
         print(vars(self)) 
+        self.motion_energy = args.motion_energy
+        self.alexnet = args.alexnet        
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
@@ -43,7 +45,7 @@ class FeatureNuisanceRegression:
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
-        eeg_filtered, behavior = loading.check_videos(eeg_raw, behavior, [alexnet, moten])
+        eeg_filtered, behavior, [alexnet, moten] = loading.check_videos(eeg_raw, behavior, [alexnet, moten])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
 
         # Transform EEG to dict 
@@ -72,29 +74,20 @@ class FeatureNuisanceRegression:
         return train, test
 
     def reorganize_results(self, scores, time_map, scores_null, scores_var):
-        results = pd.DataFrame(scores).transpose()
-        temp_cols = [f'col{i}' for i in range(len(results.columns))]
-        results.columns = temp_cols
-        results = results.rename(index=time_map).reset_index()
-        results = pd.melt(results, id_vars='index')
-        cols = list(self.behavior_categories.keys())
-        results['feature'] = results.variable.replace({temp_col: feature for feature, temp_col in zip(cols, temp_cols)})
-        results = results.rename(columns={'index': 'time'}).drop(columns='variable')
+        results = pd.DataFrame({'score': scores}, index=time_map.values())
+        results['feature'] = self.feature_to_predict
+        results['score'] = results['score'].astype('float32')
+        print(results.head())
 
-        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+        scores_null_df = pd.DataFrame(scores_null.transpose(), index=time_map.values(),
                                 columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+        scores_var_df = pd.DataFrame(scores_var.transpose(), index=time_map.values(),
                                 columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['feature', 'time']] = results[['feature', 'time']]
-        scores_var_df[['feature', 'time']] = results[['feature', 'time']]
-        scores_null_df.set_index(['feature', 'time'], inplace=True)
-        scores_var_df.set_index(['feature', 'time'], inplace=True)
 
-        results = results.set_index(['feature', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
-        return results
+        results = results.join(scores_null_df).join(scores_var_df).reset_index()
+        return results.rename(columns={'index': 'time'})
     
     def standard_regression(self, train, test):
-        
         #Define x2
         # Normalize the behavior features
         for feature in self.behavior_categories.keys(): 
@@ -104,36 +97,41 @@ class FeatureNuisanceRegression:
             train[feature], test[feature] = feature_scaler(train[feature], test[feature], device=self.device)
             train[feature], test[feature], _ = regression.pca_rotation(train[feature], test[feature])
             print(f'{feature} PCs: {train[feature].size()[1]}')
-        y_train, y_test, _ = dict_to_tensor(train, test, self.feature_to_predict)
+        y_train, y_true, _ = dict_to_tensor(train, test, [self.feature_to_predict])
         X_nuisance_train, _, _ = dict_to_tensor(train, test, self.x_nuisance)
 
-        scores, scores_null, scores_var = {}, [], []
+        scores, scores_null, scores_var = [], [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict features from EEG', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_eeg_train, X_eeg_test = train['eeg'][time_ind], test['eeg'][time_ind]
-            X_train = torch.hstack((X_train, ))
+            X_train = torch.hstack((X_eeg_train, X_nuisance_train))
 
-            y_pred = ridge(X_train, y_train, X_eeg_test,
+            betas = ridge(X_train, y_train,
                          alpha_start=self.alpha_start,
                          alpha_stop=self.alpha_stop,
                          device=self.device,
-                         rotate_x=True)['yhat']
+                         return_betas=True,
+                         rotate_x=True)['betas']
+
+            # Fit the prediction
+            eeg_betas = betas[:X_eeg_train.shape[-1]]
+            y_pred = torch.matmul(X_eeg_test, eeg_betas)
 
             # Evaluate against y
-            scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring,
-                                             adjusted=X_train.size()[1])
+            scores.append(compute_score(y_true, y_pred, score_type=self.scoring,
+                            adjusted=X_train.size()[1]).cpu().detach().numpy())
 
             # Compute states 
             perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                             adjusted=X_train.size()[1])
             var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                                 adjusted=X_train.size()[1])
-            scores_null.append(torch.unsqueeze(perm, 2))
-            scores_var.append(torch.unsqueeze(var, 2))
-        scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
-        scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
+            scores_null.append(perm)
+            scores_var.append(var)
+        scores_null = torch.cat(scores_null, 1).cpu().detach().numpy()
+        scores_var = torch.cat(scores_var, 1).cpu().detach().numpy()
         return scores, scores_null, scores_var
 
     def save_df(self, results):
@@ -160,9 +158,9 @@ def main():
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='data/interim/eegPreprocessing/all_trials/sub-06.parquet')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureRegression')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureNuisanceRegression')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
@@ -173,6 +171,10 @@ def main():
                         help='the number of permutations for stats')
     parser.add_argument('--feature_to_predict', '-y', type=str, default='expanse',
                         help='the feature that you want to predict')
+    parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
+    parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     args = parser.parse_args()
     FeatureNuisanceRegression(args).run()
 
