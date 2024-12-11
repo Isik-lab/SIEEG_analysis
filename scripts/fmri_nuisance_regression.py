@@ -13,9 +13,10 @@ from src.stats import compute_score
 from src.tools import dict_to_tensor
 
 
-class FeatureNuisanceRegression:
+class fMRINuisanceRegression:
     def __init__(self, args):
-        self.process = 'FeatureNuisanceRegression'
+        self.process = 'fMRINuisanceRegression'
+        self.roi_mean = args.roi_mean
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
@@ -23,31 +24,40 @@ class FeatureNuisanceRegression:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.feature_to_predict = args.feature_to_predict
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_feature-{self.feature_to_predict}.parquet'
+        self.smoothing = args.smoothing
+        self.roi_to_predict = args.roi_to_predict
+        self.sub = args.sub
+        if self.roi_mean:
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_fsub-{str(self.sub).zfill(2)}_roi-{self.roi_to_predict}.parquet'
+        elif not self.roi_mean:
+            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_full-brain'
         print(vars(self)) 
-        self.motion_energy = args.motion_energy
-        self.alexnet = args.alexnet        
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
                                     'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
-        self.x_nuisance = ['alexnet', 'moten'] + list(self.behavior_categories)
-        self.x_nuisance.remove(self.feature_to_predict)
 
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
-        moten = loading.load_model_activations(self.motion_energy)
-        alexnet = loading.load_model_activations(self.alexnet)
+        fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean, smoothing=self.smoothing)
+        x_nuisance_cols = [col for col in fmri.columns if f'sub-{self.sub}' in col and 'face' not in col and self.roi_to_predict not in col]
+        y_cols = [col for col in fmri.columns if f'sub-{self.sub}' in col and self.roi_to_predict in col]
+        print('nuisance cols:')
+        print(x_nuisance_cols)
+        print('y cols:')
+        print(y_cols)
+        print()
+        fmri_X = fmri[x_nuisance_cols]
+        fmri_y = fmri[y_cols]
         
         # Check EEG trials 
         eeg_raw = loading.load_eeg(self.eeg_file)
         eeg_raw = eeg_raw.groupby(['channel', 'time', 'video_name']).mean(numeric_only=True)
         eeg_raw = eeg_raw.reset_index().drop(columns=['trial', 'repitition', 'even'])
-        eeg_filtered, behavior, [alexnet, moten] = loading.check_videos(eeg_raw, behavior, [alexnet, moten])
+        eeg_filtered, behavior, [fmri_X, fmri_y] = loading.check_videos(eeg_raw, behavior, [fmri_X, fmri_y])
         eeg_filtered['time_ind'] = eeg_filtered['time_ind'].astype('int')
-
+        
         # Transform EEG to dict 
         eeg = {}
         iterator = tqdm(eeg_filtered.groupby('time_ind'), total=eeg_filtered.time_ind.nunique(), desc='EEG to numpy')
@@ -55,7 +65,7 @@ class FeatureNuisanceRegression:
         for time_ind, time_df in iterator:
             eeg[time_ind] = loading.strip_eeg(time_df)
             time_map[time_ind] = time_df.time.unique()[0]
-        return behavior, {'eeg': eeg, 'alexnet': alexnet, 'moten': moten}, time_map
+        return behavior, {'eeg': eeg, 'fmri_X': fmri_X, 'fmri_y': fmri_y}, time_map
 
     def split_and_norm(self, behavior, data):
         def apply_feature_scaler(train_dict, test_dict, device):
@@ -75,7 +85,8 @@ class FeatureNuisanceRegression:
 
     def reorganize_results(self, scores, time_map, scores_null, scores_var):
         results = pd.DataFrame({'score': scores}, index=time_map.values())
-        results['feature'] = self.feature_to_predict
+        results['roi_name'] = self.roi_to_predict
+        results['fmri_subj_id'] = self.sub
         results['score'] = results['score'].astype('float32')
         print(results.head())
 
@@ -88,21 +99,15 @@ class FeatureNuisanceRegression:
         return results.rename(columns={'index': 'time'})
     
     def standard_regression(self, train, test):
-        #Define x2
-        # Normalize the behavior features
-        for feature in self.behavior_categories.keys(): 
-            train[feature], test[feature] = feature_scaler(train[feature], test[feature], device=self.device)
-        # Normalize AlexNet and Moten and reduce the dimensionality
-        for feature in ['alexnet', 'moten']:
-            train[feature], test[feature] = feature_scaler(train[feature], test[feature], device=self.device)
-            train[feature], test[feature], _ = regression.pca_rotation(train[feature], test[feature])
-            print(f'{feature} PCs: {train[feature].size()[1]}')
-        y_train, y_true, _ = dict_to_tensor(train, test, [self.feature_to_predict])
-        X_nuisance_train, _, _ = dict_to_tensor(train, test, self.x_nuisance)
+        #Define y
+        train['fmri_X'], train['fmri_X'] = feature_scaler(train['fmri_X'], train['fmri_X'], device=self.device)
+        train['fmri_y'], train['fmri_y'] = feature_scaler(train['fmri_y'], train['fmri_y'], device=self.device)
+        X_nuisance_train, _, _ = dict_to_tensor(train, test, ['fmri_X'])
+        y_train, y_true, _ = dict_to_tensor(train, test, ['fmri_y'])
 
         scores, scores_null, scores_var = [], [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
-                              desc=f'Predict features from EEG', leave=True)
+                              desc=f'Predict fMRI from EEG', leave=True)
         for time_ind in outer_iterator:
             # First predict the variance in the fMRI by the EEG and predict the result
             X_eeg_train, X_eeg_test = train['eeg'][time_ind], test['eeg'][time_ind]
@@ -117,19 +122,20 @@ class FeatureNuisanceRegression:
                     torch.cuda.manual_seed(i_split)
                 perm = torch.randperm(X_train.size(0))
                 idx = perm[:int(X_train.size(0)/2)] 
-                betas = ridge(X_train[idx], y_train[idx],
+                betas = ridge(X_train, y_train,
                             groups=groups,
                             alpha_start=self.alpha_start,
                             alpha_stop=self.alpha_stop,
                             device=self.device,
                             return_betas=True,
-                            rotate_x=False)['betas']
+                            rotate_x=True)['betas']
                 eeg_betas.append(torch.unsqueeze(betas[:X_eeg_train.shape[-1]], dim=2))
             # Get the mean of the betas over 100 random samples of the training set
             eeg_betas = torch.mean(torch.cat(eeg_betas, dim=2), dim=2)
             # Fit the prediction
             y_pred = torch.matmul(X_eeg_test, eeg_betas)
 
+            # Evaluate against y
             # Evaluate against y
             scores.append(compute_score(y_true, y_pred, score_type=self.scoring,
                             adjusted=X_train.size()[1]).cpu().detach().numpy())
@@ -151,15 +157,22 @@ class FeatureNuisanceRegression:
     def mk_out_dir(self):
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
+    def save_indiv_times(self, scores, fmri_meta):
+        for time_ind, score in scores.items():
+            results = pd.DataFrame(score.cpu().detach().numpy(),
+                                   index=fmri_meta['voxel_id'],
+                                   columns=['value'])
+            if time_ind == 0:
+                print(results.head())
+            results.to_parquet(f'{self.out_name}_time-{str(time_ind).zfill(3)}.parquet')
+
     def run(self):
         behavior, other_data, time_map = self.load_and_validate()
-        print(behavior.head())
         train, test = self.split_and_norm(behavior, other_data)
+        self.mk_out_dir()
         scores, scores_null, scores_var = self.standard_regression(train, test)
-        print(f'{scores_null.shape=}')
         results = self.reorganize_results(scores, time_map, scores_null, scores_var)
         print(results.head())
-        self.mk_out_dir()
         self.save_df(results)
         print('finished')
 
@@ -171,7 +184,11 @@ def main():
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureNuisanceRegression')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fMRINuisanceRegression')
+    parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
+                        help='predict the roi mean response instead of voxelwise responses')
+    parser.add_argument('--smoothing', action=argparse.BooleanOptionalAction, default=False,
+                        help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,
@@ -180,14 +197,12 @@ def main():
                         help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
-    parser.add_argument('--feature_to_predict', '-y', type=str, default='expanse',
-                        help='the feature that you want to predict')
-    parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
-    parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
+    parser.add_argument('--roi_to_predict', '-y', type=str, default='EVC',
+                        help='the ROI that you want to predict')
+    parser.add_argument('--sub', '-s', type=int, default=1,
+                        help='the fMRI subject to predict')
     args = parser.parse_args()
-    FeatureNuisanceRegression(args).run()
+    fMRINuisanceRegression(args).run()
 
 
 if __name__ == '__main__':
