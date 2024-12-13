@@ -20,13 +20,15 @@ fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 feature_nuisance_regression=$(project_folder)/data/interim/FeatureNuisanceRegression
 fmri_nuisance_regression=$(project_folder)/data/interim/fMRINuisanceRegression
-feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
-roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
+feature_plotting=$(project_folder)/data/interim/PlotNuisanceFeatureDecoding
+roi_plotting=$(project_folder)/data/interim/PlotNuisanceROIDecoding
 back2back_plotting=$(project_folder)/data/interim/PlotBack2Back
+feature_latency=$(project_folder)/data/interim/FeatureLatencyDist
+roi_latency=$(project_folder)/data/interim/ROILatencyDist
 
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding feature_nuisance_decoding roi_decoding roi_nuisance_decoding full_brain back_to_back plot_rois plot_features plot_back2back
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding feature_nuisance_decoding feature_latency roi_decoding roi_nuisance_decoding full_brain back_to_back plot_rois roi_latency  plot_features plot_back2back
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -234,8 +236,28 @@ $(roi_plotting)/.plotted:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
+python $(project_folder)/scripts/plot_nuisance_roi_decoding.py --overwrite" | sbatch
 	# touch $(roi_plotting)/.plotted
+
+
+#Calculate the distributions
+feature_latency: $(feature_latency)/.plotted $(feature_plotting)
+$(feature_latency)/.plotted: 
+	mkdir -p $(feature_latency)
+	for f in $(features_1d); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=feature_latency\n\
+#SBATCH --time=7:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+echo $${f}\n\
+python $(project_folder)/scripts/feature_latency_dist.py -i $(feature_plotting) -f $${f}" | sbatch; \
+	done
+	# touch $(feature_latency)/.plotted
 
 
 #Plot the ROI timecourses 
@@ -251,8 +273,31 @@ $(feature_plotting)/.plotted:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_feature_decoding.py --overwrite" | sbatch
+python $(project_folder)/scripts/plot_nuisance_feature_decoding.py --overwrite" | sbatch
 	# touch $(feature_plotting)/.plotted
+
+
+#Calculate the distributions
+roi_latency: $(roi_latency)/.plotted $(roi_latency)
+$(roi_latency)/.plotted: 
+	mkdir -p $(roi_latency)
+	for fs in $(fmri_subs); do \
+	for r in $(rois); do \
+		echo -e "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=roi_latency\n\
+#SBATCH --time=7:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+set -e\n\
+ml anaconda\n\
+conda activate eeg\n\
+echo $${fs}\n\
+echo $${r}\n\
+python $(project_folder)/scripts/roi_latency_dist.py -i $(roi_plotting) -s $${fs} -r $${r}" | sbatch; \
+	done; \
+	done
+	# touch $(roi_latency)/.plotted
 
 
 #Plot the Back2Back timecourses 

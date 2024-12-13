@@ -41,8 +41,9 @@ class fMRINuisanceRegression:
     def load_and_validate(self):
         behavior = loading.load_behavior(self.fmri_dir)
         fmri, _ = loading.load_fmri(self.fmri_dir, roi_mean=self.roi_mean, smoothing=self.smoothing)
+        print(fmri.columns)
         x_nuisance_cols = [col for col in fmri.columns if f'sub-{self.sub}' in col and 'face' not in col and self.roi_to_predict not in col]
-        y_cols = [col for col in fmri.columns if f'sub-{self.sub}' in col and self.roi_to_predict in col]
+        y_cols = [col for col in fmri.columns if f'sub-{self.sub}' in col and 'face' not in col  and self.roi_to_predict in col]
         print('nuisance cols:')
         print(x_nuisance_cols)
         print('y cols:')
@@ -197,9 +198,9 @@ def main():
                         help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
-    parser.add_argument('--roi_to_predict', '-y', type=str, default='EVC',
+    parser.add_argument('--roi_to_predict', '-y', type=str, default='pSTS',
                         help='the ROI that you want to predict')
-    parser.add_argument('--sub', '-s', type=int, default=1,
+    parser.add_argument('--sub', '-s', type=int, default=4,
                         help='the fMRI subject to predict')
     args = parser.parse_args()
     fMRINuisanceRegression(args).run()
