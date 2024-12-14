@@ -39,8 +39,7 @@ class FeatureLatencyDist:
             ps_corrected = cluster_correction(scores_sample.T, ps.T, scores_null_sample.T)
             onset = time[ps_corrected < 0.05].min() if len(time[ps_corrected < 0.05]) > 0 else np.nan
             onsets.append(onset)
-        onsets = np.array(onsets)
-        np.save(f'{self.out_dir}/{self.feature}.npy')
+        np.save(f'{self.out_dir}/{self.feature}.npy', np.array(onsets))
 
 def main():
     parser = argparse.ArgumentParser(description='Compute the latency distributions')
