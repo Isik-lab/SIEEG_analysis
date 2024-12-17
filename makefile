@@ -87,10 +87,12 @@ $(eeg_reliability)/.done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
 #SBATCH --time=6:00:00\n\
-#SBATCH --cpus-per-task=12\n\
+#SBATCH --cpus-per-task=16\n\
+#SBATCH --exclusive=user\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
+echo $${s}\n\
 python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	done
 	# touch $(eeg_reliability)/.done
@@ -107,12 +109,13 @@ $(back_to_back)/.done:
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=back_to_back\n\
 #SBATCH --time=2:45:00\n\
-#SBATCH --cpus-per-task=12\n\
+#SBATCH --cpus-per-task=16\n\
+#SBATCH --exclusive=user\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 echo $${x}\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 $${x}" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 '[\"$${x}\"]'" | sbatch; \
 	done; \
 	done
 	# touch $(back_to_back)/.done

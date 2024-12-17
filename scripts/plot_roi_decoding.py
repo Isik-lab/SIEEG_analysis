@@ -30,7 +30,6 @@ def load_and_summarize(files):
     mean_df = df.groupby(['time', 'roi_name']).mean(numeric_only=True).reset_index()
     print('Finished mean over fMRI subjects')
     mean_df.sort_values(by=['roi_name', 'time'], inplace=True)
-    print(f'{mean_df.roi_name.unique()=}')
 
     # Group stats
     # Variance
