@@ -2,7 +2,8 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import stats, plotting, loading
+from src import loading
+from src.stats import bootstrap_gpu, compute_score
 from tqdm import tqdm
 
 
@@ -20,11 +21,6 @@ class eegReliability:
 
     def load_and_average(self):
         eeg = loading.load_eeg(self.eeg_file)
-        print(f'{len(eeg)=}')
-        print(f'{eeg.trial.nunique()=}')
-        print(f'{eeg.time.nunique()=}')
-        print(f'{eeg.channel.nunique()=}')
-        print(f'{(eeg.channel.nunique()*eeg.time.nunique()*eeg.trial.nunique())==len(eeg)=}')
         eeg_filtered = eeg.loc[eeg.stimulus_set == 'test'].reset_index(drop=True) #Filter to the test set
         eeg_average = eeg_filtered.groupby(['time', 'channel', 'video_name', 'even']).mean(numeric_only=True)
         return eeg_average.reset_index()
@@ -36,11 +32,14 @@ class eegReliability:
             for channel, channel_df in time_df.groupby('channel'):
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
-                results.append({'time': time, 'channel': channel, 'r': stats.corr(even, odd)})
-        return pd.DataFrame(results)
+                time_dict = {'time': time, 'channel': channel, 'r': compute_score(even, odd)}
+                time_dict.update({f'var_perm_{i}': val for i, val in enumerate(bootstrap_gpu(even, odd))})
+                results.append(time_dict)
+        results = pd.DataFrame(results)
+        return results.groupby('channel').mean(numeric_only=True).reset_index(drop=True)
 
     def save(self, df):
-        df.to_csv(f'{self.out_dir}/sub-{self.sid}.csv', index=False)
+        df.to_parquet(f'{self.out_dir}/{self.sid}.parquet', index=False)
 
     def run(self):
         df = self.load_and_average()
@@ -53,7 +52,7 @@ def main():
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegReliability')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-01.csv.gz')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-01.parquet')
     args = parser.parse_args()
     eegReliability(args).run()
 

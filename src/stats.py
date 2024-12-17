@@ -16,7 +16,10 @@ SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef,
                    'explained_variance': explained_variance}
 
 
-def compute_score(y_true, y_pred, score_type='r2_score', adjusted=0):
+def compute_score(y_true, y_pred, score_type='pearsonr', adjusted=0):
+    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
+    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
+
     if score_type == 'r2_adj':
         kwargs = {'multioutput': 'raw_values', 'adjusted': adjusted}
     elif score_type == 'explained_variance' or score_type == 'r2_score':
@@ -46,8 +49,13 @@ def calculate_p(r_null, r_true, n_perm, H0):
     return p_
 
 
-def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, adjusted=0):
+def perm_gpu(y_true, y_pred, score_type='pearsonr',
+             n_perm=int(5e3), verbose=False, adjusted=0):
     import torch
+
+    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
+    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
+
     g = torch.Generator()
     dim = y_pred.size()
 
@@ -68,8 +76,13 @@ def perm_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, adjuste
     return r_null
 
 
-def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, adjusted=0):
+def bootstrap_gpu(y_true, y_pred, score_type='pearsonr',
+                  n_perm=int(5e3), verbose=False, adjusted=0):
     import torch
+
+    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
+    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
+
     g = torch.Generator()
     dim = y_pred.size()
 
@@ -87,56 +100,6 @@ def bootstrap_gpu(y_true, y_pred, score_type, n_perm=int(5e3), verbose=False, ad
 
         # Compute the correlation
         r_var[i, :] = compute_score(y_true[inds], y_pred[inds], score_type=score_type, adjusted=adjusted)
-    return r_var
-
-
-def perm_unique_variance_gpu(y_hat_all, y_hat_ablate, y_true, score_type,
-                             n_perm=int(5e3), verbose=False):
-    import torch
-    g = torch.Generator()
-    dim = y_hat_ablate.shape
-
-    if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance permutation testing')
-    else:
-        iterator = range(n_perm)
-
-    r_null = torch.zeros((n_perm, dim[-1]))
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Permute the indices
-        inds = torch.randperm(dim[0], generator=g)
-
-        # Compute the correlations
-        r_all = compute_score(y_true, y_hat_all[inds], score_type=score_type)
-        r_ablate= compute_score(y_true, y_hat_ablate[inds], score_type=score_type)
-        r_null[i, :] = (torch.sign(r_all) * (r_all ** 2)) - (torch.sign(r_ablate) * (r_ablate ** 2))
-    return r_null
-
-
-def bootstrap_unique_variance_gpu(y_hat_all, y_hat_ablate, y_true, score_type,
-                                  n_perm=int(5e3), verbose=False):
-    import torch
-    g = torch.Generator()
-    dim = y_hat_ablate.shape
-
-    if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Shared variance bootstrapping')
-    else:
-        iterator = range(n_perm)
-
-    r_var = torch.zeros((n_perm, dim[-1]))
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Generate a random sample of indices
-        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0], 1), generator=g))
-
-        # Compute the correlations
-        r_all = compute_score(y_true[inds], y_hat_all[inds], score_type=score_type)
-        r_ablate = compute_score(y_true[inds], y_hat_ablate[inds], score_type=score_type)
-        r_var[i, :] = (torch.sign(r_all) * (r_all ** 2)) - (torch.sign(r_ablate) * (r_ablate ** 2))
     return r_var
 
 

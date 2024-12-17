@@ -16,12 +16,13 @@ eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
 feature_regression=$(project_folder)/data/interim/FeatureRegression
-feature_plotting=$(project_folder)/data/interim/PlotNuisanceFeatureDecoding
-roi_plotting=$(project_folder)/data/interim/PlotNuisanceROIDecoding
+feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
+roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
 back2back_plotting=$(project_folder)/data/interim/PlotBack2Back
 
 # Steps to run
 all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back
+
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -39,6 +40,7 @@ conda activate eeg\n\
 python $(project_folder)/scripts/motion_energy_activations.py " | sbatch
 	touch $(motion_energy)/.done
 
+
 # Get the activations from AlexNet for the 3 s videos
 alexnet: $(alexnet)/.done $(videos)
 $(alexnet)/.done: 
@@ -54,6 +56,7 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/alexnet_activations.py " | sbatch
 	touch $(alexnet)/.done
+
 
 # Preprocess EEG data for regression
 eeg_preprocess: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
@@ -73,6 +76,7 @@ python $(project_folder)/scripts/eeg_preprocessing.py -s $$s" | sbatch; \
 	done
 	touch $(eeg_preprocess)/.preprocess_done
 
+
 #Compute the channel-wise EEG reliability
 eeg_reliability: $(eeg_reliability)/.done $(eeg_preprocess)
 $(eeg_reliability)/.done: 
@@ -82,14 +86,14 @@ $(eeg_reliability)/.done:
 #SBATCH --partition=shared\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
-#SBATCH --time=2:00:00\n\
+#SBATCH --time=6:00:00\n\
 #SBATCH --cpus-per-task=12\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	done
-	touch $(eeg_reliability)/.done
+	# touch $(eeg_reliability)/.done
 
 
 #Compute b2b regression with EEG first then annotated features
@@ -108,7 +112,7 @@ set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 echo $${x}\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x $${x} --overwrite" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 $${x}" | sbatch; \
 	done; \
 	done
 	# touch $(back_to_back)/.done
@@ -218,6 +222,7 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_back2back.py --overwrite" | sbatch
 	# touch $(back2back_plotting)/.plotted
+
 
 clean:
 	rm *.out
