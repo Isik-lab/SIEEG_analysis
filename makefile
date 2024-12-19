@@ -83,11 +83,11 @@ $(eeg_reliability)/.done:
 	mkdir -p $(eeg_reliability)
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
-#SBATCH --partition=shared\n\
+#SBATCH --partition=parallel\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
-#SBATCH --time=6:00:00\n\
-#SBATCH --cpus-per-task=16\n\
+#SBATCH --time=10:00:00\n\
+#SBATCH --cpus-per-task=48\n\
 #SBATCH --exclusive=user\n\
 set -e\n\
 ml anaconda\n\
@@ -115,7 +115,7 @@ set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
 echo $${x}\n\
-python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x2 '[\"$${x}\"]'" | sbatch; \
+python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x '[\"$${x}\"]'" | sbatch; \
 	done; \
 	done
 	# touch $(back_to_back)/.done

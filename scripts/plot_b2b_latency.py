@@ -5,8 +5,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm 
-from src.stats import calculate_p
 from pathlib import Path
+from src.stats import calculate_p
 
 
 def bin_time_windows_cut(df, window_size=50, start_time=0, end_time=300):
@@ -53,11 +53,7 @@ def load_and_summarize(files):
     df = df.loc[(df.time_window >= 0) & (df.time_window < 250)].reset_index()
 
     #Average across EEG subjects
-    mean_df = df.groupby(['time_window', 'fmri_subj_id', 'roi_name']).mean(numeric_only=True).reset_index()
-    print('Finished mean over EEG subjects')
-
-    #Average across EEG subjects
-    mean_df = df.groupby(['time_window', 'roi_name']).mean(numeric_only=True).reset_index()
+    mean_df = df.groupby(['time_window', 'feature']).mean(numeric_only=True).reset_index()
     mean_df = mean_df.dropna().drop(columns=['time']).rename(columns={'value': 'score'})
     mean_df.reset_index(drop=True, inplace=True)
     print('Finished mean over EEG subjects')
@@ -72,12 +68,12 @@ def load_and_summarize(files):
     # P-values
     null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
     stats_df = []
-    for _, roi_df in mean_df.groupby('roi_name'):
-        scores_null = roi_df[null_cols].to_numpy().T
-        scores = roi_df['score'].to_numpy().T
-        roi_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
-        roi_df.drop(columns=null_cols, inplace=True)
-        stats_df.append(roi_df)
+    for _, feature_df in mean_df.groupby('feature'):
+        scores_null = feature_df[null_cols].to_numpy().T
+        scores = feature_df['score'].to_numpy().T
+        feature_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
+        feature_df.drop(columns=null_cols, inplace=True)
+        stats_df.append(feature_df)
     return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
 
 
@@ -88,18 +84,18 @@ def plot_simple(out_file, stats_df, colors, title_names):
     order_counter = -1
     jitter = -8 
     xmin, xmax = -15, 215
-    for (_, roi_df), (label, color) in zip(stats_df.groupby('roi_name', observed=True), zip(title_names, colors)):
+    for (_, feature_df), (label, color) in zip(stats_df.groupby('feature', observed=True), zip(title_names, colors)):
         order_counter +=1
-        ax.vlines(x=roi_df['time_window']+jitter, 
-                    ymin=roi_df['low_ci'], ymax=roi_df['high_ci'],
+        ax.vlines(x=feature_df['time_window']+jitter, 
+                    ymin=feature_df['low_ci'], ymax=feature_df['high_ci'],
                     color=color,
                     zorder=order_counter)
         order_counter +=1
-        ax.plot(roi_df['time_window']+jitter, roi_df['score'], 'o',
+        ax.plot(feature_df['time_window']+jitter, feature_df['score'], 'o',
                 color=color, zorder=order_counter, label=label)
         
-        sigs = roi_df['high_ci'][roi_df['p'] < 0.05] + 0.02
-        sigs_time = roi_df['time_window'][roi_df['p'] < 0.05] + (jitter-2.5)
+        sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
+        sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-2.5)
         for sig, sig_time in zip(sigs, sigs_time):
             ax.text(sig_time, sig, '*', fontsize='x-small')
         jitter += 8
@@ -121,7 +117,7 @@ def plot_simple(out_file, stats_df, colors, title_names):
     plt.tight_layout()
     plt.savefig(out_file)
 
-class PlotROILatency:
+class PlotFeatureLatency:
     def __init__(self, args):
         self.out_dir = args.out_dir 
         self.out_csv = args.out_csv
@@ -133,47 +129,48 @@ class PlotROILatency:
 
     def run(self):
         if self.simplified_plotting:
-            rois = ['EVC', 'LOC', 'aSTS']
-            title_names = ['EVC', 'LOC', 'aSTS-SI']
-            colors = ['black', '#976A9A', '#407FAA']
-            out_plot = f'{self.out_dir}/roi_plot.pdf'
+            features = ['expanse', 'agent_distance', 'communication']
+            title_names = ['spatial expanse', 'agent distance', 'communication']
+            colors = ['#F5DD40', '#8558F4', '#73D2DF']
+            out_plot = f'{self.out_dir}/feature_plot.pdf'
         else:
-            rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC',
-                    'EBA', 'pSTS', 'aSTS']
-            title_names = ['EVC', 'MT', 'FFA', 'PPA',
-                           'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
-            colors = ['black', 'black', '#497059', '#497059',
-                      '#976A9A', '#976A9A', '#407FAA', '#407FAA']
-            out_plot = f'{self.out_dir}/all_rois_plot.pdf'
+            features = ['expanse', 'object', 'agent_distance', 'facingness',
+                        'joint_action', 'communication', 'valence', 'arousal']
+            title_names = ['spatial expanse', 'object directedness',
+                        'agent distance', 'facingness',
+                        'joint action', 'communication', 'valence', 'arousal']
+            colors = ['#F5DD40', '#F5DD40', '#8558F4', '#8558F4',
+                      '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
+            out_plot = f'{self.out_dir}/all_features_plot.pdf'
 
         if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
-            files = glob(f'{self.regression_dir}/*rois.parquet')
+            files = glob(f'{self.regression_dir}/*features.parquet')
             df = load_and_summarize(files)
             df.to_csv(f'{self.out_dir}/{self.out_csv}', index=False)
         else:
             df = pd.read_csv(f'{self.out_dir}/{self.out_csv}')
 
         # Make categorical for plotting
-        df = df.loc[df['roi_name'].isin(rois)].reset_index(drop=True)
-        df['roi_name'] = pd.Categorical(df['roi_name'], categories=rois, ordered=True)
+        df = df.loc[df['feature'].isin(features)].reset_index(drop=True)
+        df['feature'] = pd.Categorical(df['feature'], categories=features, ordered=True)
 
         plot_simple(out_plot, df, colors, title_names)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Plot the ROI regression latency')
+    parser = argparse.ArgumentParser(description='Plot the Feature regression latency')
     parser.add_argument('--simplified_plotting', action=argparse.BooleanOptionalAction, default=False,
                         help='plot all or only select features')
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to redo the summary statistics')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotROILatency')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotB2BLatency')
     parser.add_argument('--out_csv', type=str, help='output csv',
                         default='feature_plot.csv')
     parser.add_argument('--regression_dir', '-r', type=str, help='directory for input',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/fMRIRegression')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
     args = parser.parse_args()
-    PlotROILatency(args).run()
+    PlotB2BLatency(args).run()
 
 
 if __name__ == '__main__':

@@ -38,8 +38,7 @@ class Back2Back:
     def __init__(self, args):
         self.process = 'Back2Back'
         self.y_names = json.loads(args.y_names)
-        self.x1 = json.loads(args.x1)
-        self.x2 = json.loads(args.x2)
+        self.feature = json.loads(args.feature)
         self.roi_mean = args.roi_mean
         self.alpha_start = args.alpha_start
         self.alpha_stop = args.alpha_stop
@@ -48,7 +47,7 @@ class Back2Back:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_x2-{'-'.join(self.x2)}.parquet'
+        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_feature-{'-'.join(self.feature)}.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
@@ -123,7 +122,7 @@ class Back2Back:
             train[feature], test[feature] = feature_scaler(train[feature], test[feature], device=self.device)
             train[feature], test[feature], _ = regression.pca_rotation(train[feature], test[feature])
             print(f'{feature} PCs: {train[feature].size()[1]}')
-        X2_train, X2_test, _ = dict_to_tensor(train, test, self.x2)
+        X2_train, X2_test, _ = dict_to_tensor(train, test, self.feature)
 
         reg1_scores, reg2_scores = {}, {}
         reg2_scores_null, reg2_scores_var = [], []
@@ -161,7 +160,9 @@ class Back2Back:
             reg2_scores[time_ind] = compute_score(y_test, yhat)
             reg2_scores_null.append(torch.unsqueeze(perm_gpu(y_test, yhat, n_perm=self.n_perm), 2))
             reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(y_test, yhat, n_perm=self.n_perm), 2))
-        return reg1_scores, reg2_scores, torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
+        return reg1_scores, reg2_scores, \
+               torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), \
+               torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -196,9 +197,7 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
-    parser.add_argument('--x1', '-x1', type=str, default='["eeg"]',
-                        help='a list of data names for fitting the first regression')
-    parser.add_argument('--x2', '-x2', type=str, default='["alexnet"]',
+    parser.add_argument('--feature', '-x', type=str, default='["alexnet"]',
                         help='a list of data names for fitting the second regression')
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')

@@ -17,6 +17,7 @@ class PlotBack2Back:
         self.input_dir = args.input_dir
         self.output_dir = args.output_dir
         self.overwrite = args.overwrite
+        Path(self.output_dir).mkdir(exist_ok=True, parents=True)
         
         # Create output directory
         Path(self.output_dir).mkdir(exist_ok=True)
@@ -66,6 +67,7 @@ class PlotBack2Back:
         """Load data for a specific feature"""
         df = []
         files = glob(f'{self.input_dir}/*{feature}*.parquet')
+        print(files)
         for i_file, file in enumerate(files):
             subj_df = pd.read_parquet(file)
             subj_df['eeg_subj_id'] = i_file
@@ -141,24 +143,7 @@ class PlotBack2Back:
             self._set_axes_properties(ax, feature, ymin, ymax, ifeature)
             
             order_counter += 2
-
-    def run(self):
-        """Main execution method"""
-        # Load and process data
-        back2back_df = self.load_and_process_data()
-        
-        # Prepare full stats dataframe
-        full_stats_df = self._prepare_full_stats(back2back_df)
-        
-        # Plot full results
-        sns.set_context(context='paper', font_scale=2)
-        self.plot_full_results(full_stats_df)
-        
-        # Prepare and plot reduced results
-        reduced_stats_df = self._prepare_reduced_stats(back2back_df)
-        sns.set_context(context='poster', font_scale=1.25)
-        self.plot_reduced_results(reduced_stats_df)
-
+    
     def _prepare_full_stats(self, df):
         """Prepare full statistics dataframe"""
         stats_df = df.loc[df['feature'].isin(self.features)].reset_index(drop=True)
@@ -310,13 +295,31 @@ class PlotBack2Back:
                       loc='upper right', fontsize='18')
         axes[-1].set_xlabel('Time (ms)')
 
+    def run(self):
+        """Main execution method"""
+        # Load and process data
+        back2back_df = self.load_and_process_data()
+        
+        # Prepare full stats dataframe
+        full_stats_df = self._prepare_full_stats(back2back_df)
+        
+        # Plot full results
+        sns.set_context(context='paper', font_scale=2)
+        self.plot_full_results(full_stats_df)
+        
+        # Prepare and plot reduced results
+        reduced_stats_df = self._prepare_reduced_stats(back2back_df)
+        sns.set_context(context='poster', font_scale=1.25)
+        self.plot_reduced_results(reduced_stats_df)
+
+
 
 def main():
     parser = argparse.ArgumentParser(description='Plot the Back2Back regression results')
-    parser.add_argument('--input_dir', type=str, default='data/interim/Back2Back',
-                      help='Input file prefix')
-    parser.add_argument('--output_dir', type=str, default='data/interim/PlotBack2Back/',
-                      help='Output file prefix')
+    parser.add_argument('--input_dir', type=str, help='Input file prefix',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
+    parser.add_argument('--output_dir', type=str, help='Output file prefix', 
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotBack2Back/')
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to redo the summary statistics')
     args = parser.parse_args()

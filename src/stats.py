@@ -64,7 +64,7 @@ def perm_gpu(y_true, y_pred, score_type='pearsonr',
     else:
         iterator = range(n_perm)
 
-    r_null = torch.zeros((n_perm, dim[-1]))
+    r_null = torch.zeros((n_perm, dim[-1]))if len(dim) > 1 else torch.zeros(n_perm)
     for i in iterator:
         g.manual_seed(i) # Set the random seed
 
@@ -72,7 +72,13 @@ def perm_gpu(y_true, y_pred, score_type='pearsonr',
         inds = torch.randperm(dim[0], generator=g)
         
         # Compute the correlation
-        r_null[i, :] = compute_score(y_true, y_pred[inds], score_type=score_type, adjusted=adjusted)
+        null = compute_score(y_true, y_pred[inds], score_type=score_type, adjusted=adjusted)
+
+        # Store the value
+        if len(dim) > 1:
+            r_null[i, :] = null
+        else:
+            r_null[i] = null
     return r_null
 
 
@@ -91,7 +97,7 @@ def bootstrap_gpu(y_true, y_pred, score_type='pearsonr',
     else:
         iterator = range(n_perm)
 
-    r_var = torch.zeros((n_perm, dim[-1]))
+    r_var = torch.zeros((n_perm, dim[-1]))if len(dim) > 1 else torch.zeros(n_perm)
     for i in iterator:
         g.manual_seed(i) # Set the random seed
 
@@ -99,7 +105,13 @@ def bootstrap_gpu(y_true, y_pred, score_type='pearsonr',
         inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
 
         # Compute the correlation
-        r_var[i, :] = compute_score(y_true[inds], y_pred[inds], score_type=score_type, adjusted=adjusted)
+        var = compute_score(y_true[inds], y_pred[inds], score_type=score_type, adjusted=adjusted)
+        
+        # Store the value
+        if len(dim) > 1:
+            r_var[i, :] = var
+        else:
+            r_var[i] = var
     return r_var
 
 

@@ -5,6 +5,7 @@ import pandas as pd
 from src import loading
 from src.stats import bootstrap_gpu, compute_score
 from tqdm import tqdm
+import numpy as np
 
 
 class eegReliability:
@@ -29,14 +30,17 @@ class eegReliability:
         results = []
         iterator = tqdm(df.groupby('time'), total=df.time.nunique(), desc='Calculating reliability')
         for time, time_df in iterator:
-            for channel, channel_df in time_df.groupby('channel'):
+            rs = 0
+            vars = np.zeros(5000)
+            for ichannel, (__cached__, channel_df) in enumerate(time_df.groupby('channel')):
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
-                time_dict = {'time': time, 'channel': channel, 'r': compute_score(even, odd)}
-                time_dict.update({f'var_perm_{i}': val for i, val in enumerate(bootstrap_gpu(even, odd))})
-                results.append(time_dict)
-        results = pd.DataFrame(results)
-        return results.groupby('channel').mean(numeric_only=True).reset_index(drop=True)
+                rs += compute_score(even, odd)
+                vars += bootstrap_gpu(even, odd).cpu().detach().numpy()
+            time_dict = {'time': time, 'r': rs/(ichannel+1)}
+            time_dict.update({f'var_perm_{i}': val for i, val in enumerate(vars/(ichannel+1))})
+            results.append(time_dict)
+        return results.mean(numeric_only=True).reset_index(drop=True)
 
     def save(self, df):
         df.to_parquet(f'{self.out_dir}/{self.sid}.parquet', index=False)

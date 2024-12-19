@@ -5,11 +5,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm 
-from src.stats import calculate_p, cluster_correction
-from scipy import ndimage
 from pathlib import Path
-import os
-from matplotlib.lines import Line2D
+from src.stats import calculate_p
 
 
 def bin_time_windows_cut(df, window_size=50, start_time=0, end_time=300):
@@ -157,10 +154,7 @@ class PlotFeatureLatency:
         df = df.loc[df['feature'].isin(features)].reset_index(drop=True)
         df['feature'] = pd.Categorical(df['feature'], categories=features, ordered=True)
 
-        if self.simplified_plotting:
-            plot_simple(out_plot, df, colors, title_names)
-        else: 
-            plot_simple(out_plot, df, colors, title_names)
+        plot_simple(out_plot, df, colors, title_names)
 
 
 def main():
