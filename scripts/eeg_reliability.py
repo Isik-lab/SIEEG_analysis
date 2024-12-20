@@ -40,15 +40,16 @@ class eegReliability:
             time_dict = {'time': time, 'r': rs/(ichannel+1)}
             time_dict.update({f'var_perm_{i}': val for i, val in enumerate(vars/(ichannel+1))})
             results.append(time_dict)
-        return results.mean(numeric_only=True).reset_index(drop=True)
+        return pd.DataFrame(results)
 
     def save(self, df):
-        df.to_parquet(f'{self.out_dir}/{self.sid}.parquet', index=False)
+        df.to_parquet(f'{self.out_dir}/{self.sid}.parquet')
 
     def run(self):
         df = self.load_and_average()
         results = self.reliability(df)
         self.save(results)
+        print('finished')
 
 def main():
     parser = argparse.ArgumentParser()
