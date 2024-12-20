@@ -220,7 +220,7 @@ class PlotBack2Back:
         ax.set_ylim([ymin, ymax])
         
         if ifeature % 2 == 0:
-            ax.set_ylabel('Unique variance ($r^2$)')
+            ax.set_ylabel('Prediction ($r$)')
         if ifeature >= 8:
             ax.set_xlabel('Time (ms)')
 
@@ -283,7 +283,7 @@ class PlotBack2Back:
                  linewidth=5, zorder=0)
         ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
                  linewidth=5, zorder=0)
-        ax.set_ylabel('Unique variance ($r^2$)')
+        ax.set_ylabel('Prediction ($r$)')
         ax.spines[['right', 'top']].set_visible(False)
         ax.set_ylim([ymin, ymax])
         ax.set_title(title)
