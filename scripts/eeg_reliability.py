@@ -11,6 +11,7 @@ import numpy as np
 class eegReliability:
     def __init__(self, args):
         self.process = 'eegReliability'
+        self.data_split = args.data_split
         if 'u' not in args.sid:
             self.sid = f'sub-{str(int(args.sid)).zfill(2)}'
         else:
@@ -22,7 +23,7 @@ class eegReliability:
 
     def load_and_average(self):
         eeg = loading.load_eeg(self.eeg_file)
-        eeg_filtered = eeg.loc[eeg.stimulus_set == 'test'].reset_index(drop=True) #Filter to the test set
+        eeg_filtered = eeg.loc[eeg.stimulus_set == self.data_split].reset_index(drop=True) #Filter to the right data split
         eeg_average = eeg_filtered.groupby(['time', 'channel', 'video_name', 'even']).mean(numeric_only=True)
         return eeg_average.reset_index()
 
@@ -43,7 +44,7 @@ class eegReliability:
         return pd.DataFrame(results)
 
     def save(self, df):
-        df.to_parquet(f'{self.out_dir}/{self.sid}.parquet')
+        df.to_parquet(f'{self.out_dir}/{self.sid}_set-{self.data_split}.parquet')
 
     def run(self):
         df = self.load_and_average()
@@ -54,6 +55,7 @@ class eegReliability:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', '-s', type=str, default='1')
+    parser.add_argument('--data_split', '-d', type=str, default='train')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegReliability')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',

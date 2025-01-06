@@ -50,7 +50,7 @@ def load_and_summarize(files):
     # Add categories for different time windows
     df['time_window'] = bin_time_windows_cut(df, window_size=50, end_time=500)
     # Remove time windows before stimulus and after 300 ms
-    df = df.loc[(df.time_window >= 0) & (df.time_window < 250)].reset_index()
+    df = df.loc[(df.time_window >= 0) & (df.time_window < 200)].reset_index()
 
     #Average across EEG subjects
     mean_df = df.groupby(['time_window', 'feature']).mean(numeric_only=True).reset_index()
