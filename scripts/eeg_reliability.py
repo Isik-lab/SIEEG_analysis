@@ -35,7 +35,7 @@ class eegReliability:
             for ichannel, (__cached__, channel_df) in enumerate(time_df.groupby('channel')):
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
-                rs += compute_score(even, odd)
+                rs += compute_score(even, odd).cpu().detach().numpy()
                 vars += bootstrap_gpu(even, odd).cpu().detach().numpy()
             time_dict = {'time': time, 'r': rs/(ichannel+1)}
             time_dict.update({f'var_perm_{i}': val for i, val in enumerate(vars/(ichannel+1))})
