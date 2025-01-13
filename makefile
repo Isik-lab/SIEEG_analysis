@@ -1,6 +1,7 @@
 user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
-eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
+# eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
+eeg_subs := 5 6 14 15 16
 fmri_subs := 1 2 3 4
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
 
@@ -86,7 +87,7 @@ $(eeg_reliability)/.done:
 #SBATCH --partition=parallel\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
-#SBATCH --time=10:00:00\n\
+#SBATCH --time=15:00:00\n\
 #SBATCH --cpus-per-task=48\n\
 #SBATCH --exclusive=user\n\
 set -e\n\
