@@ -10,6 +10,7 @@ from scipy import ndimage
 from pathlib import Path
 import os
 from matplotlib.lines import Line2D
+from src.temporal import bin_time_windows_cut
 
 
 class PlotBack2Back:
@@ -40,42 +41,86 @@ class PlotBack2Back:
         self.reduced_rois = ['EVC', 'LOC', 'aSTS']
         self.reduced_features = ['alexnet', 'agent_distance', 'communication']
         self.reduced_rois_titles = ['EVC', 'LOC', 'aSTS-SI']
-        self.reduced_features_legends = ['AlexNet conv2', 'agent distance', 'communication']
-        self.reduced_colors = ['#404040', '#8558F4', '#73D2DF']
+        self.reduced_features_legends = ['AlexNet conv2','agent distance', 'communication']
+        self.reduced_colors = ['#404040','#8558F4', '#73D2DF']
         
         self.smooth_kernel = np.ones(10)/10
-        self.stats_pos_start = {'EVC': -.2, 'LOC': -.12, 'aSTS': -.12}
+        self.stats_pos_start = {'EVC': -.2, 'LOC': -.08, 'aSTS': -.08}
 
     def load_and_process_data(self):
         """Load and process data if not already processed"""
-        if not os.path.isfile(f'{self.output_dir}plot.csv') or self.overwrite:
-            back2back_df = []
+        if not os.path.isfile(f'{self.output_dir}/joint_decoding_timecourse.csv') or self.overwrite:
+            df_timecourse = []
+            df_latency = []
             for feature in tqdm(self.features, desc='Feature group summary', leave=True):
                 df = self._load_feature_data(feature)
-                stats_df = self._calculate_stats(df)
-                stats_df['feature'] = feature
-                back2back_df.append(stats_df)
+
+                # Time course
+                df_timecourse_feature = self._calculate_timecourse(df)
+                df_timecourse_feature['feature'] = feature
+                df_timecourse.append(df_timecourse_feature)
+
+                # Latency
+                df_latency_feature = self._calculate_latency(df)
+                df_latency_feature['feature'] = feature
+                df_latency.append(df_latency_feature)
                 
-            back2back_df = pd.concat(back2back_df, ignore_index=True).reset_index(drop=True)
-            back2back_df.to_csv(f'{self.output_dir}/plot.csv', index=False)
+            # Time course
+            df_timecourse = pd.concat(df_timecourse, ignore_index=True).reset_index(drop=True)
+            df_timecourse.to_csv(f'{self.output_dir}/joint_decoding_timecourse.csv', index=False)
+
+            # Latency
+            df_latency = pd.concat(df_latency, ignore_index=True).reset_index(drop=True)
+            df_latency.to_csv(f'{self.output_dir}/joint_decoding_latency.csv', index=False)
         else:
-            back2back_df = pd.read_csv(f'{self.output_dir}/plot.csv')
+            df_timecourse = pd.read_csv(f'{self.output_dir}/joint_decoding_timecourse.csv')
+            df_latency = pd.read_csv(f'{self.output_dir}/joint_decoding_latency.csv')
         
-        return back2back_df
+        return df_timecourse, df_latency
 
     def _load_feature_data(self, feature):
         """Load data for a specific feature"""
         df = []
         files = glob(f'{self.input_dir}/*{feature}*.parquet')
-        print(files)
         for i_file, file in enumerate(files):
             subj_df = pd.read_parquet(file)
             subj_df['eeg_subj_id'] = i_file
             subj_df = subj_df.loc[subj_df.roi_name.isin(self.rois)].reset_index()
             df.append(subj_df)
         return pd.concat(df, ignore_index=True)
+    
+    def _calculate_latency(self, df):
+        df_lat = df.copy()
+        df_lat['time_window'] = bin_time_windows_cut(df_lat, window_size=50, end_time=500)
+        # Remove time windows before stimulus and after 300 ms
+        df_lat = df_lat.loc[(df_lat.time_window >= 0) & (df_lat.time_window < 200)].reset_index()
+        df_lat['time_window'] = df_lat.time_window.astype('int32')
 
-    def _calculate_stats(self, df):
+        #Average across EEG subjects
+        df_lat = df_lat.groupby(['time_window', 'fmri_subj_id', 'roi_name']).mean(numeric_only=True).reset_index()
+        df_lat = df_lat.groupby(['time_window', 'roi_name']).mean(numeric_only=True).reset_index()
+        df_lat = df_lat.dropna().drop(columns=['time']).rename(columns={'value': 'score'})
+        df_lat.reset_index(drop=True, inplace=True)
+
+        ### Group stats###
+        # Variance
+        var_cols = [col for col in df_lat.columns if 'var_perm_' in col]
+        scores_var = df_lat[var_cols].to_numpy()
+        df_lat['low_ci'], df_lat['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
+        df_lat.drop(columns=var_cols, inplace=True)
+
+        # P-values
+        null_cols = [col for col in df_lat.columns if 'null_perm_' in col]
+        stats_df = []
+        for _, roi_df in df_lat.groupby('roi_name'):
+            scores_null = roi_df[null_cols].to_numpy().T
+            scores = roi_df['score'].to_numpy().T
+            roi_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
+            roi_df.drop(columns=null_cols, inplace=True)
+            stats_df.append(roi_df)
+        return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
+
+    def _calculate_timecourse(self, df):
         """Calculate statistics for the dataset"""
         # Average across EEG and fMRI subjects
         mean_df = df.groupby(['time', 'fmri_subj_id', 'roi_name']).mean(numeric_only=True).reset_index()
@@ -105,10 +150,10 @@ class PlotBack2Back:
         roi_df.drop(columns=null_cols, inplace=True)
         return roi_df
 
-    def plot_full_results(self, stats_df):
+    def plot_full_timecourse(self, stats_df):
         """Plot full results for all ROIs and features"""
         ymin = -0.2
-        for roi, (roi_name, roi_df) in zip(self.roi_titles, stats_df.groupby('roi_name', observed=True)):
+        for roi, (_, roi_df) in zip(self.roi_titles, stats_df.groupby('roi_name', observed=True)):
             fig, axes = plt.subplots(5, 2, figsize=(19, 15.83), sharex=True, sharey=True)
             axes = axes.flatten()
             ymax = 0.4 if roi not in ['EVC', 'PPA', 'FFA'] else 0.75
@@ -116,25 +161,14 @@ class PlotBack2Back:
             self._plot_features(roi_df, axes, ymin, ymax)
             fig.suptitle(roi)
             plt.tight_layout()
-            plt.savefig(f'{self.output_dir}/{roi}.pdf')
-
-    def plot_reduced_results(self, stats_df):
-        """Plot results for reduced set of ROIs and features"""
-        _, axes = plt.subplots(len(self.reduced_rois_titles), 1, figsize=(19, 13.25), sharex=True)
-        axes = axes.flatten()
-        
-        for iroi, (roi_name, cur_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
-            self._plot_reduced_roi(iroi, roi_name, cur_df, axes)
-            
-        self._finalize_reduced_plot(axes)
-        plt.savefig(f'{self.output_dir}/feature-roi_plot.pdf')
+            plt.savefig(f'{self.output_dir}/supplemental_{roi}_timecourse.pdf')
 
     def _plot_features(self, roi_df, axes, ymin, ymax):
         """Plot features for a specific ROI"""
         order_counter = 0
         stats_pos = -.12
         
-        for ifeature, (feature_name, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
+        for ifeature, (_, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
             feature, color, ax = self.feature_titles[ifeature], self.colors[ifeature], axes[ifeature]
             alpha = self._get_alpha(color)
             
@@ -224,15 +258,73 @@ class PlotBack2Back:
         if ifeature >= 8:
             ax.set_xlabel('Time (ms)')
 
-    def _plot_reduced_roi(self, iroi, roi_name, cur_df, axes):
+    ###################
+    # PLOT THE MAIN FIGURE
+    def plot_reduced_results(self, df_timecourse_reduced, df_latency_reduced):
+        """Plot results for reduced set of ROIs and features"""
+        n_rois = len(self.reduced_rois_titles)
+        fig, axes = plt.subplots(n_rois, 3,
+                                 figsize=(7.5, 3*n_rois), 
+                                 width_ratios=[7, 2.5, 1.5])
+        
+        iterator = enumerate(zip(df_timecourse_reduced.groupby('roi_name', observed=True),
+                                 df_latency_reduced.groupby('roi_name', observed=True)))
+        for iroi, ((roi_name, roi_timecourse), (_, roi_latency)) in iterator:
+            title = self.reduced_rois_titles[iroi]
+            lines, (ymin, ymax) = self._plot_reduced_timecourse(axes[iroi, 0], 
+                                                          title, roi_name,
+                                                          roi_timecourse)
+            ymin_round, ymax_round = np.floor(ymin*10)/10, np.ceil(ymax*10)/10
+            axes[iroi, 0].set_ylim([ymin_round, ymax_round])
+            axes[iroi, 0].set_ylabel('Prediction ($r$)')
+            if iroi == (n_rois - 1):
+                axes[iroi, 0].tick_params(axis='x', labelsize=8)
+                axes[iroi, 0].set_xlabel('Time (ms)')
+            else:
+                axes[iroi, 0].set_xticklabels([])
+            yticks = list(np.arange(ymin_round, ymax_round, 0.1))
+            axes[iroi, 0].set_yticks(yticks)
+
+            # plot latency
+            self._plot_reduced_latency(axes[iroi, 1], title, roi_latency)
+            axes[iroi, 1].set_ylim([ymin_round, ymax_round])
+            axes[iroi, 1].set_yticks(yticks)
+            axes[iroi, 1].set_yticklabels([])
+            if iroi == (n_rois - 1):
+                axes[iroi, 1].set_xlim([-15, 165])
+                axes[iroi, 1].set_xticks([0, 50, 100, 150])
+                axes[iroi, 1].set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
+                axes[iroi, 1].set_xlabel('Time window(ms)')
+                axes[iroi, 1].tick_params(axis='x', labelsize=7)
+            else:
+                axes[iroi, 1].set_xticks([0, 50, 100, 150])
+                axes[iroi, 1].set_xticklabels([])
+        
+            # Add legend
+            axes[iroi, 2].axis('off')
+            axes[iroi, 2].legend(lines, self.reduced_features_legends,
+                                loc='center right', fontsize=7,
+                                handlelength=.9,  # Length of legend lines
+                                handleheight=.2)  # Height of legend lines (for markers))
+    
+        plt.tight_layout()
+        plt.subplots_adjust(wspace=0.12)
+        fig.text(0.02, .975, 'A', ha='center', fontsize=12)
+        fig.text(0.635, .975, 'B', ha='center', fontsize=12)
+        fig.text(0.02, .650, 'C', ha='center', fontsize=12)
+        fig.text(0.635, .650, 'D', ha='center', fontsize=12)
+        fig.text(0.02, .325, 'E', ha='center', fontsize=12)
+        fig.text(0.635, .325, 'F', ha='center', fontsize=12)
+        plt.savefig(f'{self.output_dir}/joint_timecourse.pdf')
+    ###################
+
+    def _plot_reduced_timecourse(self, ax, title, roi_name, cur_df):
         """Plot reduced ROI results"""
-        ax = axes[iroi]
-        title = self.reduced_rois_titles[iroi]
         order_counter = 0
         stats_pos = self.stats_pos_start[roi_name]
         custom_lines = []
-        
-        for color, (feature, feature_df) in zip(self.reduced_colors, cur_df.groupby('feature', observed=True)):
+        iterator = zip(self.reduced_colors, cur_df.groupby('feature', observed=True))
+        for color, (_, feature_df) in iterator:
             smoothed_data = self._smooth_data(feature_df)
             alpha = self._get_alpha(color)
             
@@ -246,72 +338,75 @@ class PlotBack2Back:
             
             ax.plot(feature_df['time'], smoothed_data['score'],
                    color=color, zorder=order_counter,
-                   linewidth=5)
-            custom_lines.append(Line2D([0], [0], color=color, lw=5))
+                   linewidth=1.5)
+            custom_lines.append(Line2D([0], [0], color=color, lw=2))
             
             # Plot significance
-            self._plot_reduced_significance(ax, feature_df, color, stats_pos)
+            label, n = ndimage.label(feature_df['p'] < 0.05)        
+            for icluster in range(1, n+1):
+                time_cluster = feature_df['time'].to_numpy()[label == icluster]
+                ax.hlines(y=stats_pos, xmin=time_cluster.min(),
+                        xmax=time_cluster.max(),
+                        color=color, zorder=0, linewidth=1.5)
             stats_pos -= 0.04
             order_counter += 1
             
-        self._set_reduced_axes_properties(ax, title)
-        return custom_lines
-
-    def _plot_reduced_significance(self, ax, feature_df, color, stats_pos):
-        """Plot significance for reduced ROI plots"""
-        label, n = ndimage.label(feature_df['p'] < 0.05)
-        onset_time = np.nan
-        
-        for icluster in range(1, n+1):
-            time_cluster = feature_df['time'].to_numpy()[label == icluster]
-            if icluster == 1:
-                onset_time = time_cluster.min()
-                shift = 60 if onset_time < 100 else 75
-                ax.text(x=onset_time-shift, y=stats_pos-.006,
-                       s=f'{onset_time:.0f} ms',
-                       fontsize=15.5)
-            ax.hlines(y=stats_pos, xmin=time_cluster.min(),
-                     xmax=time_cluster.max(),
-                     color=color, zorder=0, linewidth=4)
-
-    def _set_reduced_axes_properties(self, ax, title):
-        """Set properties for reduced ROI axes"""
         ymin, ymax = ax.get_ylim()
         ax.set_xlim([-200, 1000])
         ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
-                 linestyles='dashed', colors='grey',
-                 linewidth=5, zorder=0)
+                    linestyles='dashed', colors='grey',
+                    linewidth=1, zorder=0)
         ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
-                 linewidth=5, zorder=0)
-        ax.set_ylabel('Prediction ($r$)')
+                    linewidth=1, zorder=0)
         ax.spines[['right', 'top']].set_visible(False)
         ax.set_ylim([ymin, ymax])
         ax.set_title(title)
+        return custom_lines, (ymin, ymax)
 
-    def _finalize_reduced_plot(self, axes):
-        """Add final touches to reduced ROI plot"""
-        custom_lines = [Line2D([0], [0], color=c, lw=5) for c in self.reduced_colors]
-        axes[0].legend(custom_lines, self.reduced_features_legends,
-                      loc='upper right', fontsize='18')
-        axes[-1].set_xlabel('Time (ms)')
+    def _plot_reduced_latency(self, ax, title, cur_df):
+        order_counter = -1
+        jitter = -8 
+        xmin, xmax = -15, 165
+        iterator = zip(self.reduced_colors, cur_df.groupby('feature', observed=True))
+        for color, (_, feature_df) in iterator:
+            order_counter +=1
+            ax.vlines(x=feature_df['time_window']+jitter, 
+                        ymin=feature_df['low_ci'], ymax=feature_df['high_ci'],
+                        color=color,
+                        zorder=order_counter)
+            order_counter +=1
+            ax.scatter(feature_df['time_window']+jitter, feature_df['score'],
+                    color=color, zorder=order_counter, s=15)
+            
+            sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
+            sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-2.5)
+            for sig, sig_time in zip(sigs, sigs_time):
+                ax.text(sig_time, sig, '*', fontsize='x-small')
+            jitter += 8
+
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.hlines(y=0, xmin=xmin, xmax=xmax,
+                color='black', zorder=0, linewidth=1)
+        ax.set_title(title)
 
     def run(self):
         """Main execution method"""
         # Load and process data
-        back2back_df = self.load_and_process_data()
+        df_timecourse, df_latency = self.load_and_process_data()
         
         # Prepare full stats dataframe
-        full_stats_df = self._prepare_full_stats(back2back_df)
-        
+        df_timecourse_full = self._prepare_full_stats(df_timecourse)
+        df_latency_full = self._prepare_full_stats(df_latency)
+
         # Plot full results
         sns.set_context(context='paper', font_scale=2)
-        self.plot_full_results(full_stats_df)
+        self.plot_full_timecourse(df_timecourse_full)
         
         # Prepare and plot reduced results
-        reduced_stats_df = self._prepare_reduced_stats(back2back_df)
-        sns.set_context(context='poster', font_scale=1.25)
-        self.plot_reduced_results(reduced_stats_df)
-
+        df_timecourse_reduced = self._prepare_reduced_stats(df_timecourse)
+        df_latency_reduced = self._prepare_reduced_stats(df_latency)
+        sns.set_context(context='paper', font_scale=1)
+        self.plot_reduced_results(df_timecourse_reduced, df_latency_reduced)
 
 
 def main():
@@ -319,7 +414,7 @@ def main():
     parser.add_argument('--input_dir', type=str, help='Input file prefix',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
     parser.add_argument('--output_dir', type=str, help='Output file prefix', 
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotBack2Back/')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotBack2Back')
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to redo the summary statistics')
     args = parser.parse_args()
