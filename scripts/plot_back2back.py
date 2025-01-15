@@ -11,6 +11,7 @@ from pathlib import Path
 import os
 from matplotlib.lines import Line2D
 from src.temporal import bin_time_windows_cut
+import shutil
 
 
 class PlotBack2Back:
@@ -19,9 +20,7 @@ class PlotBack2Back:
         self.output_dir = args.output_dir
         self.overwrite = args.overwrite
         Path(self.output_dir).mkdir(exist_ok=True, parents=True)
-        
-        # Create output directory
-        Path(self.output_dir).mkdir(exist_ok=True)
+        self.final_plot = args.final_plot   
         
         # Constants
         self.rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
@@ -149,34 +148,6 @@ class PlotBack2Back:
         roi_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T)
         roi_df.drop(columns=null_cols, inplace=True)
         return roi_df
-
-    def plot_full_timecourse(self, stats_df):
-        """Plot full results for all ROIs and features"""
-        ymin = -0.2
-        for roi, (_, roi_df) in zip(self.roi_titles, stats_df.groupby('roi_name', observed=True)):
-            fig, axes = plt.subplots(5, 2, figsize=(19, 15.83), sharex=True, sharey=True)
-            axes = axes.flatten()
-            ymax = 0.4 if roi not in ['EVC', 'PPA', 'FFA'] else 0.75
-            
-            self._plot_features(roi_df, axes, ymin, ymax)
-            fig.suptitle(roi)
-            plt.tight_layout()
-            plt.savefig(f'{self.output_dir}/supplemental_{roi}_timecourse.pdf')
-
-    def _plot_features(self, roi_df, axes, ymin, ymax):
-        """Plot features for a specific ROI"""
-        order_counter = 0
-        stats_pos = -.12
-        
-        for ifeature, (_, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
-            feature, color, ax = self.feature_titles[ifeature], self.colors[ifeature], axes[ifeature]
-            alpha = self._get_alpha(color)
-            
-            smoothed_data = self._smooth_data(feature_df)
-            self._plot_feature_data(ax, feature_df, smoothed_data, color, alpha, order_counter, stats_pos)
-            self._set_axes_properties(ax, feature, ymin, ymax, ifeature)
-            
-            order_counter += 2
     
     def _prepare_full_stats(self, df):
         """Prepare full statistics dataframe"""
@@ -207,6 +178,115 @@ class PlotBack2Back:
             smoothed_data[key] = np.convolve(df[key], self.smooth_kernel, mode='same')
         return smoothed_data
 
+    ######### PLOT THE SUPPLEMENTAL LATENCY ##################
+    def plot_full_latency(self, stats_df):
+        """Plot full results for all ROIs and features"""
+        fig, axes = plt.subplots(4, 2, figsize=(7.5, 8), 
+                                 sharex=True)
+        axes = axes.flatten()
+        xmin, xmax = -22, 172
+        for (iroi, roi), (_, roi_df) in zip(enumerate(self.roi_titles), stats_df.groupby('roi_name', observed=True)):
+            ax = axes[iroi]
+            
+            self._plot_feature_latency(roi_df, axes[iroi])
+            ymin, ymax = ax.get_ylim()
+            ax.set_ylim([ymin, ymax])
+            ax.vlines(x=[25, 75, 125], 
+                      ymin=ymin, ymax=ymax,
+                      color='gray', linewidth=.7, alpha=0.5)
+            # ax.legend(bbox_to_anchor=(1.05, .75), loc='upper left')
+            ax.set_xlim([xmin, xmax])
+            ax.set_xticks([0, 50, 100, 150])
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.hlines(y=0, xmin=xmin, xmax=xmax,
+                    color='grey', zorder=0, linewidth=1)
+            ax.set_ylim([ymin, ymax])
+            if iroi % 2 == 0: 
+                ax.set_ylabel('Prediction ($r$)')
+
+            if iroi == 0:
+                handles, labels = ax.get_legend_handles_labels()
+                fig.legend(
+                    handles,
+                    labels,
+                    loc="upper center",         # Place the legend above the figure
+                    bbox_to_anchor=(0.5, 0.99),  # Adjust the anchor to center above the figure
+                    ncol=5,                      # Number of columns in the legend
+                    fontsize=8                  # Font size
+                )
+            
+            if (iroi == len(self.roi_titles)-2) or (iroi == len(self.roi_titles)-1):
+                ax.set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
+                ax.tick_params(axis='x', labelsize=7)
+                ax.set_xlabel('Time window (ms)')
+            
+            ax.set_title(roi)
+
+        plt.subplots_adjust(top=0.95)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])      
+        plt.savefig(f'{self.output_dir}/supplemental_joint_latency.pdf')
+
+    def _plot_feature_latency(self, roi_df, ax):
+        """Plot features for a specific ROI"""
+        jitter = -18
+        for ifeature, (_, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
+            feature = self.feature_titles[ifeature]
+            color = sns.color_palette('colorblind', len(self.feature_titles))[ifeature]
+
+            ax.vlines(x=feature_df['time_window']+jitter, 
+                      ymin=feature_df['low_ci'], ymax=feature_df['high_ci'],
+                      color=color)
+            ax.scatter(feature_df['time_window']+jitter, feature_df['score'],
+                       s=10, color=color, label=feature)
+            
+            sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
+            sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-1.75)
+            for sig, sig_time in zip(sigs, sigs_time):
+                ax.text(sig_time, sig, '*', fontsize='x-small')
+            jitter += 4
+            
+    ######### PLOT THE SUPPLEMENTAL TIMECOURSE ##################
+    def plot_full_timecourse(self, stats_df):
+        """Plot full results for all ROIs and features"""
+        ymin = -0.2
+        for roi, (_, roi_df) in zip(self.roi_titles, stats_df.groupby('roi_name', observed=True)):
+            fig, axes = plt.subplots(5, 2, figsize=(7.5, 9), sharex=True, sharey=True)
+            axes = axes.flatten()
+            ymax = 0.4 if roi not in ['EVC', 'PPA', 'FFA'] else 0.75
+            
+            self._plot_features(roi_df, axes, ymin, ymax)
+            fig.suptitle(roi)
+            plt.tight_layout()
+            plt.savefig(f'{self.output_dir}/supplemental_{roi}_timecourse.pdf')
+
+    def _plot_features(self, roi_df, axes, ymin, ymax):
+        """Plot features for a specific ROI"""
+        order_counter = 0
+        stats_pos = -.12
+        
+        for ifeature, (_, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
+            feature, color, ax = self.feature_titles[ifeature], self.colors[ifeature], axes[ifeature]
+            alpha = self._get_alpha(color)
+            
+            smoothed_data = self._smooth_data(feature_df)
+            self._plot_feature_data(ax, feature_df, smoothed_data, color, alpha, order_counter, stats_pos)
+            ax.set_title(feature)
+            ax.set_xlim([-200, 1000])
+            ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
+                    linestyles='dashed', colors='grey',
+                    linewidth=1, zorder=0)
+            ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
+                    linewidth=1, zorder=0)
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.set_ylim([ymin, ymax])
+            
+            if ifeature % 2 == 0:
+                ax.set_ylabel('Prediction ($r$)')
+            if ifeature >= 8:
+                ax.set_xlabel('Time (ms)')
+            
+            order_counter += 2
+
     def _plot_feature_data(self, ax, feature_df, smoothed_data, color, alpha, order_counter, stats_pos):
         """Plot feature data on the given axes"""
         # Plot confidence interval
@@ -219,53 +299,26 @@ class PlotBack2Back:
         # Plot mean line
         ax.plot(feature_df['time'], smoothed_data['score'],
                 color=color, zorder=order_counter + 1,
-                linewidth=5)
+                linewidth=1.5)
 
         # Plot significance markers
-        self._plot_significance(ax, feature_df, color, stats_pos)
-
-    def _plot_significance(self, ax, feature_df, color, stats_pos):
-        """Plot significance markers and onset times"""
         label, n = ndimage.label(feature_df['p'] < 0.05)
         onset_time = np.nan
         
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
-            if icluster == 1:
-                onset_time = time_cluster.min()
-                shift = 100 if onset_time < 100 else 110
-                ax.text(x=onset_time-shift, y=stats_pos-.006,
-                       s=f'{onset_time:.0f} ms',
-                       fontsize=12)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                      xmax=time_cluster.max(),
-                     color=color, zorder=0, linewidth=2)
-
-    def _set_axes_properties(self, ax, feature, ymin, ymax, ifeature):
-        """Set the properties for each subplot axes"""
-        ax.set_title(feature)
-        ax.set_xlim([-200, 1000])
-        ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
-                 linestyles='dashed', colors='grey',
-                 linewidth=3, zorder=0)
-        ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
-                 linewidth=3, zorder=0)
-        ax.spines[['right', 'top']].set_visible(False)
-        ax.set_ylim([ymin, ymax])
-        
-        if ifeature % 2 == 0:
-            ax.set_ylabel('Prediction ($r$)')
-        if ifeature >= 8:
-            ax.set_xlabel('Time (ms)')
+                     color=color, zorder=0, linewidth=1.5)
 
     ###################
     # PLOT THE MAIN FIGURE
     def plot_reduced_results(self, df_timecourse_reduced, df_latency_reduced):
         """Plot results for reduced set of ROIs and features"""
         n_rois = len(self.reduced_rois_titles)
-        fig, axes = plt.subplots(n_rois, 3,
-                                 figsize=(7.5, 3*n_rois), 
-                                 width_ratios=[7, 2.5, 1.5])
+        fig, axes = plt.subplots(n_rois, 2,
+                                 figsize=(7.5, 5), 
+                                 width_ratios=[2, 1])
         
         iterator = enumerate(zip(df_timecourse_reduced.groupby('roi_name', observed=True),
                                  df_latency_reduced.groupby('roi_name', observed=True)))
@@ -275,6 +328,9 @@ class PlotBack2Back:
                                                           title, roi_name,
                                                           roi_timecourse)
             ymin_round, ymax_round = np.floor(ymin*10)/10, np.ceil(ymax*10)/10
+            axes[iroi, 0].vlines(x=[0, 500], ymin=ymin_round, ymax=ymax_round,
+                    linestyles='dashed', colors='grey',
+                    linewidth=1, zorder=0)
             axes[iroi, 0].set_ylim([ymin_round, ymax_round])
             axes[iroi, 0].set_ylabel('Prediction ($r$)')
             if iroi == (n_rois - 1):
@@ -282,11 +338,17 @@ class PlotBack2Back:
                 axes[iroi, 0].set_xlabel('Time (ms)')
             else:
                 axes[iroi, 0].set_xticklabels([])
-            yticks = list(np.arange(ymin_round, ymax_round, 0.1))
+
+            if roi_name == 'EVC':
+                yticks = list(np.arange(ymin_round, ymax_round, 0.1)[::3])
+            elif 'STS' in roi_name:
+                yticks = list(np.arange(ymin_round, ymax_round, 0.1)[::2])
+            else:
+                yticks = list(np.arange(ymin_round, ymax_round, 0.1))
             axes[iroi, 0].set_yticks(yticks)
 
             # plot latency
-            self._plot_reduced_latency(axes[iroi, 1], title, roi_latency)
+            self._plot_reduced_latency(axes[iroi, 1], roi_latency)
             axes[iroi, 1].set_ylim([ymin_round, ymax_round])
             axes[iroi, 1].set_yticks(yticks)
             axes[iroi, 1].set_yticklabels([])
@@ -295,26 +357,24 @@ class PlotBack2Back:
                 axes[iroi, 1].set_xticks([0, 50, 100, 150])
                 axes[iroi, 1].set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
                 axes[iroi, 1].set_xlabel('Time window(ms)')
-                axes[iroi, 1].tick_params(axis='x', labelsize=7)
+                axes[iroi, 1].tick_params(axis='x', labelsize=8)
             else:
                 axes[iroi, 1].set_xticks([0, 50, 100, 150])
                 axes[iroi, 1].set_xticklabels([])
         
-            # Add legend
-            axes[iroi, 2].axis('off')
-            axes[iroi, 2].legend(lines, self.reduced_features_legends,
-                                loc='center right', fontsize=7,
-                                handlelength=.9,  # Length of legend lines
-                                handleheight=.2)  # Height of legend lines (for markers))
-    
-        plt.tight_layout()
-        plt.subplots_adjust(wspace=0.12)
-        fig.text(0.02, .975, 'A', ha='center', fontsize=12)
-        fig.text(0.635, .975, 'B', ha='center', fontsize=12)
-        fig.text(0.02, .650, 'C', ha='center', fontsize=12)
-        fig.text(0.635, .650, 'D', ha='center', fontsize=12)
-        fig.text(0.02, .325, 'E', ha='center', fontsize=12)
-        fig.text(0.635, .325, 'F', ha='center', fontsize=12)
+
+        fig.legend(lines, self.reduced_features_legends, 
+                    loc="lower center",         # Position the legend at the bottom-center
+                    bbox_to_anchor=(0.5, .0),
+                    ncol=3,                      # Number of columns in the legend
+                    fontsize=8)
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        fig.text(0.01, .95, 'A', ha='center', fontsize=12)
+        fig.text(0.675, .95, 'B', ha='center', fontsize=12)
+        fig.text(0.01, .66, 'C', ha='center', fontsize=12)
+        fig.text(0.675, .66, 'D', ha='center', fontsize=12)
+        fig.text(0.01, .37, 'E', ha='center', fontsize=12)
+        fig.text(0.675, .37, 'F', ha='center', fontsize=12)
         plt.savefig(f'{self.output_dir}/joint_timecourse.pdf')
     ###################
 
@@ -353,9 +413,6 @@ class PlotBack2Back:
             
         ymin, ymax = ax.get_ylim()
         ax.set_xlim([-200, 1000])
-        ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
-                    linestyles='dashed', colors='grey',
-                    linewidth=1, zorder=0)
         ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
                     linewidth=1, zorder=0)
         ax.spines[['right', 'top']].set_visible(False)
@@ -363,7 +420,7 @@ class PlotBack2Back:
         ax.set_title(title)
         return custom_lines, (ymin, ymax)
 
-    def _plot_reduced_latency(self, ax, title, cur_df):
+    def _plot_reduced_latency(self, ax, cur_df):
         order_counter = -1
         jitter = -8 
         xmin, xmax = -15, 165
@@ -387,7 +444,6 @@ class PlotBack2Back:
         ax.spines[['right', 'top']].set_visible(False)
         ax.hlines(y=0, xmin=xmin, xmax=xmax,
                 color='black', zorder=0, linewidth=1)
-        ax.set_title(title)
 
     def run(self):
         """Main execution method"""
@@ -399,14 +455,19 @@ class PlotBack2Back:
         df_latency_full = self._prepare_full_stats(df_latency)
 
         # Plot full results
-        sns.set_context(context='paper', font_scale=2)
+        sns.set_context(context='paper', font_scale=1)
         self.plot_full_timecourse(df_timecourse_full)
+        self.plot_full_latency(df_latency_full)
         
         # Prepare and plot reduced results
         df_timecourse_reduced = self._prepare_reduced_stats(df_timecourse)
         df_latency_reduced = self._prepare_reduced_stats(df_latency)
-        sns.set_context(context='paper', font_scale=1)
         self.plot_reduced_results(df_timecourse_reduced, df_latency_reduced)
+
+        shutil.copyfile(f'{self.output_dir}/joint_timecourse.pdf',
+                        f'{self.final_plot}/Figure4.pdf')
+        shutil.copyfile(f'{self.output_dir}/supplemental_joint_latency.pdf',
+                        f'{self.final_plot}/supplemental_joint_latency.pdf')
 
 
 def main():
@@ -417,6 +478,8 @@ def main():
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotBack2Back')
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to redo the summary statistics')
+    parser.add_argument('--final_plot', '-p', type=str,
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures/FinalFigures')
     args = parser.parse_args()
     PlotBack2Back(args).run()
 

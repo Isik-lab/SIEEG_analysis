@@ -189,8 +189,7 @@ def plot_simple(out_file, df_time, df_latency, colors, title_names):
 
 
 def plot_full_timecourse(out_file, stats_df, colors, title_names):
-    sns.set_context(context='paper', font_scale=2)
-    _, axes = plt.subplots(4, 2, figsize=(19, 12.67), sharex=True, sharey=True)
+    _, axes = plt.subplots(4, 2, figsize=(7.5, 7.5), sharex=True, sharey=True)
     axes = axes.flatten()
     ymin, ymax = -0.15, 0.425
 
@@ -214,30 +213,23 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
         order_counter +=1
         ax.plot(feature_df['time'], smoothed_data['score'],
                 color=color, zorder=order_counter,
-                linewidth=5)
+                linewidth=1.5)
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(feature_df['p'] < 0.05)
-        onset_time = np.nan
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
-            if icluster == 1:
-                onset_time = time_cluster.min()
-                shift = 75 if onset_time < 100 else 95
-                ax.text(x=onset_time-shift, y=stats_pos-.006,
-                        s=f'{onset_time:.0f} ms',
-                        fontsize=12)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
-                    color=color, zorder=0, linewidth=2)
+                    color=color, zorder=0, linewidth=1.5)
 
         ax.set_title(feature)
         ax.set_xlim([-200, 1000])
         ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
                     linestyles='dashed', colors='grey',
-                    linewidth=3, zorder=0)
+                    linewidth=1, zorder=0)
         ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
-                    linewidth=3, zorder=0)
+                    linewidth=1, zorder=0)
         ax.spines[['right', 'top']].set_visible(False)
         ax.set_ylim([ymin, ymax])
         if ifeature % 2 == 0:
@@ -251,12 +243,10 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
 
 
 def plot_full_latency(out_file, stats_df, colors, title_names):
-    sns.set_context(context='talk', font_scale=1.5)
-    _, ax = plt.subplots(figsize=(16.5, 9.5))
-    plt.subplots_adjust(right=0.85)
+    _, ax = plt.subplots(figsize=(7.5, 3))
     order_counter = -1
-    jitter = -30
-    xmin, xmax = -40, 190
+    jitter = -17
+    xmin, xmax = -25, 175
     for (_, feature_df), (label, color) in zip(stats_df.groupby('feature', observed=True), zip(title_names, colors)):
         order_counter +=1
         ax.vlines(x=feature_df['time_window']+jitter, 
@@ -264,8 +254,8 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
                     color=color,
                     zorder=order_counter)
         order_counter +=1
-        ax.plot(feature_df['time_window']+jitter, feature_df['score'], 'o',
-                color=color, zorder=order_counter, label=label)
+        ax.scatter(feature_df['time_window']+jitter, feature_df['score'], s=20,
+                    color=color, zorder=order_counter, label=label)
         
         sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
         sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-1.75)
@@ -273,20 +263,24 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
             ax.text(sig_time, sig, '*', fontsize='x-small')
         jitter += 5
 
-    ax.legend(bbox_to_anchor=(1.05, .75), loc='upper left')
+
+    ax.legend(bbox_to_anchor=(1.05, .9), loc='upper left')
     ymin, ymax = ax.get_ylim()
     ax.set_xlim([xmin, xmax])
     ax.set_ylabel('Prediction ($r$)')
     ax.set_xlabel('Time window (ms)')
     ax.set_xticks([0, 50, 100, 150])
     ax.set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
-    ax.tick_params(axis='x', labelsize=20)
+    ax.tick_params(axis='x', labelsize=10)
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.hlines(y=0, xmin=xmin, xmax=xmax,
-              color='black', zorder=0, linewidth=3)
+              color='black', zorder=0, linewidth=1)
     ax.hlines(y=ymin, xmin=xmin, xmax=xmax,
-              color='black', zorder=0, linewidth=3)
+              color='black', zorder=0, linewidth=1.5)
     ax.set_ylim([ymin, ymax])
+    ax.vlines(x=[25, 75, 125], 
+              ymin=ymin, ymax=ymax,
+              color='gray', linewidth=.7, alpha=0.5)
 
     plt.tight_layout()
     plt.savefig(out_file)
@@ -305,9 +299,9 @@ class PlotFeatureDecoding:
 
     def run(self):
         if self.simplified_plotting:
-            features = ['expanse', 'agent_distance', 'communication']
-            title_names = ['spatial expanse', 'agent distance', 'communication']
-            colors = ['#F5DD40', '#8558F4', '#73D2DF']
+            features = ['agent_distance', 'communication']
+            title_names = ['agent distance', 'communication']
+            colors = ['#8558F4', '#73D2DF']
             out_plot = 'feature_plot.pdf'
         else:
             features = ['expanse', 'object', 'agent_distance', 'facingness',

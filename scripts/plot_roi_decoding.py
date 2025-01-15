@@ -181,7 +181,6 @@ def plot_simple_latency(ax, stats_df, colors, title_names):
 
 # Plot the results
 def plot_simple(out_file, df_time, df_latency, colors, title_names): 
-    sns.set_context(context='paper')
     fig, axes = plt.subplots(1, 3, figsize=(7.5, 3),
                            width_ratios=[7, 2.5, 1.5],
                            sharey=True)
@@ -198,10 +197,8 @@ def plot_simple(out_file, df_time, df_latency, colors, title_names):
     fig.text(0.62, .95, 'B', ha='center', fontsize=12)
     plt.savefig(out_file)
 
-
 def plot_full_timecourse(out_file, stats_df, colors, title_names):
-    sns.set_context(context='paper', font_scale=2)
-    _, axes = plt.subplots(4, 2, figsize=(19, 12.67), sharex=True, sharey=True)
+    _, axes = plt.subplots(4, 2, figsize=(7.5, 6), sharex=True, sharey=True)
     axes = axes.flatten()
     ymin, ymax = -0.15, 0.6
 
@@ -209,7 +206,7 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
     stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
-    for iroi, (roi_name, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
+    for iroi, (_, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
         ax, color, roi = axes[iroi], colors[iroi], title_names[iroi]
         order_counter +=1
         alpha = 0.1 if color == 'black' else 0.2
@@ -224,30 +221,24 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
         order_counter +=1
         ax.plot(roi_df['time'], smoothed_data['score'],
                 color=color, zorder=order_counter,
-                linewidth=5)
+                linewidth=1.5)
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(roi_df['p'] < 0.05)
         onset_time = np.nan
         for icluster in range(1, n+1):
             time_cluster = roi_df['time'].to_numpy()[label == icluster]
-            if icluster == 1:
-                onset_time = time_cluster.min()
-                shift = 75 if onset_time < 100 else 95
-                ax.text(x=onset_time-shift, y=stats_pos-.006,
-                        s=f'{onset_time:.0f} ms',
-                        fontsize=12)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
-                    color=color, zorder=0, linewidth=2)
+                    color=color, zorder=0, linewidth=1.5)
 
         ax.set_title(roi)
         ax.set_xlim([-200, 1000])
         ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
                     linestyles='dashed', colors='grey',
-                    linewidth=3, zorder=0, alpha=0.5)
+                    linewidth=1, zorder=0)
         ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
-                    linewidth=3, zorder=0, alpha=0.5)
+                    linewidth=1, zorder=0)
         ax.spines[['right', 'top']].set_visible(False)
         ax.set_ylim([ymin, ymax])
         if iroi % 2 == 0:
@@ -259,10 +250,8 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
     plt.tight_layout()
     plt.savefig(out_file)
 
-
 def plot_full_latency(out_file, stats_df, colors, title_names):
-    sns.set_context(context='talk', font_scale=1.5)
-    _, ax = plt.subplots(figsize=(16.5, 9.5))
+    _, ax = plt.subplots(figsize=(7.5, 3))
     plt.subplots_adjust(right=0.85)
     order_counter = -1
     jitter = -17
@@ -274,8 +263,8 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
                     color=color,
                     zorder=order_counter)
         order_counter +=1
-        ax.plot(roi_df['time_window']+jitter, roi_df['score'], 'o',
-                color=color, zorder=order_counter, label=label)
+        ax.scatter(roi_df['time_window']+jitter, roi_df['score'], s=20,
+                    color=color, zorder=order_counter, label=label)
         
         sigs = roi_df['high_ci'][roi_df['p'] < 0.05] + 0.02
         sigs_time = roi_df['time_window'][roi_df['p'] < 0.05] + (jitter-1.75)
@@ -290,12 +279,15 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
     ax.set_xlabel('Time window (ms)')
     ax.set_xticks([0, 50, 100, 150])
     ax.set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
-    ax.tick_params(axis='x', labelsize=20)
+    ax.vlines(x=[25, 75, 125], 
+              ymin=ymin, ymax=ymax,
+              color='gray', linewidth=.7, alpha=0.5)
+    ax.tick_params(axis='x', labelsize=10)
     ax.spines[['right', 'top', 'bottom']].set_visible(False)
     ax.hlines(y=0, xmin=xmin, xmax=xmax,
-              color='black', zorder=0, linewidth=3)
+              color='black', zorder=0, linewidth=1)
     ax.hlines(y=ymin, xmin=xmin, xmax=xmax,
-              color='black', zorder=0, linewidth=3)
+              color='black', zorder=0, linewidth=1.5)
     ax.set_ylim([ymin, ymax])
 
     plt.tight_layout()
@@ -345,6 +337,7 @@ class PlotROIDecoding:
         df_latency = df_latency.loc[df_latency['roi_name'].isin(rois)].reset_index(drop=True)
         df_latency['roi_name'] = pd.Categorical(df_latency['roi_name'], categories=rois, ordered=True)
 
+        sns.set_context(context='paper')
         if self.simplified_plotting:
             plot_simple(f'{self.out_dir}/{out_plot}', df_time, df_latency, colors, title_names)
             shutil.copyfile(f'{self.out_dir}/{out_plot}', f'{self.final_plot}/Figure3.pdf')
