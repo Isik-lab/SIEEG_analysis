@@ -488,8 +488,10 @@ class PlotBack2Back:
 
         shutil.copyfile(f'{self.output_dir}/joint_timecourse.pdf',
                         f'{self.final_plot}/Figure4.pdf')
-        shutil.copyfile(f'{self.output_dir}/supplemental_joint_latency.pdf',
-                        f'{self.final_plot}/supplemental_joint_latency.pdf')
+        for file in glob(f'{self.output_dir}/supplemental*.pdf'):
+            file_stem = Path(file).name
+            shutil.copyfile(file,
+                            f'{self.final_plot}/{file_stem}')
 
 
 def main():
