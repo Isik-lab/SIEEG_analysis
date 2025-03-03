@@ -44,7 +44,7 @@ class PlotBack2Back:
         self.reduced_colors = ['#fed395','#c83e73', '#59157e']
         
         self.smooth_kernel = np.ones(10)/10
-        self.stats_pos_start = {'EVC': -.2, 'LOC': -.08, 'aSTS': -.08}
+        self.stats_pos_start = {'EVC': -.275, 'LOC': -.08, 'aSTS': -.08}
 
     def load_and_process_data(self):
         """Load and process data if not already processed"""
@@ -311,10 +311,15 @@ class PlotBack2Back:
 
         # Plot significance markers
         label, n = ndimage.label(feature_df['p'] < 0.05)
-        onset_time = np.nan
-        
+        onset = None        
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
+            if onset is None: 
+                onset = time_cluster.min()
+                ax.text(x=time_cluster.min(), 
+                        y=stats_pos+0.0075,
+                        s=f'{onset:.0f} ms',
+                        fontsize=6)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                      xmax=time_cluster.max(),
                      color=color, zorder=0, linewidth=1.5)
@@ -413,13 +418,20 @@ class PlotBack2Back:
             custom_lines.append(Line2D([0], [0], color=color, lw=2))
             
             # Plot significance
-            label, n = ndimage.label(feature_df['p'] < 0.05)        
+            label, n = ndimage.label(feature_df['p'] < 0.05)
+            onset = None
             for icluster in range(1, n+1):
                 time_cluster = feature_df['time'].to_numpy()[label == icluster]
+                if onset is None:
+                    onset = time_cluster.min()
+                    ax.text(x=time_cluster.min(), 
+                            y=stats_pos+0.0075,
+                            s=f'{onset:.0f} ms',
+                            fontsize=6)
                 ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                         xmax=time_cluster.max(),
                         color=color, zorder=0, linewidth=1.5)
-            stats_pos -= 0.04
+            stats_pos -= 0.075
             order_counter += 1
             
         ymin, ymax = ax.get_ylim()

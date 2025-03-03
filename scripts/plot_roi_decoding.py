@@ -125,8 +125,15 @@ def plot_simple_timecourse(ax, stats_df, colors, title_names):
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(roi_df['p'] < 0.05)
+        onset = None
         for icluster in range(1, n+1):
             time_cluster = roi_df['time'].to_numpy()[label == icluster]
+            if onset is None:
+                onset = time_cluster.min()
+                ax.text(x=time_cluster.min(), 
+                        y=stats_pos+0.008,
+                        s=f'{onset:.0f} ms',
+                        fontsize=6)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
                     color=color, zorder=0, linewidth=1.5)
@@ -202,7 +209,6 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
     ymin, ymax = -0.15, 0.6
 
     order_counter = 0
-    stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
     for iroi, (_, roi_df) in enumerate(stats_df.groupby('roi_name', observed=True)):
@@ -224,12 +230,19 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(roi_df['p'] < 0.05)
-        onset_time = np.nan
+        onset = None
         for icluster in range(1, n+1):
             time_cluster = roi_df['time'].to_numpy()[label == icluster]
-            ax.hlines(y=stats_pos, xmin=time_cluster.min(),
-                    xmax=time_cluster.max(),
-                    color=color, zorder=0, linewidth=1.5)
+            if onset is None:
+                onset = time_cluster.min()
+                ax.text(x=time_cluster.min(), 
+                        y=ymin+((ymax-ymin)*0.07),
+                        s=f'{onset:.0f} ms',
+                        fontsize=6)
+            ax.hlines(y=ymin+((ymax-ymin)*0.05),
+                      xmin=time_cluster.min(),
+                      xmax=time_cluster.max(),
+                      color=color, zorder=0, linewidth=1.5)
 
         ax.set_title(roi)
         ax.set_xlim([-200, 1000])

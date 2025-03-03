@@ -114,12 +114,19 @@ def plot_simple_timecourse(ax, stats_df, colors, title_names):
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(feature_df['p'] < 0.05)
+        onset = None
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
+            if onset is None:
+                onset = time_cluster.min()
+                ax.text(x=time_cluster.min(), 
+                        y=stats_pos+0.005,
+                        s=f'{onset:.0f} ms',
+                        fontsize=6)
             ax.hlines(y=stats_pos, xmin=time_cluster.min(),
                     xmax=time_cluster.max(),
                     color=color, zorder=0, linewidth=1.5)
-        stats_pos -= 0.02
+        stats_pos -= 0.03
 
     ax.legend(custom_lines, title_names,
               loc='upper right', fontsize=8,
@@ -192,7 +199,6 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
     ymin, ymax = -0.15, 0.425
 
     order_counter = 0
-    stats_pos = -.12
     custom_lines = []
     smooth_kernel = np.ones(10)/10
     for ifeature, (_, feature_df) in enumerate(stats_df.groupby('feature', observed=True)):
@@ -215,11 +221,19 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
         label, n = ndimage.label(feature_df['p'] < 0.05)
+        onset = None
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
-            ax.hlines(y=stats_pos, xmin=time_cluster.min(),
-                    xmax=time_cluster.max(),
-                    color=color, zorder=0, linewidth=1.5)
+            if onset is None:
+                onset = time_cluster.min()
+                ax.text(x=time_cluster.min(), 
+                        y=ymin+((ymax-ymin)*0.065),
+                        s=f'{onset:.0f} ms',
+                        fontsize=6)
+            ax.hlines(y=ymin+((ymax-ymin)*0.05),
+                      xmin=time_cluster.min(),
+                      xmax=time_cluster.max(),
+                      color=color, zorder=0, linewidth=1.5)
 
         ax.set_title(feature)
         ax.set_xlim([-200, 1000])

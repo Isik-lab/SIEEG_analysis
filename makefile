@@ -1,7 +1,7 @@
 user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
 # eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
-eeg_subs := 5 6 14 15 16
+eeg_subs := 2 8 13 16 17 18 21
 fmri_subs := 1 2 3 4
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
 
@@ -87,7 +87,7 @@ $(eeg_reliability)/.done:
 #SBATCH --partition=parallel\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
-#SBATCH --time=15:00:00\n\
+#SBATCH --time=36:00:00\n\
 #SBATCH --cpus-per-task=48\n\
 #SBATCH --exclusive=user\n\
 set -e\n\
@@ -140,7 +140,7 @@ python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_
 	# touch $(feature_regression)/.feature_decoding
 
 
-#Compute the channel-wise EEG reliability
+#Compute the channel-wise roi_decoding
 roi_decoding: $(fmri_regression)/.done $(eeg_preprocess)
 $(fmri_regression)/.done: 
 	mkdir -p $(fmri_regression)
@@ -207,7 +207,7 @@ $(feature_plotting)/.plotted:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_nuisance_feature_decoding.py --overwrite" | sbatch
+python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
 	# touch $(feature_plotting)/.plotted
 
 
