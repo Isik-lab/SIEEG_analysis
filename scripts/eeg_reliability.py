@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from src import loading
-from src.stats import bootstrap_gpu, compute_score
+from src.stats import bootstrap_gpu, perm_gpu, compute_score
 from tqdm import tqdm
 import numpy as np
 
@@ -33,13 +33,16 @@ class eegReliability:
         for time, time_df in iterator:
             rs = 0
             vars = np.zeros(5000)
+            nulls = np.zeros(5000)
             for ichannel, (__cached__, channel_df) in enumerate(time_df.groupby('channel')):
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
                 rs += compute_score(even, odd).cpu().detach().numpy()
                 vars += bootstrap_gpu(even, odd).cpu().detach().numpy()
+                nulls += perm_gpu(even, odd).cpu().detach().numpy()
             time_dict = {'time': time, 'r': rs/(ichannel+1)}
             time_dict.update({f'var_perm_{i}': val for i, val in enumerate(vars/(ichannel+1))})
+            time_dict.update({f'null_perm_{i}': val for i, val in enumerate(nulls/(ichannel+1))})
             results.append(time_dict)
         return pd.DataFrame(results)
 

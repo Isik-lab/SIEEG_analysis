@@ -172,7 +172,7 @@ def main():
     parser.add_argument('--roi_mean', action=argparse.BooleanOptionalAction, default=True,
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--smoothing', action=argparse.BooleanOptionalAction, default=False,
-                        help='predict the roi mean response instead of voxelwise responses')
+                        help='smooth the voxelwise response')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
     parser.add_argument('--alpha_stop', type=int, default=30,

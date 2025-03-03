@@ -23,25 +23,25 @@ class PlotBack2Back:
         self.final_plot = args.final_plot   
         
         # Constants
-        self.rois = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS', 'aSTS']
+        self.rois = ['EVC', 'MT', 'LOC', 'EBA', 'FFA', 'PPA', 'pSTS', 'aSTS']
         self.features = ['alexnet', 'moten', 'expanse', 'object',
                         'agent_distance', 'facingness',
                         'joint_action', 'communication', 
                         'valence', 'arousal']
-        self.roi_titles = ['EVC', 'MT', 'FFA', 'PPA', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
+        self.roi_titles = ['EVC', 'MT', 'LOC', 'EBA', 'FFA', 'PPA', 'pSTS-SI', 'aSTS-SI']
         self.feature_titles = ['AlexNet-conv2', 'motion energy', 
                              'spatial expanse', 'object directedness',
                              'agent distance', 'facingness',
                              'joint action', 'communication', 'valence', 'arousal']
-        self.colors = ['#404040', '#404040', '#F5DD40', '#F5DD40', '#8558F4', '#8558F4', 
-                      '#73D2DF', '#73D2DF', '#D57D7F', '#D57D7F']
+        self.colors = ['#fed395', '#fea973', '#fa7d5e', '#e95462',
+                       '#c83e73', '#a3307e', '#7e2482', '#59157e', '#331067', '#120d31']
         
         # Reduced set constants
         self.reduced_rois = ['EVC', 'LOC', 'aSTS']
         self.reduced_features = ['alexnet', 'agent_distance', 'communication']
         self.reduced_rois_titles = ['EVC', 'LOC', 'aSTS-SI']
         self.reduced_features_legends = ['AlexNet conv2','agent distance', 'communication']
-        self.reduced_colors = ['#404040','#8558F4', '#73D2DF']
+        self.reduced_colors = ['#fed395','#c83e73', '#59157e']
         
         self.smooth_kernel = np.ones(10)/10
         self.stats_pos_start = {'EVC': -.2, 'LOC': -.08, 'aSTS': -.08}
@@ -92,7 +92,7 @@ class PlotBack2Back:
         df_lat = df.copy()
         df_lat['time_window'] = bin_time_windows_cut(df_lat, window_size=50, end_time=500)
         # Remove time windows before stimulus and after 300 ms
-        df_lat = df_lat.loc[(df_lat.time_window >= 0) & (df_lat.time_window < 200)].reset_index()
+        df_lat = df_lat.loc[(df_lat.time_window >= 0) & (df_lat.time_window < 350)].reset_index()
         df_lat['time_window'] = df_lat.time_window.astype('int32')
 
         #Average across EEG subjects
@@ -179,27 +179,33 @@ class PlotBack2Back:
         return smoothed_data
 
     ######### PLOT THE SUPPLEMENTAL LATENCY ##################
-    def plot_full_latency(self, stats_df):
+    def plot_full_latency(self, stats_df, xmin=0, xmax=300,
+                          jitter_start=18, x_padding=10, jitter=4,
+                          scatter_size=8, linewidth=1):
         """Plot full results for all ROIs and features"""
         fig, axes = plt.subplots(4, 2, figsize=(7.5, 8), 
                                  sharex=True)
         axes = axes.flatten()
-        xmin, xmax = -22, 172
         for (iroi, roi), (_, roi_df) in zip(enumerate(self.roi_titles), stats_df.groupby('roi_name', observed=True)):
             ax = axes[iroi]
             
-            self._plot_feature_latency(roi_df, axes[iroi])
+            self._plot_feature_latency(roi_df, axes[iroi],
+                                       jitter_start=jitter_start,
+                                       jitter_size=jitter, 
+                                       linewidth=linewidth,
+                                       scatter_size=scatter_size)
             ymin, ymax = ax.get_ylim()
             ax.set_ylim([ymin, ymax])
-            ax.vlines(x=[25, 75, 125], 
+            ax.vlines(x=list(np.arange(xmin+25, xmax, step=50)), 
                       ymin=ymin, ymax=ymax,
                       color='gray', linewidth=.7, alpha=0.5)
             # ax.legend(bbox_to_anchor=(1.05, .75), loc='upper left')
-            ax.set_xlim([xmin, xmax])
-            ax.set_xticks([0, 50, 100, 150])
+            ax.set_xlim([xmin-jitter_start-x_padding, xmax+jitter_start+x_padding])
+            ax.set_xticks(list(np.arange(xmin, xmax+1, step=50)))
             ax.spines[['right', 'top']].set_visible(False)
-            ax.hlines(y=0, xmin=xmin, xmax=xmax,
-                    color='grey', zorder=0, linewidth=1)
+            ax.hlines(y=0, xmin=xmin-jitter_start-x_padding,
+                      xmax=xmax+jitter_start+x_padding,
+                      color='grey', zorder=0, linewidth=1)
             ax.set_ylim([ymin, ymax])
             if iroi % 2 == 0: 
                 ax.set_ylabel('Prediction ($r$)')
@@ -216,9 +222,9 @@ class PlotBack2Back:
                 )
             
             if (iroi == len(self.roi_titles)-2) or (iroi == len(self.roi_titles)-1):
-                ax.set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
-                ax.tick_params(axis='x', labelsize=7)
-                ax.set_xlabel('Time window (ms)')
+                ax.set_xticklabels(['0-50', '50-100', '100-150', '150-200', '200-250', '250-300', '300-350'])
+                ax.tick_params(axis='x', labelsize=6.5)
+                ax.set_xlabel('Time bin (ms)')
             
             ax.set_title(roi)
 
@@ -226,24 +232,26 @@ class PlotBack2Back:
         plt.tight_layout(rect=[0, 0, 1, 0.95])      
         plt.savefig(f'{self.output_dir}/supplemental_joint_latency.pdf')
 
-    def _plot_feature_latency(self, roi_df, ax):
+    def _plot_feature_latency(self, roi_df, ax, jitter_start=18,
+                              jitter_size=4, linewidth=1,
+                              scatter_size=8):
         """Plot features for a specific ROI"""
-        jitter = -18
+        jitter = -1*jitter_start
         for ifeature, (_, feature_df) in enumerate(roi_df.groupby('feature', observed=True)):
             feature = self.feature_titles[ifeature]
-            color = sns.color_palette('colorblind', len(self.feature_titles))[ifeature]
+            color = self.colors[ifeature]
 
             ax.vlines(x=feature_df['time_window']+jitter, 
                       ymin=feature_df['low_ci'], ymax=feature_df['high_ci'],
-                      color=color)
+                      color=color, linewidth=linewidth)
             ax.scatter(feature_df['time_window']+jitter, feature_df['score'],
-                       s=10, color=color, label=feature)
+                       s=scatter_size, color=color, label=feature)
             
             sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
             sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-1.75)
             for sig, sig_time in zip(sigs, sigs_time):
                 ax.text(sig_time, sig, '*', fontsize='x-small')
-            jitter += 4
+            jitter += jitter_size
             
     ######### PLOT THE SUPPLEMENTAL TIMECOURSE ##################
     def plot_full_timecourse(self, stats_df):
@@ -313,12 +321,13 @@ class PlotBack2Back:
 
     ###################
     # PLOT THE MAIN FIGURE
-    def plot_reduced_results(self, df_timecourse_reduced, df_latency_reduced):
+    def plot_reduced_results(self, df_timecourse_reduced, df_latency_reduced, 
+                             jitter_size=12, xmin=0, xmax=300, x_padding=10):
         """Plot results for reduced set of ROIs and features"""
         n_rois = len(self.reduced_rois_titles)
         fig, axes = plt.subplots(n_rois, 2,
                                  figsize=(7.5, 5), 
-                                 width_ratios=[2, 1])
+                                 width_ratios=[7, 3])
         
         iterator = enumerate(zip(df_timecourse_reduced.groupby('roi_name', observed=True),
                                  df_latency_reduced.groupby('roi_name', observed=True)))
@@ -348,18 +357,20 @@ class PlotBack2Back:
             axes[iroi, 0].set_yticks(yticks)
 
             # plot latency
-            self._plot_reduced_latency(axes[iroi, 1], roi_latency)
+            self._plot_reduced_latency(axes[iroi, 1], roi_latency,
+                                       jitter_size=jitter_size, x_padding=x_padding,
+                                       xmin=xmin, xmax=xmax)
             axes[iroi, 1].set_ylim([ymin_round, ymax_round])
             axes[iroi, 1].set_yticks(yticks)
             axes[iroi, 1].set_yticklabels([])
             if iroi == (n_rois - 1):
-                axes[iroi, 1].set_xlim([-15, 165])
-                axes[iroi, 1].set_xticks([0, 50, 100, 150])
-                axes[iroi, 1].set_xticklabels(['0-50', '50-100', '100-150', '150-200'])
-                axes[iroi, 1].set_xlabel('Time window(ms)')
+                axes[iroi, 1].set_xlim([xmin-jitter_size-x_padding, xmax+jitter_size+x_padding])
+                axes[iroi, 1].set_xlabel('Time bin (ms)')
+                axes[iroi, 1].set_xticks(list(np.arange(xmin, xmax+1, step=50)))
                 axes[iroi, 1].tick_params(axis='x', labelsize=8)
             else:
-                axes[iroi, 1].set_xticks([0, 50, 100, 150])
+                axes[iroi, 1].set_xlim([xmin-jitter_size-x_padding, xmax+jitter_size+x_padding])
+                axes[iroi, 1].set_xticks(list(np.arange(xmin, xmax+1, step=50)))
                 axes[iroi, 1].set_xticklabels([])
         
 
@@ -370,11 +381,11 @@ class PlotBack2Back:
                     fontsize=8)
         plt.tight_layout(rect=[0, 0.05, 1, 1])
         fig.text(0.01, .95, 'A', ha='center', fontsize=12)
-        fig.text(0.675, .95, 'B', ha='center', fontsize=12)
+        fig.text(0.7, .95, 'B', ha='center', fontsize=12)
         fig.text(0.01, .66, 'C', ha='center', fontsize=12)
-        fig.text(0.675, .66, 'D', ha='center', fontsize=12)
+        fig.text(0.7, .66, 'D', ha='center', fontsize=12)
         fig.text(0.01, .37, 'E', ha='center', fontsize=12)
-        fig.text(0.675, .37, 'F', ha='center', fontsize=12)
+        fig.text(0.7, .37, 'F', ha='center', fontsize=12)
         plt.savefig(f'{self.output_dir}/joint_timecourse.pdf')
     ###################
 
@@ -420,10 +431,9 @@ class PlotBack2Back:
         ax.set_title(title)
         return custom_lines, (ymin, ymax)
 
-    def _plot_reduced_latency(self, ax, cur_df):
+    def _plot_reduced_latency(self, ax, cur_df, jitter_size=12, xmin=0, xmax=300, x_padding=10):
         order_counter = -1
-        jitter = -8 
-        xmin, xmax = -15, 165
+        jitter = -1 * jitter_size
         iterator = zip(self.reduced_colors, cur_df.groupby('feature', observed=True))
         for color, (_, feature_df) in iterator:
             order_counter +=1
@@ -439,11 +449,11 @@ class PlotBack2Back:
             sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-2.5)
             for sig, sig_time in zip(sigs, sigs_time):
                 ax.text(sig_time, sig, '*', fontsize='x-small')
-            jitter += 8
+            jitter += jitter_size
 
         ax.spines[['right', 'top']].set_visible(False)
-        ax.hlines(y=0, xmin=xmin, xmax=xmax,
-                color='black', zorder=0, linewidth=1)
+        ax.hlines(y=0, xmin=xmin-jitter_size-x_padding, xmax=xmax+jitter_size+x_padding,
+                  color='gray', zorder=0, linewidth=1)
 
     def run(self):
         """Main execution method"""
