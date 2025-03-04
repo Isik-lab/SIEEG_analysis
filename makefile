@@ -15,15 +15,16 @@ eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
 eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
+whole_brain=$(project_folder)/data/interim/fMRIWholeBrain
 feature_regression=$(project_folder)/data/interim/FeatureRegression
 feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
 roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
 back2back_plotting=$(project_folder)/data/interim/PlotBack2Back
-reliability_plotting=$(project_folder)/data/interim/plot_reliability
+reliability_plotting=$(project_folder)/data/interim/PlotReliability
 
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back
+all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back plot_reliability 
 
 
 # Get the motion energy for the 3 s videos
@@ -178,6 +179,23 @@ python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_tri
 	touch $(fmri_regression)/.full_brain
 
 
+#Full brain Averaging and NIFTI image saving
+full_brain_avg: $(whole_brain)/.full_brain $(fmri_regression)
+$(whole_brain)/.full_brain: 
+	mkdir -p $(whole_brain)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=whole_brain\n\
+#SBATCH --time=15:00\n\
+#SBATCH --cpus-per-task=12\n\
+#SBATCH --gres=gpu:1\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/fmri_whole_brain.py" | sbatch
+	touch $(whole_brain)/.full_brain
+
+
 #Plot the EEG Reliability
 plot_reliability: $(reliability_plotting)/.plotted $(eeg_reliability)
 $(reliability_plotting)/.plotted: 
@@ -243,7 +261,7 @@ $(back2back_plotting)/.plotted:
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_back2back.py --overwrite" | sbatch
-	# touch $(back2back_plotting)/.plotted
+	touch $(back2back_plotting)/.plotted
 
 
 clean:
