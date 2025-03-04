@@ -19,6 +19,8 @@ feature_regression=$(project_folder)/data/interim/FeatureRegression
 feature_plotting=$(project_folder)/data/interim/PlotFeatureDecoding
 roi_plotting=$(project_folder)/data/interim/PlotROIDecoding
 back2back_plotting=$(project_folder)/data/interim/PlotBack2Back
+reliability_plotting=$(project_folder)/data/interim/plot_reliability
+
 
 # Steps to run
 all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back
@@ -95,7 +97,7 @@ conda activate eeg\n\
 echo $${s}\n\
 python $(project_folder)/scripts/eeg_reliability.py -s $$s" | sbatch; \
 	done
-	# touch $(eeg_reliability)/.done
+	touch $(eeg_reliability)/.done
 
 
 #Compute b2b regression with EEG first then annotated features
@@ -118,7 +120,7 @@ echo $${x}\n\
 python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x '[\"$${x}\"]'" | sbatch; \
 	done; \
 	done
-	# touch $(back_to_back)/.done
+	touch $(back_to_back)/.done
 
 
 #Compute EEG feature regression
@@ -136,7 +138,7 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
-	# touch $(feature_regression)/.feature_decoding
+	touch $(feature_regression)/.feature_decoding
 
 
 #Compute the channel-wise roi_decoding
@@ -154,7 +156,7 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
 	done
-	# touch $(fmri_regression)/.roi_decoding
+	touch $(fmri_regression)/.roi_decoding
 
 
 #Full brain EEG to fMRI regression
@@ -173,7 +175,24 @@ ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
 	done
-	# touch $(fmri_regression)/.full_brain
+	touch $(fmri_regression)/.full_brain
+
+
+#Plot the EEG Reliability
+plot_reliability: $(reliability_plotting)/.plotted $(eeg_reliability)
+$(reliability_plotting)/.plotted: 
+	mkdir -p $(reliability_plotting)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --job-name=reliability_plotting\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 1:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/plot_reliability.py --overwrite" | sbatch
+	touch $(reliability_plotting)/.plotted
 
 
 #Plot the ROI timecourses 
@@ -189,8 +208,8 @@ $(roi_plotting)/.plotted:
 #SBATCH --cpus-per-task=12\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_nuisance_roi_decoding.py --overwrite" | sbatch
-	# touch $(roi_plotting)/.plotted
+python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
+	touch $(roi_plotting)/.plotted
 
 
 #Plot the ROI timecourses 
@@ -207,7 +226,7 @@ $(feature_plotting)/.plotted:
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
-	# touch $(feature_plotting)/.plotted
+	touch $(feature_plotting)/.plotted
 
 
 #Plot the Back2Back timecourses 
