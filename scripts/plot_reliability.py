@@ -7,6 +7,8 @@ from glob import glob
 from pathlib import Path
 from tqdm import tqdm
 from PIL import Image
+from src.stats import calculate_p, cluster_correction
+from scipy import ndimage
 
 
 def load_timecourse(files):
@@ -22,13 +24,23 @@ def load_timecourse(files):
     #Average across EEG subjects
     mean_df = df.groupby(['time']).mean(numeric_only=True).reset_index()
     print('Finished mean over EEG subjects')
+
     # Group stats
     # Variance
     var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
     scores_var = mean_df[var_cols].to_numpy()
     mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
     mean_df.drop(columns=var_cols, inplace=True)
-    return mean_df
+
+    # P-values
+    null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
+    scores_null = mean_df[null_cols].to_numpy().T
+    scores = mean_df['r'].to_numpy().T
+    ps = calculate_p(scores_null, scores, 5000, 'greater')
+    mean_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T,
+                                      verbose=True,
+                                      desc=f'cluster correction')
+    return mean_df.drop(columns=null_cols)
 
 
 # Plot the results
@@ -53,8 +65,18 @@ def plot_reliability(out_file, df, img):
     ax.plot(df['time'], smoothed_data['r'],
             color='black', zorder=1,
             linewidth=1.5)
-
+    
     ymin, ymax = ax.get_ylim()
+
+    label, n = ndimage.label(df['p'] < 0.05)
+    for icluster in range(1, n+1):
+        time_cluster = df['time'].to_numpy()[label == icluster]
+        print(f'{time_cluster.min():.0f} to {time_cluster.max():.0f}')
+        ax.hlines(y=ymin+((ymax-ymin)*0.07),
+                  xmin=time_cluster.min(),
+                  xmax=time_cluster.max(),
+                color='black', zorder=0, linewidth=1.5)
+
     ax.set_xlim([-200, 1000])
     ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
                 linestyles='dashed', colors='grey',

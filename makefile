@@ -1,7 +1,6 @@
 user=$(shell whoami)
 project_folder=/home/$(user)/scratch4-lisik3/$(user)/SIEEG_analysis
-# eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
-eeg_subs := 2 8 13 16 17 18 21
+eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 fmri_subs := 1 2 3 4
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
 
@@ -42,7 +41,7 @@ python $(project_folder)/scripts/motion_energy_activations.py " | sbatch
 	touch $(motion_energy)/.done
 
 
-# Get the activations from AlexNet for the 3 s videos
+# Get the activations from AlexNet for the 500 ms videos
 alexnet: $(alexnet)/.done $(videos)
 $(alexnet)/.done: 
 	mkdir -p $(alexnet)
@@ -122,7 +121,7 @@ python $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials
 	# touch $(back_to_back)/.done
 
 
-#Compute b2b regression with EEG first then annotated features
+#Compute EEG feature regression
 feature_decoding: $(feature_regression)/.feature_decoding $(eeg_preprocess)
 $(feature_regression)/.feature_decoding: 
 	mkdir -p $(feature_regression)
