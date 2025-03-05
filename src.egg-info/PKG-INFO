@@ -1,10 +1,7 @@
-Metadata-Version: 1.0
+Metadata-Version: 2.1
 Name: src
 Version: 0.1.0
 Summary: Code need to reproduce analyses in McMahon et al 2022
-Home-page: UNKNOWN
 Author: Emalie McMahon
-Author-email: UNKNOWN
 License: MIT
-Description: UNKNOWN
-Platform: UNKNOWN
+License-File: LICENSE
