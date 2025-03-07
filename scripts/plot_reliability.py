@@ -9,6 +9,8 @@ from tqdm import tqdm
 from PIL import Image
 from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
+from pdf2image import convert_from_path
+from matplotlib import gridspec
 
 
 def load_timecourse(files):
@@ -44,54 +46,64 @@ def load_timecourse(files):
 
 
 # Plot the results
-def plot_reliability(out_file, df, img): 
+def plot_reliability(out_file, df, img1, img2): 
     sns.set_context(context='paper')
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3),
-                             width_ratios=[4, 7],
-                             dpi=600)
-    # Plot overview image
-    axes[0].imshow(img, interpolation='nearest')
-    axes[0].axis('off')
+    
+    # Set up the plot
+    fig = plt.figure(figsize=(7.5, 4.5), dpi=600)
+    gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[3, 2])
+    ax1 = plt.subplot(gs[0, 0])  # Top-left subplot (width ratio 4)
+    ax2 = plt.subplot(gs[0, 1])  # Top-right subplot (width ratio 7)
+    ax3 = plt.subplot(gs[1, :])  # Bottom subplot (spans both columns)
 
-    ax = axes[1]
+    # Plot overview image
+    ax1.imshow(img1, interpolation='nearest')
+    ax1.axis('off')
+
+    # Plot regression image
+    ax3.imshow(img2, interpolation='nearest')
+    ax3.axis('off')
+
     smoothed_data = {}
     for key in ['low_ci', 'high_ci', 'r']:
         smoothed_data[key] = np.convolve(df[key], np.ones(10)/10, mode='same')
 
-    ax.fill_between(x=df['time'], 
+    ax2.fill_between(x=df['time'], 
                 y1=smoothed_data['low_ci'], y2=smoothed_data['high_ci'],
                 edgecolor=None, color='black', alpha=0.1, 
                 zorder=0)
-    ax.plot(df['time'], smoothed_data['r'],
+    ax2.plot(df['time'], smoothed_data['r'],
             color='black', zorder=1,
             linewidth=1.5)
     
-    ymin, ymax = ax.get_ylim()
+    ymin, ymax = ax2.get_ylim()
 
     label, n = ndimage.label(df['p'] < 0.05)
     for icluster in range(1, n+1):
         time_cluster = df['time'].to_numpy()[label == icluster]
         print(f'{time_cluster.min():.0f} to {time_cluster.max():.0f}')
-        ax.hlines(y=ymin+((ymax-ymin)*0.07),
+        ax2.hlines(y=ymin+((ymax-ymin)*0.07),
                   xmin=time_cluster.min(),
                   xmax=time_cluster.max(),
                 color='black', zorder=0, linewidth=1.5)
 
-    ax.set_xlim([-200, 1000])
-    ax.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
+    ax2.set_xlim([-200, 1000])
+    ax2.vlines(x=[0, 500], ymin=ymin, ymax=ymax,
                 linestyles='dashed', colors='grey',
                 linewidth=1, zorder=0)
-    ax.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
+    ax2.hlines(y=0, xmin=-200, xmax=1000, colors='grey',
                 linewidth=1, zorder=0)
-    ax.set_ylabel('Correlation ($r$)')
-    ax.set_xlabel('Time (ms)')
-    ax.tick_params(axis='x', labelsize=8)
-    ax.spines[['right', 'top']].set_visible(False)
-    ax.set_ylim([ymin, ymax])
+    ax2.set_ylabel('Correlation ($r$)')
+    ax2.set_xlabel('Time (ms)')
+    ax2.tick_params(axis='x', labelsize=8)
+    ax2.spines[['right', 'top']].set_visible(False)
+    ax2.set_ylim([ymin, ymax])
+    
     plt.tight_layout()
     plt.subplots_adjust(wspace=0.2)
     fig.text(0.01, .95, 'A', ha='center', fontsize=12)
-    fig.text(0.31, .95, 'B', ha='center', fontsize=12)
+    fig.text(0.43, .95, 'B', ha='center', fontsize=12)
+    fig.text(0.01, .36, 'C', ha='center', fontsize=12)
     plt.savefig(out_file)
 
 
@@ -101,6 +113,7 @@ class PlotReliability:
         self.out_csv = args.out_csv
         self.reliability_dir = args.reliability_dir 
         self.overview = args.overview
+        self.regression_schema = args.regression_schema 
         self.out_plot = args.overview.replace('schema.png', 'Figure1.pdf')
         Path(f'{self.out_dir}/PlotReliability').mkdir(exist_ok=True, parents=True)
         self.overwrite = args.overwrite 
@@ -110,6 +123,9 @@ class PlotReliability:
         overview_img = Image.open(self.overview) 
         print(f'image size {overview_img.size}')
 
+        reg_schema = convert_from_path(self.regression_schema, dpi=600)[0]
+        print(f'image size {reg_schema.size}')
+
         if self.overwrite or not Path(f'{self.out_dir}/PlotReliability/{self.out_csv}').is_file():
             files = glob(f'{self.reliability_dir}/*.parquet')
             df = load_timecourse(files)
@@ -117,7 +133,7 @@ class PlotReliability:
         else:
             df = pd.read_csv(f'{self.out_dir}/PlotReliability/{self.out_csv}')
 
-        plot_reliability(self.out_plot, df, overview_img)
+        plot_reliability(self.out_plot, df, overview_img, reg_schema)
 
 
 def main():
@@ -130,6 +146,8 @@ def main():
                         default='reliability.csv')
     parser.add_argument('--overview', type=str, help='experiment schematic',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures/FinalFigures/schema.png')
+    parser.add_argument('--regression_schema', type=str, help='regression schematic',
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures/FinalFigures/regression_schema_long.pdf')
     parser.add_argument('--reliability_dir', '-r', type=str, help='directory for input',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegReliability')
     args = parser.parse_args()
