@@ -1,4 +1,5 @@
 #/Applications/anaconda3/envs/egg/bin/python
+import os
 import argparse
 import pandas as pd
 import numpy as np
@@ -11,6 +12,10 @@ from pdf2image import convert_from_path
 from shutil import copyfile
 from PIL import Image, ImageDraw, ImageFont
 import re
+
+
+sub_plot_letters = {1: 'A', 2: 'C', 3: 'B', 4: 'C'}
+plot_arrow = {1: False, 2: True, 3: False, 4: True}
 
 
 def load_ventral(image_path, resize_factor):
@@ -88,10 +93,14 @@ def draw_arrow(draw, start, end, arrow_size=10, fill=(0, 0, 0),
 def plot_brain_baguette(ventrals, laterals, 
                         colorbar_path, 
                         outpath, 
+                        add_arrow=True,
+                        sub_plot_letter='C',
                         lateral_resize=1.55, 
                         ventral_resize=2.25,
-                        width_inches=7.5, height_inches=2.5,
+                        width_inches=7.5, height_inches=2.1,
                         dpi=600): 
+    if add_arrow:
+        height_inches += 0.4
     canvas_size = (int(width_inches*dpi), int(height_inches*dpi))
     brain_canvas = Image.new('RGBA', canvas_size, (255, 255, 255, 0))
     brain_canvas.info['dpi'] = (dpi, dpi)
@@ -120,7 +129,9 @@ def plot_brain_baguette(ventrals, laterals,
             arrow_start = x + int(ventral.width * .2)
 
         x += int(ventral.width * .5)
-        draw.text((x, time_pos), font=font, text=time, fill=(0, 0, 0))
+
+        if add_arrow: 
+            draw.text((x, time_pos), font=font, text=time, fill=(0, 0, 0))
 
         if i+1 == len(ventrals):
             arrow_end = x + int(ventral.width * .25)
@@ -136,21 +147,21 @@ def plot_brain_baguette(ventrals, laterals,
     colorbar = load_colorbar(colorbar_path, ventral_resize)
     combined_canvas.paste(colorbar, (int(x*1.15), ventral_pos), mask=colorbar)
 
-    # Add the time
+    # Add the sub plot time
     draw = ImageDraw.Draw(combined_canvas)
     font = ImageFont.truetype('/home/emcmaho7/.fonts/Roboto/Roboto-Regular.ttf', 110)
-    draw.text((10, 10), font=font, text='C', fill=(0, 0, 0))
-
-    # Draw the arrow
-    draw_arrow(draw, start=(arrow_start, arrow_pos), 
-               end=(arrow_end, arrow_pos),
-               arrow_size=50, fill=(0, 0, 0),
-               width=15)
-    
-    # Add time label
-    font = ImageFont.truetype('/home/emcmaho7/.fonts/Roboto/Roboto-Regular.ttf', 100)
-    draw.text((int(arrow_start + (arrow_end-arrow_start)/2), title_pos), font=font,
-              text='Time (ms)', fill=(0, 0, 0))
+    draw.text((10, 10), font=font, text=sub_plot_letter, fill=(0, 0, 0))
+    if add_arrow: 
+        # Draw the arrow
+        draw_arrow(draw, start=(arrow_start, arrow_pos), 
+                end=(arrow_end, arrow_pos),
+                arrow_size=50, fill=(0, 0, 0),
+                width=15)
+        
+        # Add time label
+        font = ImageFont.truetype('/home/emcmaho7/.fonts/Roboto/Roboto-Regular.ttf', 100)
+        draw.text((int(arrow_start + (arrow_end-arrow_start)/2), title_pos), font=font,
+                text='Time (ms)', fill=(0, 0, 0))
     
     # Add rotated text "Prediction (r)" on the right side
     prediction_text = "Prediction (r)"
@@ -167,8 +178,8 @@ def plot_brain_baguette(ventrals, laterals,
     combined_canvas.save(outpath)
 
 
-def combine_plots(out_file, img1, img2, 
-                  width_inches=7.5, height_inches=5.5, dpi=600): 
+def combine_main_plots(out_file, img1, img2, 
+                       width_inches=7.5, height_inches=5.5, dpi=600): 
     canvas_size = (int(width_inches*dpi), int(height_inches*dpi))
     canvas = Image.new('RGB', canvas_size, (255, 255, 255))
     canvas.info['dpi'] = (dpi, dpi)
@@ -179,17 +190,36 @@ def combine_plots(out_file, img1, img2,
     canvas.save(out_file)
 
 
-def get_files(search_str, times=[0,50],
-              pattern=r"timems-(\d+)"):
+def combine_sup_plots(out_file, imgs, 
+                      width_inches=7.5, 
+                      height_inches=6.75, 
+                      dpi=600): 
+    canvas_size = (int(width_inches*dpi), int(height_inches*dpi))
+    canvas = Image.new('RGB', canvas_size, (255, 255, 255))
+    canvas.info['dpi'] = (dpi, dpi)
+
+    # Add the top plots
+    y = 0 
+    for img in imgs:
+        canvas.paste(img, (0, y))
+        y += img.height
+    canvas.save(out_file)
+
+
+def get_files(search_str, times=[0,50], subj=2,
+                time_pattern=r"timems-(\d+)",
+                subj_pattern=r"sub-(\d+)"):
     files = []
     for file in sorted(glob(search_str)):
-        match = re.search(pattern, file)
-        if match:
-            time = int(match.group(1))
+        time_match = re.search(time_pattern, file)
+        subj_match = re.search(subj_pattern, file)
+        if time_match and subj_match:
+            file_time = int(time_match.group(1))
+            file_subj = int(subj_match.group(1))
         else:
             print("No match found.")
 
-        if time in times:
+        if file_time in times and file_subj == subj:
             files.append(file)
     return files
 
@@ -197,6 +227,7 @@ def get_files(search_str, times=[0,50],
 class PlotBaguette:
     def __init__(self, args):
         self.process = 'PlotBaguette'
+        self.sid = args.sid
         self.out_dir = args.out_dir 
         self.final_dir = args.final_dir
         self.brain_plots_path = f'{self.out_dir}/PlotWholeBrain'
@@ -208,24 +239,41 @@ class PlotBaguette:
         print(vars(self))
 
     def run(self):
-        baguette_path = f'{self.out_dir}/{self.process}/baguette_plot.png'
+        baguette_path = f'{self.out_dir}/{self.process}/sub-{str(self.sid).zfill(2)}_baguette_plot.png'
         ventrals = get_files(f'{self.brain_plots_path}/ventral-rh/*png',
-                             times=self.times)
+                             times=self.times, subj=self.sid)
         laterals = get_files(f'{self.brain_plots_path}/lateral-rh/*png',
-                             times=self.times)
-        plot_brain_baguette(ventrals, laterals, self.color_bar, baguette_path)
+                             times=self.times, subj=self.sid)
+        plot_brain_baguette(ventrals, laterals, 
+                            self.color_bar, baguette_path,
+                            sub_plot_letter=sub_plot_letters[self.sid], 
+                            add_arrow=plot_arrow[self.sid])
 
-        roi_plot = convert_from_path(self.roi_plot, dpi=600)[0]
-        baguette_plot = Image.open(baguette_path)
-        
-        combine_plots(f'{self.out_dir}/{self.process}/combined_plot.pdf',
-                      roi_plot, baguette_plot)
-        copyfile(f'{self.out_dir}/{self.process}/combined_plot.pdf', 
-                 self.out_plot)
+        if self.sid == 2: 
+            roi_plot = convert_from_path(self.roi_plot, dpi=600)[0]
+            baguette_plot = Image.open(baguette_path)
+            combine_main_plots(f'{self.out_dir}/{self.process}/combined_plot.pdf',
+                               roi_plot, baguette_plot)
+            copyfile(f'{self.out_dir}/{self.process}/combined_plot.pdf', 
+                     self.out_plot)
+        else: 
+            plots = []
+            for sup_sid in [1, 3, 4]:
+                path = f'{self.out_dir}/{self.process}/sub-{str(sup_sid).zfill(2)}_baguette_plot.png'
+                if os.path.exists(path):
+                    plots.append(Image.open(path))
+            sup_plot = f'{self.out_dir}/{self.process}/combined_supplot.pdf'
+
+            if len(plots) == 3:
+                combine_sup_plots(sup_plot, plots)
+                copyfile(f'{self.out_dir}/{self.process}/combined_supplot.pdf', 
+                        f'{self.final_dir}/supplemental_whole_brain.pdf')
 
 
 def main():
     parser = argparse.ArgumentParser(description='Plot the ROI regression results')
+    parser.add_argument('--sid', '-s', type=int, default=2,
+                         help='fMRI subject to plot')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim')
     parser.add_argument('--final_dir', type=str, help='experiment schematic',
