@@ -204,7 +204,7 @@ def plot_simple(out_file, df_time, df_latency, colors, title_names):
     plt.savefig(out_file)
 
 def plot_full_timecourse(out_file, stats_df, colors, title_names):
-    _, axes = plt.subplots(4, 2, figsize=(7.5, 6), sharex=True, sharey=True)
+    _, axes = plt.subplots(3, 2, figsize=(7.5, 5.25), sharex=True, sharey=True)
     axes = axes.flatten()
     ymin, ymax = -0.15, 0.6
 
@@ -256,7 +256,7 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
         if iroi % 2 == 0:
             ax.set_ylabel('Prediction ($r$)')
 
-        if iroi >= 6:
+        if iroi >= 4:
             ax.set_xlabel('Time (ms)')
 
     plt.tight_layout()
@@ -266,7 +266,7 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
     _, ax = plt.subplots(figsize=(7.5, 3))
     plt.subplots_adjust(right=0.85)
     order_counter = -1
-    jitter = -17
+    jitter = -15
     xmin, xmax = -25, 325
     for (_, roi_df), (label, color) in zip(stats_df.groupby('roi_name', observed=True), zip(title_names, colors)):
         order_counter +=1
@@ -282,7 +282,7 @@ def plot_full_latency(out_file, stats_df, colors, title_names):
         sigs_time = roi_df['time_window'][roi_df['p'] < 0.05] + (jitter-1.75)
         for sig, sig_time in zip(sigs, sigs_time):
             ax.text(sig_time, sig, '*', fontsize='x-small')
-        jitter += 5
+        jitter += 6
 
     ax.legend(bbox_to_anchor=(1.05, .75), loc='upper left')
     ymin, ymax = ax.get_ylim()
@@ -322,19 +322,18 @@ class PlotROIDecoding:
         if self.simplified_plotting:
             rois = ['EVC', 'LOC', 'aSTS']
             title_names = ['EVC', 'LOC', 'aSTS-SI']
-            colors = ['#a1dfb9', '#38aaac', '#28192e']
+            colors = ['#8bd9b2', '#338ea7', '#2e1e3a']
             out_plot = 'roi_plot.pdf'
         else:
             rois = ['EVC', 'MT',
                     'LOC', 'EBA', 
-                    'FFA', 'PPA', 
                     'pSTS', 'aSTS']
             title_names = ['EVC', 'MT', 
                            'LOC', 'EBA',
-                           'FFA', 'PPA',
                            'pSTS-SI', 'aSTS-SI']
-            colors = ['#a1dfb9', '#55caad', '#38aaac', '#348ba6',
-                      '#366a9f', '#40498e', '#3b2e5d', '#28192e']
+            colors = ['#8bd9b2', '#40b7ad', 
+                      '#338ea7', '#37659d',
+                      '#403c7b', '#2e1e3a']
             out_plot = 'supplement_rois'
 
         if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
@@ -347,7 +346,7 @@ class PlotROIDecoding:
         else:
             df_time = pd.read_csv(f'{self.out_dir}/{self.out_csv}')
             df_latency = pd.read_csv(f'{self.out_dir}/roi_decoding_latency.csv')
-        
+       
         # Make categorical for plotting
         df_time = df_time.loc[df_time['roi_name'].isin(rois)].reset_index(drop=True)
         df_time['roi_name'] = pd.Categorical(df_time['roi_name'], categories=rois, ordered=True)

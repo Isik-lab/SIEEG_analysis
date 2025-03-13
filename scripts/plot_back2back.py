@@ -23,12 +23,12 @@ class PlotBack2Back:
         self.final_plot = args.final_plot   
         
         # Constants
-        self.rois = ['EVC', 'MT', 'LOC', 'EBA', 'FFA', 'PPA', 'pSTS', 'aSTS']
+        self.rois = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS', 'aSTS']
         self.features = ['alexnet', 'moten', 'expanse', 'object',
                         'agent_distance', 'facingness',
                         'joint_action', 'communication', 
                         'valence', 'arousal']
-        self.roi_titles = ['EVC', 'MT', 'LOC', 'EBA', 'FFA', 'PPA', 'pSTS-SI', 'aSTS-SI']
+        self.roi_titles = ['EVC', 'MT', 'LOC', 'EBA', 'pSTS-SI', 'aSTS-SI']
         self.feature_titles = ['AlexNet-conv2', 'motion energy', 
                              'spatial expanse', 'object directedness',
                              'agent distance', 'facingness',
@@ -74,7 +74,10 @@ class PlotBack2Back:
         else:
             df_timecourse = pd.read_csv(f'{self.output_dir}/joint_decoding_timecourse.csv')
             df_latency = pd.read_csv(f'{self.output_dir}/joint_decoding_latency.csv')
-        
+
+            df_latency = df_latency.loc[df_latency.roi_name.isin(self.rois)].reset_index(drop=True)
+            df_timecourse = df_timecourse.loc[df_timecourse.roi_name.isin(self.rois)].reset_index(drop=True)
+
         return df_timecourse, df_latency
 
     def _load_feature_data(self, feature):
@@ -183,7 +186,7 @@ class PlotBack2Back:
                           jitter_start=18, x_padding=10, jitter=4,
                           scatter_size=8, linewidth=1):
         """Plot full results for all ROIs and features"""
-        fig, axes = plt.subplots(4, 2, figsize=(7.5, 8), 
+        fig, axes = plt.subplots(3, 2, figsize=(7.5, 6), 
                                  sharex=True)
         axes = axes.flatten()
         for (iroi, roi), (_, roi_df) in zip(enumerate(self.roi_titles), stats_df.groupby('roi_name', observed=True)):
@@ -195,7 +198,7 @@ class PlotBack2Back:
                                        linewidth=linewidth,
                                        scatter_size=scatter_size)
             ymin, ymax = ax.get_ylim()
-            ax.set_ylim([ymin, ymax])
+            ax.set_ylim([ymin, ymax+0.3])
             ax.vlines(x=list(np.arange(xmin+25, xmax, step=50)), 
                       ymin=ymin, ymax=ymax,
                       color='gray', linewidth=.7, alpha=0.5)
@@ -216,7 +219,7 @@ class PlotBack2Back:
                     handles,
                     labels,
                     loc="upper center",         # Place the legend above the figure
-                    bbox_to_anchor=(0.5, 0.99),  # Adjust the anchor to center above the figure
+                    bbox_to_anchor=(0.5, 0.995),  # Adjust the anchor to center above the figure
                     ncol=5,                      # Number of columns in the legend
                     fontsize=8                  # Font size
                 )
@@ -228,8 +231,8 @@ class PlotBack2Back:
             
             ax.set_title(roi)
 
-        plt.subplots_adjust(top=0.95)
-        plt.tight_layout(rect=[0, 0, 1, 0.95])      
+        plt.subplots_adjust(top=0.94)
+        plt.tight_layout(rect=[0, 0, 1, 0.94])      
         plt.savefig(f'{self.output_dir}/supplemental_joint_latency.pdf')
 
     def _plot_feature_latency(self, roi_df, ax, jitter_start=18,
@@ -247,7 +250,7 @@ class PlotBack2Back:
             ax.scatter(feature_df['time_window']+jitter, feature_df['score'],
                        s=scatter_size, color=color, label=feature)
             
-            sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.02
+            sigs = feature_df['high_ci'][feature_df['p'] < 0.05] + 0.015
             sigs_time = feature_df['time_window'][feature_df['p'] < 0.05] + (jitter-1.75)
             for sig, sig_time in zip(sigs, sigs_time):
                 ax.text(sig_time, sig, '*', fontsize='x-small')
@@ -386,10 +389,10 @@ class PlotBack2Back:
                     fontsize=8)
         plt.tight_layout(rect=[0, 0.05, 1, 1])
         fig.text(0.01, .95, 'A', ha='center', fontsize=12)
-        fig.text(0.7, .95, 'B', ha='center', fontsize=12)
-        fig.text(0.01, .66, 'C', ha='center', fontsize=12)
-        fig.text(0.7, .66, 'D', ha='center', fontsize=12)
-        fig.text(0.01, .37, 'E', ha='center', fontsize=12)
+        fig.text(0.7, .95, 'D', ha='center', fontsize=12)
+        fig.text(0.01, .66, 'B', ha='center', fontsize=12)
+        fig.text(0.7, .66, 'E', ha='center', fontsize=12)
+        fig.text(0.01, .37, 'C', ha='center', fontsize=12)
         fig.text(0.7, .37, 'F', ha='center', fontsize=12)
         plt.savefig(f'{self.output_dir}/joint_timecourse.pdf')
     ###################
