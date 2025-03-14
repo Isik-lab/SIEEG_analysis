@@ -356,7 +356,6 @@ class PlotROIDecoding:
         sns.set_context(context='paper')
         if self.simplified_plotting:
             plot_simple(f'{self.out_dir}/{out_plot}', df_time, df_latency, colors, title_names)
-            shutil.copyfile(f'{self.out_dir}/{out_plot}', f'{self.final_plot}/Figure3.pdf')
         else: 
             plot_full_timecourse(f'{self.out_dir}/{out_plot}_timecourse.pdf',
                                   df_time, colors, title_names)
