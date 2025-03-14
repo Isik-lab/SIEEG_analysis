@@ -8,8 +8,9 @@ reports/project_updates/*.key
 reports/figures/Group_Analysis/*mp4
 reports/figures/Group_Analysis/brain_plots/*
 */__pycache__/
-*.egg-info/
+src.egg-info/
 */*out
 *out
 .neptune/
 */.neptune
+.vscode/
