@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 import re
 
 
-sub_plot_letters = {1: 'A', 2: 'C', 3: 'B', 4: 'C'}
+sub_plot_letters = {1: 'A', 2: 'B', 3: 'B', 4: 'C'}
 plot_arrow = {1: False, 2: True, 3: False, 4: True}
 
 

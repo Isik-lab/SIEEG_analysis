@@ -333,28 +333,29 @@ class PlotBack2Back:
                              jitter_size=12, xmin=0, xmax=300, x_padding=10):
         """Plot results for reduced set of ROIs and features"""
         n_rois = len(self.reduced_rois_titles)
-        fig, axes = plt.subplots(n_rois, 2,
-                                 figsize=(7.5, 5), 
-                                 width_ratios=[7, 3])
+        fig, axes = plt.subplots(n_rois, 1,
+                                 figsize=(7.5, 5)) 
+                                #  width_ratios=[7, 3])
         
-        iterator = enumerate(zip(df_timecourse_reduced.groupby('roi_name', observed=True),
-                                 df_latency_reduced.groupby('roi_name', observed=True)))
-        for iroi, ((roi_name, roi_timecourse), (_, roi_latency)) in iterator:
+        # iterator = enumerate(zip(df_timecourse_reduced.groupby('roi_name', observed=True),
+        #                          df_latency_reduced.groupby('roi_name', observed=True)))
+        iterator = enumerate(df_timecourse_reduced.groupby('roi_name', observed=True))
+        for iroi, (roi_name, roi_timecourse) in iterator:
             title = self.reduced_rois_titles[iroi]
-            lines, (ymin, ymax) = self._plot_reduced_timecourse(axes[iroi, 0], 
+            lines, (ymin, ymax) = self._plot_reduced_timecourse(axes[iroi], 
                                                           title, roi_name,
                                                           roi_timecourse)
             ymin_round, ymax_round = np.floor(ymin*10)/10, np.ceil(ymax*10)/10
-            axes[iroi, 0].vlines(x=[0, 500], ymin=ymin_round, ymax=ymax_round,
+            axes[iroi].vlines(x=[0, 500], ymin=ymin_round, ymax=ymax_round,
                     linestyles='dashed', colors='grey',
                     linewidth=1, zorder=0)
-            axes[iroi, 0].set_ylim([ymin_round, ymax_round])
-            axes[iroi, 0].set_ylabel('Prediction ($r$)')
+            axes[iroi].set_ylim([ymin_round, ymax_round])
+            axes[iroi].set_ylabel('Prediction ($r$)')
             if iroi == (n_rois - 1):
-                axes[iroi, 0].tick_params(axis='x', labelsize=8)
-                axes[iroi, 0].set_xlabel('Time (ms)')
+                axes[iroi].tick_params(axis='x', labelsize=8)
+                axes[iroi].set_xlabel('Time (ms)')
             else:
-                axes[iroi, 0].set_xticklabels([])
+                axes[iroi].set_xticklabels([])
 
             if roi_name == 'EVC':
                 yticks = list(np.arange(ymin_round, ymax_round, 0.1)[::3])
@@ -362,25 +363,7 @@ class PlotBack2Back:
                 yticks = list(np.arange(ymin_round, ymax_round, 0.1)[::2])
             else:
                 yticks = list(np.arange(ymin_round, ymax_round, 0.1))
-            axes[iroi, 0].set_yticks(yticks)
-
-            # plot latency
-            self._plot_reduced_latency(axes[iroi, 1], roi_latency,
-                                       jitter_size=jitter_size, x_padding=x_padding,
-                                       xmin=xmin, xmax=xmax)
-            axes[iroi, 1].set_ylim([ymin_round, ymax_round])
-            axes[iroi, 1].set_yticks(yticks)
-            axes[iroi, 1].set_yticklabels([])
-            if iroi == (n_rois - 1):
-                axes[iroi, 1].set_xlim([xmin-jitter_size-x_padding, xmax+jitter_size+x_padding])
-                axes[iroi, 1].set_xlabel('Time bin (ms)')
-                axes[iroi, 1].set_xticks(list(np.arange(xmin, xmax+1, step=50)))
-                axes[iroi, 1].tick_params(axis='x', labelsize=8)
-            else:
-                axes[iroi, 1].set_xlim([xmin-jitter_size-x_padding, xmax+jitter_size+x_padding])
-                axes[iroi, 1].set_xticks(list(np.arange(xmin, xmax+1, step=50)))
-                axes[iroi, 1].set_xticklabels([])
-        
+            axes[iroi].set_yticks(yticks)
 
         fig.legend(lines, self.reduced_features_legends, 
                     loc="lower center",         # Position the legend at the bottom-center
@@ -389,14 +372,14 @@ class PlotBack2Back:
                     fontsize=8)
         plt.tight_layout(rect=[0, 0.05, 1, 1])
         fig.text(0.01, .95, 'A', ha='center', fontsize=12)
-        fig.text(0.7, .95, 'D', ha='center', fontsize=12)
+        # fig.text(0.7, .95, 'D', ha='center', fontsize=12)
         fig.text(0.01, .66, 'B', ha='center', fontsize=12)
-        fig.text(0.7, .66, 'E', ha='center', fontsize=12)
+        # fig.text(0.7, .66, 'E', ha='center', fontsize=12)
         fig.text(0.01, .37, 'C', ha='center', fontsize=12)
-        fig.text(0.7, .37, 'F', ha='center', fontsize=12)
+        # fig.text(0.7, .37, 'F', ha='center', fontsize=12)
         plt.savefig(f'{self.output_dir}/joint_timecourse.pdf')
-    ###################
 
+    ###################
     def _plot_reduced_timecourse(self, ax, title, roi_name, cur_df):
         """Plot reduced ROI results"""
         order_counter = 0

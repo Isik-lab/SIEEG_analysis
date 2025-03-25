@@ -181,15 +181,15 @@ def plot_simple_latency(ax, stats_df, colors, title_names, jitter_size=12,
 # Plot the results
 def plot_simple(out_file, df_time, df_latency, colors, title_names): 
     sns.set_context(context='paper')
-    fig, axes = plt.subplots(1, 2, figsize=(7.5, 3),
-                             width_ratios=[7, 3],
-                             sharey=True)
-    plot_simple_timecourse(axes[0], df_time, colors, title_names)
-    plot_simple_latency(axes[1], df_latency, colors, title_names)
+    _, ax = plt.subplots(1, 1, figsize=(7.5, 3))
+                            #  width_ratios=[7, 3],
+                            #  sharey=True)
+    plot_simple_timecourse(ax, df_time, colors, title_names)
+    # plot_simple_latency(axes[1], df_latency, colors, title_names)
     plt.tight_layout()
-    plt.subplots_adjust(wspace=0.15)
-    fig.text(0.01, .95, 'A', ha='center', fontsize=12)
-    fig.text(0.7, .95, 'B', ha='center', fontsize=12)
+    # plt.subplots_adjust(wspace=0.15)
+    # fig.text(0.01, .95, 'A', ha='center', fontsize=12)
+    # fig.text(0.7, .95, 'B', ha='center', fontsize=12)
     plt.savefig(out_file)
 
 
