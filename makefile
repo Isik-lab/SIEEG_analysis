@@ -89,7 +89,7 @@ $(eeg_reliability)/.done:
 #SBATCH --partition=parallel\n\
 #SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_reliability\n\
-#SBATCH --time=36:00:00\n\
+#SBATCH --time=48:00:00\n\
 #SBATCH --cpus-per-task=48\n\
 #SBATCH --exclusive=user\n\
 set -e\n\

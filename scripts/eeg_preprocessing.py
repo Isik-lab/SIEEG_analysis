@@ -61,6 +61,7 @@ class eegPreprocessing:
         print(vars(self))
         self.out_dir = f'{self.data_dir}/interim/{self.process}'
         Path(f'{self.out_dir}/all_trials').mkdir(parents=True, exist_ok=True)
+        self.channels_to_exclude = ['Fz', 'Fp1', 'Fp2', 'AF3', 'AF4', 'AF7', 'AF8'] + [f'F{i}' for i in range(1,9)]
 
     @staticmethod
     def average_repetitions(data):
@@ -90,16 +91,16 @@ class eegPreprocessing:
                 times = times[0] * 1000 # Change to ms
                 for channel, channel_eeg in zip(eeg_dict['label'], trial_eeg):
                     channel = channel[0][0]
-                    resampled_time, resampled_data = temporal.resample(times, channel_eeg,
-                                                                    new_sample_rate=self.resample_rate)
-                    smoothed_data = temporal.smooth(resampled_data, window_size=self.n_samples_to_smooth)
-                    for (itime, time), signal in zip(enumerate(resampled_time), smoothed_data):
-
-                        df.append({'trial': itrial, 'channel': channel,
-                                    'time': time, 'time_ind': itime,
-                                    'signal': signal, 
-                                    'repitition': repitition, 'even': even, 
-                                    'video_name': video_name, 'stimulus_set': stimulus_set})
+                    if channel not in self.channels_to_exclude: 
+                        resampled_time, resampled_data = temporal.resample(times, channel_eeg,
+                                                                        new_sample_rate=self.resample_rate)
+                        smoothed_data = temporal.smooth(resampled_data, window_size=self.n_samples_to_smooth)
+                        for (itime, time), signal in zip(enumerate(resampled_time), smoothed_data):
+                            df.append({'trial': itrial, 'channel': channel,
+                                        'time': time, 'time_ind': itime,
+                                        'signal': signal, 
+                                        'repitition': repitition, 'even': even, 
+                                        'video_name': video_name, 'stimulus_set': stimulus_set})
         return pd.DataFrame(df) 
 
     def load_trials(self):
