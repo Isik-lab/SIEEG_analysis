@@ -16,3 +16,4 @@ src.egg-info/
 .vscode/
 scripts/eeg_preprocessing/fieldtrip/
 scripts/eeg_preprocessing/textprogressbar/
+logs/

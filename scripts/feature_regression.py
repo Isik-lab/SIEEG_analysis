@@ -28,7 +28,7 @@ class FeatureRegression:
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
                                     'agent_distance': 'rating-agent_distance', 'facingness': 'rating-facingness',
-                                    'joint_action': 'rating-joint_action', 'communication': 'rating-communication',
+                                    'joint_action': 'rating-joint_action', 'communication': 'rating-communication_500ms',
                                     'valence': 'rating-valence', 'arousal': 'rating-arousal'}
 
     def load_and_validate(self):

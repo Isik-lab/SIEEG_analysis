@@ -35,14 +35,19 @@ class eegReliability:
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
                 r = compute_score(even, odd).cpu().detach().numpy()
+
+                # Ensure `r` is a scalar (flatten if needed)
+                if isinstance(r, np.ndarray):
+                    r = r.item()  # Convert single-element array to scalar
+                elif hasattr(r, "__len__") and len(r) > 1:
+                    r = r[0]  # Take the first element if multi-dimensional
+            
                 var =  bootstrap_gpu(even, odd).cpu().detach().numpy()
                 null = perm_gpu(even, odd).cpu().detach().numpy()
                 time_dict = {'time': time, 'ichannel': ichannel, 'channel': channel, 'r': r}
                 time_dict.update({f'var_perm_{i}': val for i, val in enumerate(var)})
                 time_dict.update({f'null_perm_{i}': val for i, val in enumerate(null)})
                 results.append(time_dict)
-                print(results[-1])
-            break
         return pd.DataFrame(results)
 
     def save(self, df):

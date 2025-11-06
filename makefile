@@ -24,8 +24,26 @@ reliability_plotting=$(project_folder)/data/interim/PlotReliability
 
 
 # Steps to run
-all: motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back plot_reliability 
+all: reorg_fmri motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back plot_reliability 
 
+
+# Get the activations from AlexNet for the 500 ms videos
+reorg_fmri: $(fmri_data)/.done $(videos)
+$(fmri_data)/.done: 
+	mkdir -p $(fmri_data)
+	printf "#!/bin/bash\n\
+#SBATCH --partition=shared\n\
+#SBATCH --job-name=reorg_fmri\n\
+#SBATCH --account=lisik33\n\
+#SBATCH --ntasks=1\n\
+#SBATCH --time 1:00:00\n\
+#SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
+ml anaconda\n\
+conda activate eeg\n\
+python $(project_folder)/scripts/reorganize_fmri.py\n\
+python $(project_folder)/scripts/reorganize_fmri.py --fwhm 12" | sbatch
+	touch $(fmri_data)/.done
 
 # Get the motion energy for the 3 s videos
 motion_energy: $(motion_energy)/.done $(videos)
@@ -33,11 +51,12 @@ $(motion_energy)/.done:
 	mkdir -p $(motion_energy)
 	printf "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
+#SBATCH --job-name=motion_energy\n\
 #SBATCH --account=lisik33\n\
-#SBATCH --job-name=moten\n\
 #SBATCH --ntasks=1\n\
 #SBATCH --time 5:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/motion_energy_activations.py " | sbatch
@@ -50,11 +69,12 @@ $(alexnet)/.done:
 	mkdir -p $(alexnet)
 	printf "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
+#SBATCH --job-name=alexnet\n\
 #SBATCH --account=lisik33\n\
-#SBATCH --job-name=moten\n\
 #SBATCH --ntasks=1\n\
 #SBATCH --time 1:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/alexnet_activations.py " | sbatch
@@ -68,10 +88,11 @@ $(eeg_preprocess)/.preprocess_done:
 	for s in $(eeg_subs); do \
 		echo -e "#!/bin/bash\n\
 #SBATCH --partition=shared\n\
-#SBATCH --account=lisik33\n\
 #SBATCH --job-name=eeg_preprocess\n\
+#SBATCH --account=lisik33\n\
 #SBATCH --time=2:00:00\n\
 #SBATCH --cpus-per-task=18\n\
+#SBATCH --output=logs/%x_%A.out\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
@@ -92,6 +113,7 @@ $(eeg_reliability)/.done:
 #SBATCH --time=48:00:00\n\
 #SBATCH --cpus-per-task=48\n\
 #SBATCH --exclusive=user\n\
+#SBATCH --output=logs/%x_%A.out\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
@@ -114,6 +136,7 @@ $(back_to_back)/.done:
 #SBATCH --time=2:45:00\n\
 #SBATCH --cpus-per-task=16\n\
 #SBATCH --exclusive=user\n\
+#SBATCH --output=logs/%x_%A.out\n\
 set -e\n\
 ml anaconda\n\
 conda activate eeg\n\
@@ -135,6 +158,7 @@ $(feature_regression)/.feature_decoding:
 #SBATCH --job-name=feature_decoding\n\
 #SBATCH --time=2:45:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
@@ -153,6 +177,7 @@ $(fmri_regression)/.done:
 #SBATCH --job-name=roi_decoding\n\
 #SBATCH --time=2:45:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" | sbatch; \
@@ -172,6 +197,7 @@ $(fmri_regression)/.full_brain:
 #SBATCH --time=45:00\n\
 #SBATCH --cpus-per-task=12\n\
 #SBATCH --gres=gpu:1\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" | sbatch; \
@@ -190,6 +216,7 @@ $(whole_brain)/.full_brain:
 #SBATCH --time=15:00\n\
 #SBATCH --cpus-per-task=12\n\
 #SBATCH --gres=gpu:1\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/fmri_whole_brain.py" | sbatch
@@ -207,6 +234,7 @@ $(reliability_plotting)/.plotted:
 #SBATCH --ntasks=1\n\
 #SBATCH --time 1:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_reliability.py --overwrite" | sbatch
@@ -224,9 +252,11 @@ $(roi_plotting)/.plotted:
 #SBATCH --ntasks=1\n\
 #SBATCH --time 1:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
+python $(project_folder)/scripts/plot_roi_decoding.py --overwrite\n\
+python $(project_folder)/scripts/plot_roi_decoding.py --simplified_plotting" | sbatch
 	touch $(roi_plotting)/.plotted
 
 
@@ -241,9 +271,11 @@ $(feature_plotting)/.plotted:
 #SBATCH --ntasks=1\n\
 #SBATCH --time 1:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
-python $(project_folder)/scripts/plot_roi_decoding.py --overwrite" | sbatch
+python $(project_folder)/scripts/plot_feature_decoding.py --overwrite\n\
+python $(project_folder)/scripts/plot_feature_decoding.py --simplified_plotting" | sbatch
 	touch $(feature_plotting)/.plotted
 
 
@@ -258,6 +290,7 @@ $(back2back_plotting)/.plotted:
 #SBATCH --ntasks=1\n\
 #SBATCH --time 3:00:00\n\
 #SBATCH --cpus-per-task=12\n\
+#SBATCH --output=logs/%x_%A.out\n\
 ml anaconda\n\
 conda activate eeg\n\
 python $(project_folder)/scripts/plot_back2back.py --overwrite" | sbatch

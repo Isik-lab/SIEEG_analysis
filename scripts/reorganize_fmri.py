@@ -93,7 +93,7 @@ class ReorganizefMRI:
         return metadata, response_data
     
     def load_stimulus_data(self):
-        stim_data = pd.read_csv(f'{self.data_dir}/raw/CaptionData/stimulus_data.csv')
+        stim_data = pd.read_csv(f'{self.data_dir}/raw/CaptionData/stimulus_data_w_500ms_ratings.csv')
 
         # get the sorting indices to combine the train and test fMRI data
         temp = stim_data[['video_name', 'stimulus_set']]
