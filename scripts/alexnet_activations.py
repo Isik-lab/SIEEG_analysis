@@ -152,11 +152,11 @@ def main():
     parser.add_argument('--layer', '-l', type=int, default=2)
     parser.add_argument('--average_all_frames', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--stim_data', type=str, help='path to the stimulus data',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI/stimulus_data.csv')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/ReorganizefMRI/stimulus_data.csv')
     parser.add_argument('--vid_dir', '-v', type=str, help='video directory',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/raw/videos_3000ms')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/raw/videos_3000ms')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/AlexNetActivations')
     args = parser.parse_args()
     AlexNetActivations(args).run()
 

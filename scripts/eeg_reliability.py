@@ -2,8 +2,8 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import loading
-from src.stats import bootstrap_gpu, perm_gpu, compute_score
+from eeg import loading
+from eeg.stats import bootstrap_gpu, perm_gpu, compute_score
 from tqdm import tqdm
 import numpy as np
 

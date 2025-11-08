@@ -2,7 +2,7 @@ import inspect
 from tqdm import tqdm 
 import numpy as np
 import pandas as pd
-from src import stats
+from eeg import stats
 import gc
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline

@@ -2,7 +2,7 @@
 from pathlib import Path
 import argparse
 import pandas as pd
-from src import loading
+from eeg import loading
 import matplotlib.pyplot as plt
 import seaborn as sns
 

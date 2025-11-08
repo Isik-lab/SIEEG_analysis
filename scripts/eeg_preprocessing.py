@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from glob import glob
-from src import temporal
+from eeg import temporal
 from scipy.io import loadmat
 from tqdm import tqdm
 import numpy as np
@@ -147,7 +147,7 @@ def main():
     parser.add_argument('--resample_rate', type=float, default=2.5)
     parser.add_argument('--n_samples_to_smooth', type=int, default=5)
     parser.add_argument('--data_dir', '-d', type=str,
-                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
+                         default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data')
     args = parser.parse_args()
     eegPreprocessing(args).run()
 

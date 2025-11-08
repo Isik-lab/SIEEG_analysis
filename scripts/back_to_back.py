@@ -1,12 +1,12 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from src import loading, regression, tools, stats
+from eeg import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from src.stats import compute_score, perm_gpu, bootstrap_gpu
-from src.regression import ridge, feature_scaler, ols
+from eeg.stats import compute_score, perm_gpu, bootstrap_gpu
+from eeg.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import KFold
@@ -186,15 +186,15 @@ class Back2Back:
 def main():
     parser = argparse.ArgumentParser(description='Decoding behavior or fMRI from EEG responses')
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/Back2Back')
     parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
     parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
     parser.add_argument('--feature', '-x', type=str, default='["alexnet"]',
