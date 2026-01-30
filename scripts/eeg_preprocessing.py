@@ -4,11 +4,14 @@ from pathlib import Path
 import argparse
 import pandas as pd
 from glob import glob
-from eeg import temporal
 from scipy.io import loadmat
 from tqdm import tqdm
 import numpy as np
 
+import sys
+sys.path.append(Path(__file__).parent.parent)
+from eeg import temporal
+ 
 
 def track_stimulus_repititions(stimulus_name, stimulus_dict):
     """
@@ -122,21 +125,24 @@ class eegPreprocessing:
         trials.loc[trials.video_name.isin(test_videos), 'stimulus_set'] = 'test'
         return trials[['trial', 'video_name', 'condition', 'stimulus_set', 'response']]
 
-    def save(self, df, name):
+    def save(self, df):
         print('saving...')
-        df.to_parquet(f'{self.out_dir}/{name}', index=False)
+        out_name = os.path.join(self.out_dir, 'all_trials', f'{self.sid}.parquet')
+        df.to_parquet(out_name, index=False)
         print('Finished!')
-
+    
     def save_time_df(self, df):
         for time_ind, time_df in df.groupby('time_ind'):
-            time_df.to_parquet(f'{self.out_dir}/{self.sid}_time-{str(int(time_ind)).zfill(3)}.parquet')
+            out_name = os.path.join(self.out_dir, f'{self.sid}_time-{str(int(time_ind)).zfill(3)}.parquet')
+            time_df.to_parquet(out_name, index=False)
 
     def run(self):
         trials = self.load_trials()
         eeg_dict = self.load_eeg(trials)
         eeg_df = self.reorganize_and_resample(eeg_dict, trials)
         print(eeg_df.head())
-        self.save(eeg_df, f'all_trials/{self.sid}.parquet')
+
+        self.save(eeg_df)
         eeg_averaged = self.average_repetitions(eeg_df)
         self.save_time_df(eeg_averaged)
 

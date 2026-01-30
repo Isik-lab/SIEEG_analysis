@@ -8,6 +8,8 @@ from statsmodels.stats.multitest import multipletests
 from scipy import ndimage
 import torch
 from torchmetrics.functional import pearson_corrcoef, r2_score, explained_variance
+from scipy.stats import wilcoxon, t
+from mne.stats import permutation_cluster_1samp_test
 
 
 SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef, 
@@ -49,139 +51,165 @@ def calculate_p(r_null, r_true, n_perm, H0):
     return p_
 
 
-def perm_gpu(y_true, y_pred, score_type='pearsonr',
-             n_perm=int(5e3), verbose=False, adjusted=0):
-    import torch
-
-    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
-    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
-
-    g = torch.Generator()
-    dim = y_pred.size()
-
-    if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Permutation testing')
-    else:
-        iterator = range(n_perm)
-
-    r_null = torch.zeros((n_perm, dim[-1]))if len(dim) > 1 else torch.zeros(n_perm)
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Permute the indices
-        inds = torch.randperm(dim[0], generator=g)
+def compare_latencies_paired(latencies_dict, cat_pairs=None):
+    """
+    Compare latencies between categories using paired nonparametric tests
+    latencies_dict: {category: [n_participants] or scalar latency estimates}
+    """
+    
+    if cat_pairs is None:
+        cat_pairs = [(i, j) for i in range(len(latencies_dict)) 
+                     for j in range(i+1, len(latencies_dict))]
+    
+    comparisons = {}
+    for cat_a, cat_b in cat_pairs:
+        lat_a = latencies_dict[cat_a]
+        lat_b = latencies_dict[cat_b]
         
-        # Compute the correlation
-        null = compute_score(y_true, y_pred[inds], score_type=score_type, adjusted=adjusted)
-
-        # Store the value
-        if len(dim) > 1:
-            r_null[i, :] = null
+        # If single value, can't do paired test - use point estimates
+        if np.isscalar(lat_a) or lat_a.size == 1:
+            diff = lat_a - lat_b
+            comparisons[(cat_a, cat_b)] = {
+                'diff_ms': diff,
+                'test': 'point_estimate'
+            }
         else:
-            r_null[i] = null
-    return r_null
+            # Paired Wilcoxon if per-participant latencies available
+            W, p_val = wilcoxon(lat_a, lat_b)
+            comparisons[(cat_a, cat_b)] = {
+                'W_statistic': W,
+                'p_value': p_val,
+                'median_diff': np.median(lat_a - lat_b),
+                'test': 'wilcoxon'
+            }
+    
+    return comparisons
 
 
-def bootstrap_gpu(y_true, y_pred, score_type='pearsonr',
-                  n_perm=int(5e3), verbose=False, adjusted=0):
-    import torch
-
-    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
-    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
-
-    g = torch.Generator()
-    dim = y_pred.size()
-
+def bootstrap_latency_ci(corr_data, times, 
+                         n_bootstrap=1000,
+                         n_permutations=100,
+                         alpha=0.05, tail=1,
+                         df_adjustment=2, seed=None, 
+                         verbose=False):  # Reduced for speed
+    """
+    For each bootstrap resample:
+    1. Compute correlations
+    2. Run full cluster permutation test
+    3. Extract onset latency from significant cluster
+    
+    This is computationally expensive but most rigorous.
+    """
+    latencies_boot = []
+    n_subs = corr_data.shape[1]
+    t_crit = t.ppf(1 - alpha, n_subs - df_adjustment) # Critical t-value for your specific df
+    
     if verbose:
-        iterator = tqdm(range(n_perm), total=n_perm, desc='Bootstapping')
+        boot_range = tqdm(range(n_bootstrap), desc='Bootstrapping latencies')
     else:
-        iterator = range(n_perm)
-
-    r_var = torch.zeros((n_perm, dim[-1]))if len(dim) > 1 else torch.zeros(n_perm)
-    for i in iterator:
-        g.manual_seed(i) # Set the random seed
-
-        # Generate a random sample of indices
-        inds = torch.squeeze(torch.randint(high=dim[0], size=(dim[0],1), generator=g))
-
-        # Compute the correlation
-        var = compute_score(y_true[inds], y_pred[inds], score_type=score_type, adjusted=adjusted)
+        boot_range = range(n_bootstrap)
+    for boot in boot_range:
+        boot_idx = np.random.choice(n_subs, size=n_subs, replace=True)
+        boot_corrs = corr_data[:, boot_idx]
         
-        # Store the value
-        if len(dim) > 1:
-            r_var[i, :] = var
-        else:
-            r_var[i] = var
-    return r_var
-
-
-def compute_null_clusters(nulls, alpha=0.05, desc=None, verbose=False):
-    """
-        inputs:
-            nulls: 2d numpy array, the first dim is the time points and second is the number of permutations
-            alpha: is the pvalue threshold, assumed 0.05
-        outputs: 
-            cluster_null: random cluster values
-    """
-    if desc is None:
-        'Cluster permutation'
-
-    n_perm = nulls.shape[-1]
-    if verbose is True:
-        iterator = tqdm(range(n_perm), total=n_perm, desc=desc)
+        # Cluster test
+        try:
+            _, clusters, p_values, _ = permutation_cluster_1samp_test(
+                boot_corrs.T,
+                n_permutations=n_permutations, 
+                threshold=t_crit, 
+                tail=tail,
+                seed=seed,
+                verbose='ERROR')
+            
+            # Extract first significant cluster
+            sig_idx = np.where(p_values < alpha)[0]
+            if len(sig_idx) > 0:
+                first_cluster = clusters[sig_idx[0]]
+                onset_idx = first_cluster[0][0]
+                latencies_boot.append(float(times[onset_idx]))
+        except:
+            pass  # Skip if no clusters found
+    
+    if len(latencies_boot) > 0:
+        latencies_boot = np.asarray(latencies_boot, dtype=float)
+        return np.quantile(latencies_boot, [alpha/2, 1 - (alpha/2)])
     else:
-        iterator = range(n_perm)
+        return np.nan, np.nan
+    
 
-    cluster_null = []
-    for i_perm in iterator:
-        # Get the current random time series
-        true = nulls[:, i_perm:i_perm + 1]
-
-        # Get the null distribution
-        indices_except_one = np.delete(np.arange(n_perm), i_perm)
-        null = nulls[:, indices_except_one]
-
-        # Calculate p and identify the clusters
-        p = calculate_p(null.T, true.T, n_perm-1, 'greater')
-        label, n = ndimage.label(p < alpha) # Label the clusters where p is less than alpha
-
-        # If any clusters exist, find the largest one
-        if n > 0: 
-            cluster_sum = 0
-            for i_cluster in range(n):
-                cur_val = np.sum(true[label == i_cluster+1])
-                if cur_val > cluster_sum:
-                    cluster_sum = cur_val
-            cluster_null.append(cluster_sum)
-
-    return np.array(cluster_null)
-
-
-def cluster_correction(rs, ps, r_nulls, alpha=0.05, desc=None, verbose=False):
+def get_onset_latency(corr_data, times, 
+                      n_permutations=1000, 
+                      alpha=0.05, tail=1,
+                      df_adjustment=2, seed=None):
     """
-        inputs:
-            rs: np.array of the r values at each time point
-            ps: np.array of the p values at each time point 
-            nulls: 2d numpy array, the first dim is the time points and second is the number of permutations
-            alpha: is the pvalue threshold, assumed 0.05
-            desc: a string passed to tqdm for progress update, default is 'Cluster permutation'
-        outputs: 
-            cluster_ps: a vector of corrected p values. Unsignificant p values are unchanged
+    corr_data: [n_time, n_participants]
+    Performs permutation cluster test against H0 (r=0)
+    Returns: onset_latency, p_value, significant_timepoints
     """
-    cluster_nulls = compute_null_clusters(r_nulls, desc=desc, verbose=verbose)
-    cluster_ps = ps.copy()
+    
+    # Remove participants with NaN (if any)
+    valid_data = corr_data[:, ~np.isnan(corr_data).any(axis=0)]
+    
+    # Convert correlations to t-statistics for cluster test
+    n_subs = valid_data.shape[1]
+    t_crit = t.ppf(1 - alpha, n_subs - df_adjustment) # Critical t-value for your specific df
 
-    # Label the clusters
-    label, n = ndimage.label(ps < alpha)
+    # Cluster permutation test against H0 (t=0)
+    T_obs, clusters, p_values, H0 = permutation_cluster_1samp_test(
+        corr_data.T,  # transpose to [n_participants, n_time]
+        n_permutations=n_permutations,
+        threshold=t_crit,
+        tail=tail,  # one-tailed: test if r > 0
+        out_type='indices',  # returns indices, not boolean arrays
+        seed=seed,
+        verbose='ERROR'
+    )
+    
+    # Find first significant cluster
+    sig_clusters_idx = np.where(p_values < alpha)[0]
+    
+    if len(sig_clusters_idx) == 0:
+        return {'onset_latency_ms': np.nan,
+            'sig_clusters': [np.nan],
+            'cluster_pvals': [np.nan],
+            'sig_timepoints': np.zeros(corr_data.shape[0], dtype=bool)
+    }
 
-    # If there are clusters, sum the r values and find whether they are 
-    # greater than the randomly computed clusters
-    if n > 0:
-        for i_cluster in range(1, n + 1):
-            time_inds = label == i_cluster
-            cluster_val = np.sum(rs[time_inds])
-            sum_val = np.sum(cluster_val > cluster_nulls)
+    
+    # Get onset latency from first significant cluster
+    first_sig_cluster_idx = clusters[sig_clusters_idx[0]]
+    onset_timepoint_idx = first_sig_cluster_idx[0][0]
+    onset_latency_ms = times[onset_timepoint_idx]
 
-            # Edit p values to the cluster p values
-            cluster_ps[time_inds] = 1 - (sum_val / len(cluster_nulls))
-    return cluster_ps
+    # Get p-values and clusters for significant clusters
+    cluster_pvals = [p_values[sig_idx] for sig_idx in sig_clusters_idx]
+    sig_clusters = [clusters[sig_idx] for sig_idx in sig_clusters_idx]
+
+    # Create boolean array of significant timepoints
+    sig_timepoints = np.zeros(corr_data.shape[0], dtype=bool)
+    for cluster in sig_clusters:
+        sig_timepoints[cluster[0]] = True
+
+    return {'onset_latency_ms': onset_latency_ms,
+            'sig_clusters': sig_clusters,
+            'cluster_pvals': cluster_pvals,
+            'sig_timepoints': sig_timepoints
+    }
+
+def bootstrap_ci(arr, n_bootstrap=1000, 
+                 seed=None, verbose=False):
+    rng = np.random.default_rng(seed)
+    arr = np.asarray(arr)
+
+    n_subs = arr.shape[1]
+    out = np.zeros((n_bootstrap, arr.shape[0]))
+    if verbose:
+        boot_range = tqdm(range(n_bootstrap), desc='Bootstrapping')
+    else:
+        boot_range = range(n_bootstrap)
+    for i in boot_range:
+        idx = np.random.choice(n_subs, n_subs, replace=True)
+        arr_sample = arr[:, idx].mean(axis=1)
+        out[i] = arr_sample
+    return np.quantile(out, [0.025, 0.975], axis=0)

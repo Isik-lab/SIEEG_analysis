@@ -60,7 +60,7 @@ $(eeg_preprocess)/.preprocess_done:
 	mkdir -p $(eeg_preprocess)
 	for s in $(eeg_subs); do \
 		echo -e "Submitting eeg_preprocess job for $$s"; \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh eeg_preprocess 2:00:00 18 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/eeg_preprocessing.py -s $$s" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh eeg_preprocess 3:00:00 32 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/eeg_preprocessing.py -s $$s" ""; \
 	done
 	touch $(eeg_preprocess)/.preprocess_done
 
@@ -92,7 +92,7 @@ feature_decoding: $(feature_regression)/.feature_decoding $(eeg_preprocess)
 $(feature_regression)/.feature_decoding: 
 	mkdir -p $(feature_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_decoding 2:45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_decoding 30:00 16 ou_bcs_low "$(conda_python) $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
 	touch $(feature_regression)/.feature_decoding
 
@@ -102,7 +102,7 @@ roi_decoding: $(fmri_regression)/.done $(eeg_preprocess)
 $(fmri_regression)/.done: 
 	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 2:45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
 	touch $(fmri_regression)/.roi_decoding
 
@@ -161,9 +161,3 @@ clean:
 	rm *.out
 	rm *.sh
 	rm -f $(project_folder)/scripts/libijitshim.so
-
-
-# Build the iJIT shim (no-op implementations) so libtorch_cpu.so can resolve missing symbols.
-ijit-shim:
-	gcc -shared -fPIC -o $(project_folder)/scripts/libijitshim.so $(project_folder)/scripts/ijit_shim.c || true
-

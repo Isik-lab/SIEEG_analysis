@@ -21,6 +21,7 @@ class fMRIRegression:
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
         self.n_perm = args.n_perm
+        self.run_stats = args.run_stats
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
@@ -82,7 +83,7 @@ class fMRIRegression:
         results['roi_name'] = results.variable.replace({temp_col: roi_name for roi_name, temp_col in zip(fmri_meta.roi_name, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        if type(scores_null) != list: 
+        if scores_null is not None and scores_var is not None:
             scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
                                     columns=[f'null_perm_{i}' for i in range(self.n_perm)])
             scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
@@ -97,9 +98,11 @@ class fMRIRegression:
     
     def standard_regression(self, train, test):
         #Define y
-        y_train, y_true, group2 = dict_to_tensor(train, test, ['fmri'])
+        y_train, y_true, _ = dict_to_tensor(train, test, ['fmri'])
 
-        scores, scores_null, scores_var = {}, [], []
+        scores = {}
+        scores_null = [] if self.roi_mean and self.run_stats else None
+        scores_var = [] if self.roi_mean and self.run_stats else None
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict fMRI from EEG', leave=True)
         for time_ind in outer_iterator:
@@ -116,20 +119,23 @@ class fMRIRegression:
             scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring,
                                              adjusted=X_train.size()[1])
 
-            # Compute states 
-            if self.roi_mean: 
+            # Compute stats
+            if self.roi_mean and self.run_stats:
                 perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                                 adjusted=X_train.size()[1])
                 var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                                     adjusted=X_train.size()[1])
                 scores_null.append(torch.unsqueeze(perm, 2))
                 scores_var.append(torch.unsqueeze(var, 2))
-        if self.roi_mean: 
+        if self.roi_mean and self.run_stats:
             scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
             scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
             return scores, scores_null, scores_var
-        else:
-            return scores
+
+        if self.roi_mean:
+            return scores, None, None
+
+        return scores
 
     def save_df(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -181,6 +187,8 @@ def main():
                         help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
+    parser.add_argument('--run_stats', action=argparse.BooleanOptionalAction, default=False,
+                        help='whether to run permutation/bootstrap stats')
     args = parser.parse_args()
     fMRIRegression(args).run()
 

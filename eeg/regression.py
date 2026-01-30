@@ -2,7 +2,6 @@ import inspect
 from tqdm import tqdm 
 import numpy as np
 import pandas as pd
-from eeg import stats
 import gc
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
@@ -13,12 +12,150 @@ import torch
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
 from deepjuice.alignment import TorchRidgeGCV
-from src.pca import PCA
 from himalaya.ridge import GroupRidgeCV
 from himalaya.backend import set_backend
-from src.tools import to_torch
+from himalaya.scoring import r2_score_split, r2_score
 from kneed import KneeLocator
 from sklearn.decomposition import PCA as sklearn_PCA
+import torch
+import torch.nn as nn
+from typing import Optional, Union
+
+from pathlib import Path
+import sys
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from eeg import stats
+from eeg.pca import PCA
+from eeg.tools import to_torch
+
+
+
+class StandardScaler:
+    """
+    Standardize features by removing the mean and scaling to unit variance.
+    
+    Works like sklearn.preprocessing.StandardScaler but for PyTorch tensors.
+    Supports GPU tensors and maintains compatibility with PyTorch's device management.
+    """
+    
+    def __init__(self, epsilon: float = 1e-8):
+        """
+        Args:
+            epsilon: Small value to avoid division by zero
+        """
+        self.epsilon = epsilon
+        self.mean_: Optional[torch.Tensor] = None
+        self.std_: Optional[torch.Tensor] = None
+        self.is_fitted_ = False
+        self.device_ = None
+        self.dtype_ = None
+    
+    def fit(self, X: torch.Tensor) -> 'StandardScaler':
+        """
+        Compute the mean and std to be used for later scaling.
+        
+        Args:
+            X: Tensor of shape (n_samples, n_features) or (n_samples, ...)
+            
+        Returns:
+            self
+        """
+        if not isinstance(X, torch.Tensor):
+            raise TypeError(f"Expected torch.Tensor, got {type(X)}")
+        
+        # Store device and dtype for later use
+        self.device_ = X.device
+        self.dtype_ = X.dtype
+        
+        # Compute mean and std across the first dimension (samples)
+        self.mean_ = torch.mean(X, dim=0, keepdim=False)
+        self.std_ = torch.std(X, dim=0, keepdim=False, unbiased=True)
+        
+        # Ensure std has minimum value to avoid division by zero
+        self.std_ = torch.clamp(self.std_, min=self.epsilon)
+        
+        self.is_fitted_ = True
+        return self
+    
+    def transform(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Perform standardization by centering and scaling.
+        
+        Args:
+            X: Tensor to transform
+            
+        Returns:
+            Transformed tensor
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("Scaler must be fitted before transform. Call fit() first.")
+        
+        if not isinstance(X, torch.Tensor):
+            raise TypeError(f"Expected torch.Tensor, got {type(X)}")
+        
+        # Ensure tensors are on the same device and dtype
+        mean = self.mean_.to(X.device).to(X.dtype)
+        std = self.std_.to(X.device).to(X.dtype)
+        
+        return (X - mean) / std
+    
+    def fit_transform(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Fit to data, then transform it.
+        
+        Args:
+            X: Tensor to fit and transform
+            
+        Returns:
+            Transformed tensor
+        """
+        return self.fit(X).transform(X)
+    
+    def inverse_transform(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Scale back the data to the original representation.
+        
+        Args:
+            X: Transformed tensor
+            
+        Returns:
+            Original scale tensor
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("Scaler must be fitted before inverse_transform.")
+        
+        if not isinstance(X, torch.Tensor):
+            raise TypeError(f"Expected torch.Tensor, got {type(X)}")
+        
+        mean = self.mean_.to(X.device).to(X.dtype)
+        std = self.std_.to(X.device).to(X.dtype)
+        
+        return X * std + mean
+    
+    def get_params(self) -> dict:
+        """Get scaler parameters (mean and std)."""
+        if not self.is_fitted_:
+            raise RuntimeError("Scaler must be fitted first.")
+        
+        return {
+            'mean': self.mean_.clone().cpu(),
+            'std': self.std_.clone().cpu(),
+        }
+    
+    def set_params(self, mean: torch.Tensor, std: torch.Tensor) -> 'StandardScaler':
+        """Set scaler parameters manually."""
+        self.mean_ = mean.clone()
+        self.std_ = std.clone()
+        self.device_ = mean.device
+        self.dtype_ = mean.dtype
+        self.is_fitted_ = True
+        return self
+    
+    def __repr__(self) -> str:
+        if self.is_fitted_:
+            return (f"StandardScaler(mean={self.mean_.shape}, "
+                   f"std={self.std_.shape}, fitted=True)")
+        return "StandardScaler(fitted=False)"
 
 
 def T_torch(tensor):
@@ -97,36 +234,14 @@ def feature_scaler(train, test=None, dim=0, device='cpu'):
         train_scored (torch.Tensor): 1 or 2D tensor of samples x features normalized by train mean and std
         test_scored (torch.Tensor): 1 or 2D tensor of samples x features normalized by train mean and std
     """
-    if type(train) == np.ndarray:
-        # If the input is a numpy array, first convert to torch tensor
-        [train] = to_torch([train], device=device)
 
-    if (test is not None) and (type(test) == np.ndarray):
-        [test] = to_torch([test], device=device)
-
-    # First make sure that there are no features that are the same for all videos.
-    # If there are, remove those features from the train and test data. 
-    if train.ndim > 1: 
-        idx = torch.squeeze(torch.std(train, dim=dim).nonzero())
-        train_ = train[:, idx].to(torch.float64)
-        if test is not None: 
-            test_ = test[:, idx].to(torch.float64)
-
-        # Calculate the mean and std of the modified train data
-        train_mean = torch.mean(train_, dim=dim, keepdim=True)
-        train_std = torch.std(train_, dim=dim, keepdim=True)
+    scaler = StandardScaler()
+    train_scaled = scaler.fit_transform(train)
+    if test is not None:
+        test_scaled = scaler.transform(test)
+        return train_scaled, test_scaled
     else:
-        train_ = torch.clone(train).to(torch.float64)
-        if test is not None:
-            test_ = torch.clone(test).to(torch.float64)
-        train_mean = torch.mean(train)
-        train_std = torch.std(train)
-
-    train_normed = (train_-train_mean)/train_std
-    if test is not None: 
-        return train_normed, (test_-train_mean)/train_std
-    else:
-        return train_normed
+        return train_scaled
 
 
 def preprocess(X_train, X_test, y_train, y_test):
@@ -220,7 +335,8 @@ def regression_model(method_name, X_train, y_train, X_test, **kwargs):
     return regression_function(X_train, y_train, X_test, **filtered_kwargs)
 
 
-def banded_ridge(X_train, y_train, X_test, groups,
+def banded_ridge(X_train, y_train, X_test, y_test,
+                 groups,
                  alpha_start=-2, alpha_stop=5,
                  device='cuda', rotate_x=True,
                  return_alpha=False, return_betas=False):
@@ -231,6 +347,7 @@ def banded_ridge(X_train, y_train, X_test, groups,
         X_train (torch.Tensor): training X data
         y_train (torch.Tensor): training y data
         X_test (torch.Tensor): testing X data
+        y_test (torch.Tensor): testing y data
         alpha_start (int, optional): smallest power for alpha. Defaults to -2.
         alpha_stop (int, optional): largest power for alpha. Defaults to 5.
         device (str, optional): device location of tensors. Defaults to 'cuda'.
@@ -246,23 +363,33 @@ def banded_ridge(X_train, y_train, X_test, groups,
     else:
         backend = set_backend("torch_cuda")
 
+    # Standardize X data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Standardize y data
+    y_train_scaled = scaler.fit_transform(y_train)
+    y_test_scaled = scaler.transform(y_test)
+
     alphas = np.logspace(alpha_start, alpha_stop, num=(alpha_stop-alpha_start)+1)
 
     if rotate_x:
-        X_train, X_test, groups = pca_rotation(X_train, X_test, groups)
-        print(f'X Size after rotation = {X_train.size()}')
+        X_train_scaled, X_test_scaled, groups = pca_rotation(X_train_scaled, X_test_scaled, groups)
+        print(f'X Size after rotation = {X_train_scaled.size()}')
 
-    pipe = GroupRidgeCV(groups=groups,
-                        solver_params={'alphas': alphas},
-                        fit_intercept=False)
-    pipe.fit(X_train, y_train)
-    out = {'yhat': pipe.predict(X_test)}
-
-    if return_alpha:
-        out['alpha'] = pipe.best_alphas_
-    if return_betas:
-        out['betas'] = pipe.coef_
-    return out
+    model = GroupRidgeCV(
+        groups=groups,
+        solver_params={'alphas': alphas},
+        fit_intercept=False
+    )
+    
+    model.fit(X_train_scaled, y_train_scaled)
+    y_pred = model.predict(X_test_scaled, split=False)
+    r2 = r2_score(y_test_scaled, y_pred)
+    y_pred_split = model.predict(X_test_scaled, split=True)
+    r2_split = r2_score_split(y_test_scaled, y_pred_split, include_correlation=True)
+    return {'r2': r2, 'r2_split': r2_split, 'yhat': y_pred}
 
 
 def ridge(X, y,

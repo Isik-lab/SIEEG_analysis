@@ -2,16 +2,26 @@ import torch
 import numpy as np
 
 
-def dict_to_tensor(train_dict, test_dict, keys):
+def dict_to_tensor(train_dict, test_dict, keys, device='cpu'):
     def list_to_tensor(l):
-        return torch.hstack(tuple(l))
+        tensors = []
+        for item in l:
+            if torch.is_tensor(item):
+                tensors.append(item)
+            else:
+                tensors.append(torch.from_numpy(item))
+        return torch.hstack(tuple(tensors))
 
     train_out, test_out, groups = [], [], []
     for i_group, key in enumerate(keys):
         if train_dict[key].ndim > 1: 
             train_out.append(train_dict[key])
             test_out.append(test_dict[key])
-            group_vec = torch.ones(test_dict[key].size()[1])*i_group
+            if torch.is_tensor(test_dict[key]):
+                n_cols = test_dict[key].size(1)
+            else:
+                n_cols = test_dict[key].shape[1]
+            group_vec = torch.ones(n_cols) * i_group
         else: 
             train_out.append(torch.unsqueeze(train_dict[key], 1))
             test_out.append(torch.unsqueeze(test_dict[key], 1))
@@ -20,12 +30,11 @@ def dict_to_tensor(train_dict, test_dict, keys):
     return list_to_tensor(train_out), list_to_tensor(test_out), list_to_tensor(groups)
 
 
-def to_torch(arrays, device):
+def to_torch(arrays, device, dtype=torch.DoubleTensor):
     if isinstance(arrays, list):
-        return [to_torch(array, device) for array in arrays]
+        return [to_torch(array, device, dtype=dtype) for array in arrays]
     else:
-        return torch.from_numpy(arrays).type(torch.DoubleTensor).to(device)
-
+        return torch.from_numpy(arrays).type(dtype).to(device)
 
 def to_numpy(tensors):
     if isinstance(tensors, list):

@@ -1,15 +1,18 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from eeg import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from eeg.stats import perm_gpu, bootstrap_gpu
-from eeg.regression import ridge, feature_scaler, ols
+
 import json
 from tqdm import tqdm
-from eeg.stats import compute_score
+
+import sys
+
+from eeg.stats import perm_gpu, bootstrap_gpu, compute_score
+from eeg.regression import ridge, feature_scaler, ols
+from eeg import loading, regression
 from eeg.tools import dict_to_tensor
 
 
@@ -20,10 +23,11 @@ class FeatureRegression:
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
         self.n_perm = args.n_perm
+        self.run_stats = args.run_stats
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_features.parquet'
+        self.out_name = f"{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_features.parquet"
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -76,23 +80,26 @@ class FeatureRegression:
         results['feature'] = results.variable.replace({temp_col: feature for feature, temp_col in zip(cols, temp_cols)})
         results = results.rename(columns={'index': 'time'}).drop(columns='variable')
 
-        scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'null_perm_{i}' for i in range(self.n_perm)])
-        scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
-                                columns=[f'var_perm_{i}' for i in range(self.n_perm)])
-        scores_null_df[['feature', 'time']] = results[['feature', 'time']]
-        scores_var_df[['feature', 'time']] = results[['feature', 'time']]
-        scores_null_df.set_index(['feature', 'time'], inplace=True)
-        scores_var_df.set_index(['feature', 'time'], inplace=True)
+        if scores_null is not None and scores_var is not None:
+            scores_null_df = pd.DataFrame(scores_null.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'null_perm_{i}' for i in range(self.n_perm)])
+            scores_var_df = pd.DataFrame(scores_var.reshape(self.n_perm, -1).transpose(),
+                                    columns=[f'var_perm_{i}' for i in range(self.n_perm)])
+            scores_null_df[['feature', 'time']] = results[['feature', 'time']]
+            scores_var_df[['feature', 'time']] = results[['feature', 'time']]
+            scores_null_df.set_index(['feature', 'time'], inplace=True)
+            scores_var_df.set_index(['feature', 'time'], inplace=True)
 
-        results = results.set_index(['feature', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
+            results = results.set_index(['feature', 'time']).join(scores_null_df).join(scores_var_df).reset_index()
         return results
     
     def standard_regression(self, train, test):
         #Define y
         y_train, y_true, group2 = dict_to_tensor(train, test, list(self.behavior_categories.keys()))
 
-        scores, scores_null, scores_var = {}, [], []
+        scores = {}
+        scores_null = [] if self.run_stats else None
+        scores_var = [] if self.run_stats else None
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict features from EEG', leave=True)
         for time_ind in outer_iterator:
@@ -106,18 +113,23 @@ class FeatureRegression:
                          rotate_x=True)['yhat']
 
             # Evaluate against y
-            scores[time_ind] = compute_score(y_true, y_pred, score_type=self.scoring,
-                                             adjusted=X_train.size()[1])
+            score = compute_score(y_true, y_pred, score_type=self.scoring,
+                                  adjusted=X_train.size()[1])
+            if isinstance(score, torch.Tensor):
+                score = score.detach().cpu().numpy()
+            scores[time_ind] = score
 
-            # Compute states 
-            perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
-                            adjusted=X_train.size()[1])
-            var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
+            if self.run_stats:
+                # Compute stats 
+                perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                                 adjusted=X_train.size()[1])
-            scores_null.append(torch.unsqueeze(perm, 2))
-            scores_var.append(torch.unsqueeze(var, 2))
-        scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
-        scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
+                var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
+                                    adjusted=X_train.size()[1])
+                scores_null.append(torch.unsqueeze(perm, 2))
+                scores_var.append(torch.unsqueeze(var, 2))
+        if self.run_stats:
+            scores_null = torch.cat(scores_null, 2).cpu().detach().numpy()
+            scores_var = torch.cat(scores_var, 2).cpu().detach().numpy()
         return scores, scores_null, scores_var
 
     def save_df(self, results):
@@ -131,7 +143,8 @@ class FeatureRegression:
         print(behavior.head())
         train, test = self.split_and_norm(behavior, other_data)
         scores, scores_null, scores_var = self.standard_regression(train, test)
-        print(f'{scores_null.shape=}')
+        if self.run_stats:
+            print(f'{scores_null.shape=}')
         results = self.reorganize_results(scores, time_map, scores_null, scores_var)
         print(results.head())
         self.mk_out_dir()
@@ -155,6 +168,8 @@ def main():
                         help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
+    parser.add_argument('--run_stats', action='store_true',
+                        help='run permutation and bootstrap statistics (default: off)')
     args = parser.parse_args()
     FeatureRegression(args).run()
 

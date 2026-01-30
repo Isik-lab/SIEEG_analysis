@@ -5,90 +5,82 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm 
-from src.stats import calculate_p, cluster_correction
 from scipy import ndimage
 from pathlib import Path
-import os
 from matplotlib.lines import Line2D
 import shutil
-from src.temporal import bin_time_windows_cut
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from eeg.stats import calculate_p, cluster_correction
+from eeg.temporal import bin_time_windows_cut
 
 
-def load_latency(files):
-    #Load data
+
+
+
+def sign_permute(arr, n=1000, axis=1, seed=None):
+    rng = np.random.default_rng(seed)
+    arr = np.asarray(arr)
+
+    if axis != 1:
+        raise ValueError("sign_permute currently supports axis=1 for (time, feature) arrays")
+
+    signs = rng.choice([-1, 1], size=(arr.shape[0], n, 1))
+    return arr[:, None, :] * signs  # (time, n, feature)
+
+
+def load_files(files):
     df = []
-    for file in tqdm(files, desc='loading files'):
+    for file in tqdm(files, desc='Loading files'):
         subj_df = pd.read_parquet(file)
         subj_df['eeg_subj_id'] = file.split('/')[-1].split('_')[0]
         df.append(subj_df)
     df = pd.concat(df, ignore_index=True)
     print('Finished loading files')
-
-    # Add categories for different time windows
-    df['time_window'] = bin_time_windows_cut(df, window_size=50, end_time=500)
-    # Remove time windows before stimulus and after 300 ms
-    df = df.loc[(df.time_window >= 0) & (df.time_window < 350)].reset_index()
-    df['time_window'] = df.time_window.astype('int32')
-
-    #Average across EEG subjects
-    mean_df = df.groupby(['time_window', 'feature']).mean(numeric_only=True).reset_index()
-    mean_df = mean_df.dropna().drop(columns=['time']).rename(columns={'value': 'score'})
-    mean_df.reset_index(drop=True, inplace=True)
-    print('Finished mean over EEG subjects')
-
-    ### Group stats###
-    # Variance
-    var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
-    scores_var = mean_df[var_cols].to_numpy()
-    mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
-    mean_df.drop(columns=var_cols, inplace=True)
-
-    # P-values
-    null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
-    stats_df = []
-    for _, feature_df in mean_df.groupby('feature'):
-        scores_null = feature_df[null_cols].to_numpy().T
-        scores = feature_df['score'].to_numpy().T
-        feature_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
-        feature_df.drop(columns=null_cols, inplace=True)
-        stats_df.append(feature_df)
-    stats_df = pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
-    return stats_df.rename(columns={'value': 'score'})
+    return df
 
 
-def load_timecourse(files):
-    #Load data
-    df = []
-    for file in tqdm(files, desc='loading files'):
-        subj_df = pd.read_parquet(file)
-        subj_df['eeg_subj_id'] = file.split('/')[-1].split('_')[0]
-        df.append(subj_df)
-    df = pd.concat(df, ignore_index=True)
-    print('Finished loading files')
+def load_summary(files, n_samples=5000):
+    df = load_files(files)
+    tensor = []
+    features = []
+    for feature, fdf in df.groupby('feature'):
+        fdf = fdf.pivot(index='time', columns='eeg_subj_id', values='value').sort_index()
+        mat = fdf.to_numpy()
+        tensor.append(np.expand_dims(mat, axis=2))
+        features.append(feature)
+    tensor = np.concatenate(tensor, axis=2)
+    avg = tensor.mean(axis=1)
+    var = bootstrap(tensor, axis=1, n=n_samples)
+    print(f'{var.shape=}')
+    low_ci, high_ci = np.quantile(var, [0.025, 0.975], axis=1)
+    del var
 
-    #Average across EEG subjects
-    mean_df = df.groupby(['time', 'feature']).mean(numeric_only=True).reset_index()
-    print('Finished mean over EEG subjects')
-    # Group stats
-    # Variance
-    var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
-    scores_var = mean_df[var_cols].to_numpy()
-    mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
-    mean_df.drop(columns=var_cols, inplace=True)
-    # P-values
-    null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
-    stats_df = []
-    for feature, feature_df in mean_df.groupby('feature'):
-        scores_null = feature_df[null_cols].to_numpy().T
-        scores = feature_df['value'].to_numpy().T
-        ps = calculate_p(scores_null, scores, 5000, 'greater')
-        feature_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T,
-                                            verbose=True,
-                                            desc=f'{feature} cluster correction')
-        feature_df.drop(columns=null_cols, inplace=True)
-        stats_df.append(feature_df)
-    stats_df = pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
-    return stats_df.rename(columns={'value': 'score'})
+    null = sign_permute(avg, n=n_samples)
+    p = 1 - (((null > 0).sum(axis=1) + 1) / (null.shape[1]))
+
+    summary_df = []
+    for i, feature in tqdm(enumerate(features), 
+                           desc='Cluster correction per feature'):
+        cluster_corrected_p = cluster_correction(avg[:, i],
+                                                 p[:, i],
+                                                 null[:, :, i],
+                                                 verbose=True,
+                                                 desc=f'correcting {feature}')
+        summary_df.append(pd.DataFrame({
+            'time': df['time'].unique(),
+            'feature': feature,
+            'score': avg[:, i],
+            'low_ci': low_ci[:, i],
+            'high_ci': high_ci[:, i],
+            'p': p[:, i],
+            'corrected_p': cluster_corrected_p
+        }))
+    summary_df = pd.concat(summary_df, ignore_index=True)
+    del null
+    return summary_df
 
 
 def plot_simple_timecourse(ax, stats_df, colors, title_names):
@@ -220,7 +212,7 @@ def plot_full_timecourse(out_file, stats_df, colors, title_names):
                 linewidth=1.5)
         custom_lines.append(Line2D([0], [0], color=color, lw=2))
 
-        label, n = ndimage.label(feature_df['p'] < 0.05)
+        label, n = ndimage.label(feature_df['corrected_p'] < 0.05)
         onset = None
         for icluster in range(1, n+1):
             time_cluster = feature_df['time'].to_numpy()[label == icluster]
@@ -327,11 +319,12 @@ class PlotFeatureDecoding:
 
         if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
             files = glob(f'{self.regression_dir}/*features.parquet')
-            df_time = load_timecourse(files)
+            df_time = load_summary(files)
+            # df_time = load_timecourse(files)
             df_time.to_csv(f'{self.out_dir}/{self.out_csv}', index=False)
 
-            df_latency = load_latency(files)
-            df_latency.to_csv(f'{self.out_dir}/feature_decoding_latency.csv', index=False)
+            # df_latency = load_latency(files)
+            # df_latency.to_csv(f'{self.out_dir}/feature_decoding_latency.csv', index=False)
         else:
             df_time = pd.read_csv(f'{self.out_dir}/{self.out_csv}')
             df_latency = pd.read_csv(f'{self.out_dir}/feature_decoding_latency.csv')
@@ -340,37 +333,40 @@ class PlotFeatureDecoding:
         # Make categorical for plotting
         df_time = df_time.loc[df_time['feature'].isin(features)].reset_index(drop=True)
         df_time['feature'] = pd.Categorical(df_time['feature'], categories=features, ordered=True)
-        df_latency = df_latency.loc[df_latency['feature'].isin(features)].reset_index(drop=True)
-        df_latency['feature'] = pd.Categorical(df_latency['feature'], categories=features, ordered=True)
-
-        if self.simplified_plotting:
-            plot_simple(f'{self.out_dir}/{out_plot}', df_time, df_latency, colors, title_names)
-            shutil.copyfile(f'{self.out_dir}/{out_plot}', f'{self.final_plot}/Figure2.pdf')
-        else: 
-            plot_full_timecourse(f'{self.out_dir}/{out_plot}_timecourse.pdf',
+        plot_full_timecourse(f'{self.out_dir}/{out_plot}_timecourse.pdf',
                                  df_time, colors, title_names)
-            plot_full_latency(f'{self.out_dir}/{out_plot}_latency.pdf', df_latency,
-                              colors, title_names)
-            shutil.copyfile(f'{self.out_dir}/{out_plot}_timecourse.pdf',
-                            f'{self.final_plot}/{out_plot}_timecourse.pdf')
-            shutil.copyfile(f'{self.out_dir}/{out_plot}_latency.pdf',
-                            f'{self.final_plot}/{out_plot}_latency.pdf')
+        print()
+        # df_latency = df_latency.loc[df_latency['feature'].isin(features)].reset_index(drop=True)
+        # df_latency['feature'] = pd.Categorical(df_latency['feature'], categories=features, ordered=True)
+
+        # if self.simplified_plotting:
+        #     plot_simple(f'{self.out_dir}/{out_plot}', df_time, df_latency, colors, title_names)
+        #     shutil.copyfile(f'{self.out_dir}/{out_plot}', f'{self.final_plot}/Figure2.pdf')
+        # else: 
+            # plot_full_timecourse(f'{self.out_dir}/{out_plot}_timecourse.pdf',
+            #                      df_time, colors, title_names)
+        #     plot_full_latency(f'{self.out_dir}/{out_plot}_latency.pdf', df_latency,
+        #                       colors, title_names)
+        #     shutil.copyfile(f'{self.out_dir}/{out_plot}_timecourse.pdf',
+        #                     f'{self.final_plot}/{out_plot}_timecourse.pdf')
+        #     shutil.copyfile(f'{self.out_dir}/{out_plot}_latency.pdf',
+        #                     f'{self.final_plot}/{out_plot}_latency.pdf')
 
 
 def main():
     parser = argparse.ArgumentParser(description='Plot the ROI regression results')
     parser.add_argument('--simplified_plotting', action=argparse.BooleanOptionalAction, default=False,
                         help='plot all or only select features')
-    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=False,
+    parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=True,
                         help='whether to redo the summary statistics')
     parser.add_argument('--final_plot', '-p', type=str,
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/reports/figures/FinalFigures')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/reports/figures/FinalFigures')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/PlotFeatureDecoding')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/PlotFeatureDecoding')
     parser.add_argument('--out_csv', type=str, help='output csv',
                         default='feature_decoding_timecourse.csv')
     parser.add_argument('--regression_dir', '-r', type=str, help='directory for input',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/FeatureRegression')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/FeatureRegression')
     args = parser.parse_args()
     PlotFeatureDecoding(args).run()
 
