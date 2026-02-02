@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 from pathlib import Path
 from tqdm import tqdm
+import numpy as np
 
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -80,6 +81,15 @@ class JointRegression:
         #Define y
         y_train, y_test, _ = dict_to_tensor(train, test, ['fmri'], device=self.device)
 
+        def to_scalar(value):
+            if torch.is_tensor(value):
+                value = value.detach().cpu().numpy()
+            if isinstance(value, np.ndarray):
+                if value.size == 1:
+                    return value.item()
+                return value.squeeze().item()
+            return value
+
         scores = []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict fMRI from EEG', leave=True)
@@ -87,8 +97,24 @@ class JointRegression:
             behavior_train, behavior_test, groups = dict_to_tensor(train, test, list(self.behavior_categories.keys()),
                                                  device=self.device)
             train_eeg, test_eeg = train['eeg'][time_ind], test['eeg'][time_ind]
+            if not torch.is_tensor(train_eeg):
+                train_eeg = torch.from_numpy(train_eeg)
+            if not torch.is_tensor(test_eeg):
+                test_eeg = torch.from_numpy(test_eeg)
+            train_eeg = train_eeg.to(self.device)
+            test_eeg = test_eeg.to(self.device)
+            if torch.is_tensor(behavior_train):
+                behavior_train = behavior_train.to(self.device)
+            if torch.is_tensor(behavior_test):
+                behavior_test = behavior_test.to(self.device)
+            if torch.is_tensor(groups):
+                groups = groups.to(self.device)
             n_groups = len(self.behavior_categories)
-            groups = torch.concat([groups, torch.ones(train_eeg.size(1), dtype=torch.int32)*n_groups], dim=0)
+            if torch.is_tensor(train_eeg):
+                n_eeg_features = train_eeg.size(1)
+            else:
+                n_eeg_features = train_eeg.shape[1]
+            groups = torch.concat([groups, torch.ones(n_eeg_features, dtype=torch.int32, device=self.device) * n_groups], dim=0)
             X_train = torch.concat([train_eeg, behavior_train], dim=1)
             X_test = torch.concat([test_eeg, behavior_test], dim=1)
 
@@ -97,22 +123,25 @@ class JointRegression:
                                   alpha_start=self.alpha_start,
                                   alpha_stop=self.alpha_stop,
                                   device=self.device,
-                                  rotate_x=True)
+                                  rotate_x=False)
 
             for i_roi, mri_df in enumerate(fmri_meta.itertuples()):
-                subj_id = mri_df.fmri_subj_id
+                subj_id = mri_df.subj_id
                 roi_name = mri_df.roi_name
                 scores.append({'time': time_map[time_ind],
                                    'fmri_subj_id': subj_id,
                                    'roi_name': roi_name,
                                    'feature': 'total',
-                                   'score': output['r2'][i_roi].detach().cpu().numpy()})
-                for group in list(self.behavior_categories.keys()) + ['eeg']:
+                                   'score': to_scalar(output['r2'][i_roi])})
+                group_labels = list(self.behavior_categories.keys()) + ['eeg']
+                for i_group, group in enumerate(group_labels):
+                    r2_split = output['r2_split']
+                    score_val = to_scalar(r2_split[i_group, i_roi])
                     scores.append({'time': time_map[time_ind],
                                    'fmri_subj_id': subj_id,
                                    'roi_name': roi_name,
                                    'feature': group,
-                                   'score': output['r2_split'][group, i_roi].detach().cpu().numpy()})
+                                   'score': score_val})
         return pd.DataFrame(scores)
 
     def save_df(self, results):
@@ -143,7 +172,7 @@ def main():
                         help='predict the roi mean response instead of voxelwise responses')
     parser.add_argument('--alpha_start', type=int, default=-5,
                         help='starting value in log space for the ridge alpha penalty')
-    parser.add_argument('--alpha_stop', type=int, default=30,
+    parser.add_argument('--alpha_stop', type=int, default=5,
                         help='stopping value in log space for the ridge alpha penalty')      
     parser.add_argument('--scoring', type=str, default='pearsonr',
                         help='scoring function. Options are pearsonr, r2_score, r2_adj, or explained_variance')     
