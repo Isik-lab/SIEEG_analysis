@@ -1,6 +1,7 @@
 user=$(shell whoami)
 project_folder=/orcd/data/ngk/001/users/$(user)/SIEEG_analysis
 conda_python=/orcd/data/ngk/001/users/$(user)/miniconda3/envs/eeg/bin/python
+# eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 eeg_subs := 1 2 3 4 5 6 8 9 10 11 12 13 14 15 16 17 18 19 20 21
 fmri_subs := 1 2 3 4
 features := alexnet moten expanse object agent_distance facingness joint_action communication valence arousal
@@ -9,10 +10,12 @@ features := alexnet moten expanse object agent_distance facingness joint_action 
 videos=$(project_folder)/data/raw/videos_3000ms
 motion_energy=$(project_folder)/data/interim/MotionEnergyActivations
 alexnet=$(project_folder)/data/interim/AlexNetActivations
-fmri_data=$(project_folder)/data/interim/ReorganizefMRI
 
-matlab_eeg_path=$(project_folder)/data/interim/SIdyads_EEG
-eeg_preprocess=$(project_folder)/data/interim/eegPreprocessing
+fmri_data=$(project_folder)/data/interim/ReorganizefMRI
+reorganize_eeg=$(project_folder)/data/interim/ReorganizeEEG
+
+
+preprocess_raw=$(project_folder)/data/interim/PreprocessRaw
 eeg_reliability=$(project_folder)/data/interim/eegReliability
 back_to_back=$(project_folder)/data/interim/Back2Back
 fmri_regression=$(project_folder)/data/interim/fMRIRegression
@@ -25,7 +28,7 @@ reliability_plotting=$(project_folder)/data/interim/PlotReliability
 
 
 # Steps to run
-all: reorg_fmri motion_energy alexnet eeg_preprocess eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back plot_reliability 
+all: reorg_fmri motion_energy alexnet preprocess_raw reorganize_eeg eeg_reliability feature_decoding roi_decoding full_brain back_to_back plot_rois plot_features plot_back2back plot_reliability 
 
 
 # Get the activations from AlexNet for the 500 ms videos
@@ -54,19 +57,30 @@ $(alexnet)/.done:
 	touch $(alexnet)/.done
 
 
+# Preprocess raw EEG data
+preprocess_raw: $(preprocess_raw)/.done
+$(preprocess_raw)/.done: 
+	mkdir -p $(preprocess_raw)
+	bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py" ""
+# 	touch $(preprocess_raw)/.done
+
+# Exclude bad subjects identified during preprocessing
+bad_eeg_subs := 10
+eeg_subs := $(filter-out $(bad_eeg_subs), $(eeg_subs))
+
 # Preprocess EEG data for regression
-eeg_preprocess: $(eeg_preprocess)/.preprocess_done $(matlab_eeg_path) $(fmri_data)
-$(eeg_preprocess)/.preprocess_done: 
-	mkdir -p $(eeg_preprocess)
+reorganize_eeg: $(reorganize_eeg)/.preprocess_done $(preprocess_raw) $(fmri_data)
+$(reorganize_eeg)/.preprocess_done: 
+	mkdir -p $(reorganize_eeg)
 	for s in $(eeg_subs); do \
-		echo -e "Submitting eeg_preprocess job for $$s"; \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh eeg_preprocess 3:00:00 32 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/eeg_preprocessing.py -s $$s" ""; \
+		echo -e "Submitting reorganize_eeg job for $$s"; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh reorganize_eeg 3:00:00 32 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/reorganize_eeg.py -s $$s" "--mem=64G"; \
 	done
-	touch $(eeg_preprocess)/.preprocess_done
+# 	touch $(reorganize_eeg)/.preprocess_done
 
 
 #Compute the channel-wise EEG reliability
-eeg_reliability: $(eeg_reliability)/.done $(eeg_preprocess)
+eeg_reliability: $(eeg_reliability)/.done $(reorganize_eeg)
 $(eeg_reliability)/.done: 
 	mkdir -p $(eeg_reliability)
 	for s in $(eeg_subs); do \
@@ -76,43 +90,43 @@ $(eeg_reliability)/.done:
 
 
 #Compute b2b regression with EEG first then annotated features
-back_to_back: $(back_to_back)/.done $(eeg_preprocess)
+back_to_back: $(back_to_back)/.done $(reorganize_eeg)
 $(back_to_back)/.done: 
 	mkdir -p $(back_to_back)
 	for x in $(features); do \
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh back_to_back 2:45:00 16 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/back_to_back.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x '["$${x}"]'" "" "echo $${x}"; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh back_to_back 2:45:00 16 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/back_to_back.py -e $(reorganize_eeg)/all_trials/sub-$$(printf '%02d' $${s}).parquet -x '["$${x}"]'" "" "echo $${x}"; \
 			done; \
 			done
 	touch $(back_to_back)/.done
 
 
 #Compute EEG feature regression
-feature_decoding: $(feature_regression)/.feature_decoding $(eeg_preprocess)
+feature_decoding: $(feature_regression)/.feature_decoding $(reorganize_eeg)
 $(feature_regression)/.feature_decoding: 
 	mkdir -p $(feature_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_decoding 30:00 16 ou_bcs_low "$(conda_python) $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_decoding 30:00 16 ou_bcs_low "$(conda_python) $(project_folder)/scripts/feature_regression.py -e $(reorganize_eeg)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
 # 	touch $(feature_regression)/.feature_decoding
 
 
 #Compute the channel-wise roi_decoding
-roi_decoding: $(fmri_regression)/.done $(eeg_preprocess)
+roi_decoding: $(fmri_regression)/.done $(reorganize_eeg)
 $(fmri_regression)/.done: 
 	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/joint_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/joint_regression.py -e $(reorganize_eeg)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
 	touch $(fmri_regression)/.roi_decoding
 
 
 #Full brain EEG to fMRI regression
-full_brain: $(fmri_regression)/.full_brain $(eeg_preprocess)
+full_brain: $(fmri_regression)/.full_brain $(reorganize_eeg)
 $(fmri_regression)/.full_brain: 
 	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh full_brain 45:00 12 ou_bcs_low "$(conda_python) $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" "--gres=gpu:1"; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh full_brain 45:00 12 ou_bcs_low "$(conda_python) $(project_folder)/scripts/fmri_regression.py -e $(reorganize_eeg)/all_trials/sub-$$(printf '%02d' $${s}).parquet --no-roi_mean --smoothing" "--gres=gpu:1"; \
 	done
 	touch $(fmri_regression)/.full_brain
 

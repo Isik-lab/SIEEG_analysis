@@ -22,7 +22,7 @@ from functools import partial
 # - finalize_epochs
 # - plot_channel_timecourses
 
-def detect_bad_channels(epochs, corr_threshold=0.2,
+def detect_bad_channels(epochs, corr_threshold=0.01,
                         output_path='channel_timecourses.png'):
     """
     Detect bad channels based on variance and correlation criteria.
@@ -570,7 +570,7 @@ def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned):
             plt.close()
         
         # Detect and drop bad channels (lenient criteria)
-        bad_channels = detect_bad_channels(epochs_final, corr_threshold=0.2,
+        bad_channels = detect_bad_channels(epochs_final, corr_threshold=0.01,
                                            output_path=os.path.join(subj_path, 'channel_timecourses_after_cleaning.png') if subj_path else None)
         if bad_channels:
             print(f"Detected bad channels: {bad_channels}")

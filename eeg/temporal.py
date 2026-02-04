@@ -16,17 +16,6 @@ def find_neighbours(value, df, colname):
             return high_value
 
 
-def smooth(array, window_size=20, step_size=1):
-    kernel = np.ones(window_size) / window_size
-    return np.convolve(array, kernel, mode='full')[::step_size]
-
-
-def resample(time, data, new_sample_rate=10):
-    new_time = np.arange(time.min(), time.max(), new_sample_rate)
-    interpolation_function = interp1d(time, data, kind='linear', fill_value="extrapolate")
-    return new_time, interpolation_function(new_time)
-
-
 def bin_time_windows_cut(df, window_size=50, start_time=0, end_time=300):
     """
     Bin time values into windows using pd.cut with a fixed end time
