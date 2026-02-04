@@ -297,7 +297,7 @@ if __name__ == '__main__':
         prestim_time=prestim_time,
         poststim_time=raw_poststim_time,
         aligned_poststim_time=aligned_poststim_time,
-        rerun_ica=True
+        rerun_initial=True
     )    
     if len(all_evokeds) == 0:
         print("No subjects were successfully processed!")

@@ -262,7 +262,7 @@ def align_to_photodiode(raw,
 
 def load_raw_data(vhdr_file):
     """
-    Load BrainVision data and set montage.
+    Load BrainVision data.
     
     Parameters
     ----------
@@ -272,14 +272,14 @@ def load_raw_data(vhdr_file):
     Returns
     -------
     raw : mne.io.Raw
-        Loaded raw EEG data with montage set
+        Loaded raw EEG data
     """
     print("Loading BrainVision data...")
     raw = mne.io.read_raw_brainvision(vhdr_file, preload=True, verbose=False)
     
-    # Set montage
-    montage = mne.channels.make_standard_montage('standard_1005')
-    raw.set_montage(montage, on_missing='warn', verbose=False)
+    # Set channel type for photodiode to misc to avoid coordinate warnings
+    if 'photodiode' in raw.ch_names:
+        raw.set_channel_types({'photodiode': 'misc'})
     
     print(f"Data loaded: {raw.info['nchan']} channels, {raw.n_times} samples, {raw.info['sfreq']} Hz")
     return raw
@@ -609,15 +609,23 @@ def apply_ica_artifact_removal(epochs_final, subj_path, rerun_ica):
     
     if not (ica_epochs_file and os.path.exists(ica_epochs_file) and not rerun_ica):
         print("Starting ICA artifact removal...")
-        ica = ICA(n_components=20, method='picard', random_state=42, verbose=False,
+        ica = ICA(n_components=20, method='picard', 
+                  random_state=42, verbose=False,
                   fit_params=dict(ortho=True, extended=True) )
         ica.fit(epochs_final)
-        
-        # Automatically find bad components (e.g., eye movement related)
-        sources_data = ica.get_sources(epochs_final).get_data()  # (n_epochs, n_components, n_times)
-        sources_concat = sources_data.reshape(sources_data.shape[1], -1)  # (n_components, n_epochs * n_times)
-        kurtosis = np.array([np.mean((comp - np.mean(comp))**4) / np.var(comp)**2 for comp in sources_concat])
-        ica.exclude = [i for i in range(len(kurtosis)) if kurtosis[i] > np.percentile(kurtosis, 90)]
+
+        # Find the first available channel from the preferred list for EOG detection
+        preferred_channels = ['Fp1', 'Fp2', 'AFz', 'AF3', 'AF4', 'AF7', 'AF8']
+        ch_name = None
+        for ch in preferred_channels:
+            if ch in epochs_final.ch_names:
+                ch_name = ch
+                break
+        # Fallback to first channel if none of the preferred channels exist
+        if ch_name is None:
+            ch_name = epochs_final.ch_names[0]
+        eog_indices, _ = ica.find_bads_eog(epochs_final, ch_name=ch_name)
+        ica.exclude = eog_indices
         
         print(f"ICA: Excluding {len(ica.exclude)} components out of {ica.n_components_}")
         
@@ -663,7 +671,7 @@ def finalize_epochs(epochs_final, prestim_time, subj_path):
         Finalized epochs
     """
     # Remove frontal electrodes to reduce eye movement artifacts
-    frontal_channels = ['Fp1', 'Fp2']
+    frontal_channels = ['Fp1', 'Fp2', 'AF7', 'AF3', 'AFz', 'AF4', 'AF8']
     existing_frontal = [ch for ch in frontal_channels if ch in epochs_final.ch_names]
     if existing_frontal:
         print(f"Removing frontal channels: {existing_frontal}")
