@@ -94,7 +94,7 @@ $(feature_regression)/.feature_decoding:
 	for s in $(eeg_subs); do \
 		bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_decoding 30:00 16 ou_bcs_low "$(conda_python) $(project_folder)/scripts/feature_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
-	touch $(feature_regression)/.feature_decoding
+# 	touch $(feature_regression)/.feature_decoding
 
 
 #Compute the channel-wise roi_decoding
@@ -102,7 +102,7 @@ roi_decoding: $(fmri_regression)/.done $(eeg_preprocess)
 $(fmri_regression)/.done: 
 	mkdir -p $(fmri_regression)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/fmri_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh roi_decoding 45:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/joint_regression.py -e $(eeg_preprocess)/all_trials/sub-$$(printf '%02d' $${s}).parquet" ""; \
 	done
 	touch $(fmri_regression)/.roi_decoding
 
@@ -145,8 +145,8 @@ $(roi_plotting)/.plotted:
 plot_features: $(feature_plotting)/.plotted $(feature_decoding)
 $(feature_plotting)/.plotted: 
 	mkdir -p $(feature_plotting)
-	bash $(project_folder)/batch_scripts/submit_sbatch.sh feature_plotting 1:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/plot_feature_decoding.py --overwrite; $(conda_python) $(project_folder)/scripts/plot_feature_decoding.py --simplified_plotting" ""
-	touch $(feature_plotting)/.plotted
+	bash $(project_folder)/batch_scripts/submit_sbatch.sh stats_testing 5:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/plot_feature_decoding.py --overwrite" ""
+# 	touch $(feature_plotting)/.plotted
 
 
 #Plot the Back2Back timecourses 

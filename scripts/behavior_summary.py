@@ -106,8 +106,8 @@ class BehaviorSummary:
         self.process = 'BehaviorSummary'
         self.dataset_path = args.dataset_path
         self.derivatives_path = f'{self.dataset_path}/data'
-        self.behavior_path = f'{self.derivatives_path}/raw/expert_raw_annotations'
-        self.condition_path = f'{self.derivatives_path}/raw/expert_conditions'
+        self.behavior_path = f'{self.derivatives_path}/raw/behavior_raw_annotations'
+        self.condition_path = f'{self.derivatives_path}/raw/behavior_conditions'
         self.out_path = f'{self.derivatives_path}/interim/{self.process}'
         self.bad_subjs_file = f'{self.out_path}/bad_subjs.csv'
         Path(self.out_path).mkdir(exist_ok=True, parents=True)
@@ -245,28 +245,28 @@ class BehaviorSummary:
     def run(self):
         condition_map = self.get_condition_map()
 
-        filtered_df, error_subjs = load_data(sorted(glob(f'{self.behavior_path}/*.csv')),
+        raw_data, error_subjs = load_data(sorted(glob(f'{self.behavior_path}/*.csv')),
                                            condition_map)
 
-        # # Clean data
-        # filtered_df = []
-        # bad_subjs = []
-        # for _, cond_df in raw_data.groupby('condition'):
-        #     cond_df, cond_bad_subjs = self.clean_data(cond_df)
-        #     bad_subjs += cond_bad_subjs
-        #     filtered_df.append(cond_df)
-        # filtered_df = pd.concat(filtered_df)
+        # Clean data
+        filtered_df = []
+        bad_subjs = []
+        for _, cond_df in raw_data.groupby('condition'):
+            cond_df, cond_bad_subjs = self.clean_data(cond_df)
+            bad_subjs += cond_bad_subjs
+            filtered_df.append(cond_df)
+        filtered_df = pd.concat(filtered_df)
 
         # self.save_bad_subjs(error_subjs + bad_subjs)
         self.save_subject_data(filtered_df)
         get_condition_counts(filtered_df)
 
-        split_500 = self.split_half_reliability(filtered_df)
+        # split_500 = self.split_half_reliability(filtered_df)
         self.og_split()
 
         df = self.save_video_data(filtered_df)
         annotations = self.get_annotations()
-        self.correlate_ratings(split_500, annotations)
+        # self.correlate_ratings(split_500, annotations)
 
         # Combine new and old and save
         df.drop(columns=['condition_number', 'condition'], inplace=True)
@@ -279,7 +279,7 @@ class BehaviorSummary:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', '-d', type=str,
-                        default='/Users/emaliem/Dropbox/jhu_projects/SI_EEG/SIEEG_analysis')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis')
     args = parser.parse_args()
     BehaviorSummary(args).run()
 

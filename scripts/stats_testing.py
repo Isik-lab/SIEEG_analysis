@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from eeg.stats import get_onset_latency, bootstrap_latency_ci, compare_latencies_paired, bootstrap_ci
+from eeg.stats import get_onset_latency, bootstrap_latency_ci, \
+    compare_latencies_paired, bootstrap_ci
 
 
 def load_files(files):
@@ -25,8 +26,7 @@ def load_files(files):
     print('Finished loading files')
     return df
 
-def load_summary(files, n_samples=1000, seed=42):
-    df = load_files(files)
+def stat_summary(df, n_samples=1000, seed=42):
     plotting_stats = []
     onset_stats = []
     for feature, fdf in tqdm(df.groupby('feature'), desc='Calculating summary stats'):
@@ -41,7 +41,7 @@ def load_summary(files, n_samples=1000, seed=42):
         latency_ci = bootstrap_latency_ci(corr_data, times,
                                             n_bootstrap=n_samples,
                                             n_permutations=n_samples,
-                                            seed=seed)
+                                            seed=seed, verbose=True)
         
         onset_stats.append({
             'feature': feature,
@@ -59,8 +59,8 @@ def load_summary(files, n_samples=1000, seed=42):
             'high_ci': high_ci,
         }))
         print(feature)
-        return pd.concat(plotting_stats, ignore_index=True), \
-            pd.DataFrame(onset_stats)
+    return pd.concat(plotting_stats, ignore_index=True), \
+        pd.DataFrame(onset_stats)
 
 
 
@@ -154,7 +154,9 @@ class PlotFeatureDecoding:
 
         if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
             files = glob(f'{self.regression_dir}/*features.parquet')
-            df_time, df_onset = load_summary(files)
+            df = load_files(files)
+            print(df.feature.unique())
+            df_time, df_onset = stat_summary(df)
             df_time.to_csv(f'{self.out_dir}/{self.out_csv}', index=False)
             df_onset.to_csv(f'{self.out_dir}/onset_{self.out_csv}', index=False)
         else:

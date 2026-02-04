@@ -7,33 +7,8 @@ from scipy.spatial.distance import squareform
 from statsmodels.stats.multitest import multipletests
 from scipy import ndimage
 import torch
-from torchmetrics.functional import pearson_corrcoef, r2_score, explained_variance
 from scipy.stats import wilcoxon, t
 from mne.stats import permutation_cluster_1samp_test
-
-
-SCORE_FUNCTIONS = {'pearsonr': pearson_corrcoef, 
-                   'r2_score': r2_score,
-                   'r2_adj': r2_score,
-                   'explained_variance': explained_variance}
-
-
-def compute_score(y_true, y_pred, score_type='pearsonr', adjusted=0):
-    y_true = torch.tensor(y_true) if isinstance(y_true, np.ndarray) else y_true
-    y_pred = torch.tensor(y_pred) if isinstance(y_pred, np.ndarray) else y_pred
-
-    if score_type == 'r2_adj':
-        kwargs = {'multioutput': 'raw_values', 'adjusted': adjusted}
-    elif score_type == 'explained_variance' or score_type == 'r2_score':
-        kwargs = {'multioutput': 'raw_values'}
-    else:
-        kwargs = {}
-    
-    if score_type not in SCORE_FUNCTIONS:
-        raise ValueError(f'Unknown score_type: {score_type}; ' +
-                         f'Choose from: {SCORE_FUNCTIONS.keys()}')
-    
-    return SCORE_FUNCTIONS[score_type](y_pred, y_true, **kwargs)
 
 
 def calculate_p(r_null, r_true, n_perm, H0):

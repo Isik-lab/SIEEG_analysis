@@ -18,8 +18,6 @@ from eeg.temporal import bin_time_windows_cut
 
 
 
-
-
 def sign_permute(arr, n=1000, axis=1, seed=None):
     rng = np.random.default_rng(seed)
     arr = np.asarray(arr)
