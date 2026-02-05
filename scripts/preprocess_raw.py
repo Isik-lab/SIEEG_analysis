@@ -152,28 +152,33 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
         # Apply ICA for blink removal
         epochs_final = ep.apply_ica_blink_removal(epochs_final, subj_path, rerun_ica)
 
-        if rerun_frontal_drop:
+        # Define file paths for subsequent steps
+        frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
+        cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
+
+        if rerun_frontal_drop or (frontal_drop_epochs_file and not os.path.exists(frontal_drop_epochs_file)):
             # Drop frontal channels epochs
             epochs_final = ep.remove_frontal_channels(epochs_final, prestim_time, subj_path)
             # Save frontal drop epochs
-            frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
             if frontal_drop_epochs_file:
                 epochs_final.save(frontal_drop_epochs_file, overwrite=True)
                 print("Saved frontal drop epochs")
 
-        if rerun_epoch_cleaning:
+        if rerun_epoch_cleaning or (cleaned_epochs_file and not os.path.exists(cleaned_epochs_file)):
             # Clean epochs and interpolate bad channels
             epochs_final = ep.clean_epochs(epochs_final, subj_path, rerun_epoch_cleaning)
     else:
         # Apply any subsequent steps that need rerunning
-        if loaded_stage not in ['frontal_drop', 'cleaned'] and rerun_frontal_drop:
+        frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
+        cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
+        
+        if loaded_stage not in ['frontal_drop', 'cleaned'] and (rerun_frontal_drop or (frontal_drop_epochs_file and not os.path.exists(frontal_drop_epochs_file))):
             epochs_final = ep.remove_frontal_channels(epochs_final, prestim_time, subj_path)
-            frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
             if frontal_drop_epochs_file:
                 epochs_final.save(frontal_drop_epochs_file, overwrite=True)
                 print("Saved frontal drop epochs")
         
-        if loaded_stage != 'cleaned' and rerun_epoch_cleaning:
+        if loaded_stage != 'cleaned' and (rerun_epoch_cleaning or (cleaned_epochs_file and not os.path.exists(cleaned_epochs_file))):
             epochs_final = ep.clean_epochs(epochs_final, subj_path, rerun_epoch_cleaning)
     
     print(f"Preprocessing pipeline complete: {len(epochs_final)} final epochs")

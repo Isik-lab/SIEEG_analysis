@@ -62,7 +62,7 @@ preprocess_raw: $(preprocess_raw)/.done
 $(preprocess_raw)/.done: 
 	mkdir -p $(preprocess_raw)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 16 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py -s $$s" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 16 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py -s $$s --rerun_frontal_drop" ""; \
 	done
 # 	touch $(preprocess_raw)/.done
 
