@@ -34,8 +34,7 @@ class reorganize_eeg:
     def load_eeg(self, trials):
         print('loading eeg from MNE epochs...')
         # Load the MNE epochs file instead of .mat file
-        # epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/{self.sid}_preproc-epo.fif'
-        epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/filtered_epochs-epo.fif'
+        epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/{self.sid}_preproc-epo.fif'
 
         if not os.path.exists(epochs_file):
             raise FileNotFoundError(f"MNE epochs file not found: {epochs_file}")
@@ -171,7 +170,7 @@ class reorganize_eeg:
 
         self.save(eeg_df)
         eeg_averaged = self.average_repetitions(eeg_df)
-        # self.save_time_df(eeg_averaged)
+        self.save_time_df(eeg_averaged)
         self.plot_average_timecourse(eeg_df)
         print('All done!')
 
@@ -179,7 +178,7 @@ class reorganize_eeg:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', '-s', type=int, default=2)
-    parser.add_argument('--resample_rate', type=float, default=150)
+    parser.add_argument('--resample_rate', type=float, default=400)
     parser.add_argument('--n_samples_to_smooth', type=int, default=5)
     parser.add_argument('--data_dir', '-d', type=str,
                          default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data')
