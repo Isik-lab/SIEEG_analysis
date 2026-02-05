@@ -8,7 +8,7 @@ from mne.preprocessing import ICA
 from scipy.signal import butter, sosfiltfilt
 from scipy.stats import median_abs_deviation
 from functools import partial
-from mne.preprocessing import find_bad_channels_lof
+from pyprep import NoisyChannels
 
 
 # Functions in this file:
@@ -30,7 +30,7 @@ from mne.preprocessing import find_bad_channels_lof
 
 def load_raw_data(vhdr_file):
     """
-    Load BrainVision data.
+    Load BrainVision data and detect bad channels.
     
     Parameters
     ----------
@@ -48,8 +48,17 @@ def load_raw_data(vhdr_file):
     # Set channel type for photodiode to misc to avoid coordinate warnings
     if 'photodiode' in raw.ch_names:
         raw.set_channel_types({'photodiode': 'misc'})
-    
+
     print(f"Data loaded: {raw.info['nchan']} channels, {raw.n_times} samples, {raw.info['sfreq']} Hz")
+
+    nc = NoisyChannels(raw)
+    nc.find_bad_by_correlation()
+    nc.find_bad_by_deviation()
+    nc.find_bad_by_nan_flat()
+    bads = nc.get_bads()
+    raw.drop_channels(bads)
+    
+    print(f"{len(bads)} bad channels detected and removed: {bads}")
     return raw
 
 
@@ -122,6 +131,10 @@ def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, tria
         if initial_epochs_file:
             epochs.save(initial_epochs_file, overwrite=True)
             print("Saved initial epochs")
+
+            epochs.average().detrend().plot_joint()
+            plt.savefig(os.path.join(subj_path, 'initial_epochs_joint_plot.png'), dpi=150)
+            plt.close()
     
     return epochs, stim_events, stim_event_id, stim_key
 
@@ -378,139 +391,53 @@ def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
     return epochs_final
 
 # ============================================================================
-# Detect Bad Channels and Trials
+# Detect Bad Trials
 # ============================================================================
 
-def detect_bad_channels(epochs, mad_threshold=3,
-                        output_path='channel_timecourses.png'):
+
+def clean_epochs(epochs, subj_path, rerun_epoch_cleaning):
     """
-    Detect bad channels based on variance and correlation criteria.
+    Reject bad epochs.
     
     Parameters
     ----------
     epochs : mne.Epochs
-        The epochs object
-    mad_threshold : float
-        Threshold for Median Absolute Deviation to identify bad channels
-    output_path : str
-        Path to save the channel time course plot
-
-    Returns
-    -------
-    bad_channels : list
-        List of bad channel names
-    """
-    bad_channels = []
-    
-    # Get EEG channel names
-    eeg_channels = [ch for ch in epochs.ch_names if ch not in ['photodiode']]
-    
-    if len(eeg_channels) == 0:
-        return bad_channels
-    
-    data = epochs.get_data()
-    mad = median_abs_deviation(data, axis=(0, 2))
-    bad_channel_idx = np.where(mad > mad_threshold)[0]
-    bad_channels = [eeg_channels[idx] for idx in bad_channel_idx]
-    epochs.drop_channels(bad_channels)
-    
-    # List of good channels
-    good_channels = [ch for ch in eeg_channels if ch not in bad_channels]
-    
-    # Get data and compute time courses averaged across epochs
-    data = epochs.get_data()  # (n_epochs, n_channels, n_times)
-    time_courses = np.mean(data, axis=0)  # (n_channels, n_times)
-    time_courses = time_courses - np.mean(time_courses, axis=1, keepdims=True)  # Demean each channel
-    
-    # Compute mean of good channels
-    if good_channels:
-        good_indices = [epochs.ch_names.index(ch) for ch in good_channels]
-        good_mean = np.mean(time_courses[good_indices, :], axis=0)
-    
-    # Create plot
-    plt.figure(figsize=(15, 8))
-    
-    # Plot each channel
-    for ch_idx, ch_name in enumerate(epochs.ch_names):
-        if ch_name in eeg_channels:
-            if ch_name in bad_channels:
-                # Plot bad channels in red
-                plt.plot(epochs.times, time_courses[ch_idx, :], 'r-', alpha=0.8, linewidth=1, label='Bad channels' if ch_name == bad_channels[0] else "")
-            else:
-                # Plot good channels in gray with low alpha
-                plt.plot(epochs.times, time_courses[ch_idx, :], 'gray', alpha=0.5, linewidth=0.8)
-    
-    # Plot mean of good channels in black
-    if good_channels:
-        plt.plot(epochs.times, good_mean, 'k-', linewidth=2, label=f'Mean of {len(good_channels)} good channels')
-    
-    # Add legend
-    plt.legend(loc='upper right')
-    
-    # Labels and title
-    plt.xlabel('Time (s)')
-    plt.ylabel('Demeaned Amplitude (V)')
-    plt.title(f'Channel Time Courses (Bad channels: {bad_channels})')
-    
-    # Grid
-    plt.grid(True, alpha=0.3)
-    
-    # Save plot
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Channel time course plot saved to {output_path}")
-    print(f"Detected {len(bad_channels)} bad channels: {bad_channels}")
-    print(f"Good channels: {len(good_channels)}")
-    
-    return bad_channels
-
-
-def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned, 
-                              mad_threshold=3):
-    """
-    Reject bad epochs and interpolate bad channels.
-    
-    Parameters
-    ----------
-    epochs_final : mne.Epochs
         Epochs to clean
     subj_path : str
         Path to save subject-specific files
-    rerun_cleaned : bool
+    rerun_epoch_cleaning : bool
         Whether to rerun cleaning
-    mad_threshold : float
-        Threshold for Median Absolute Deviation to identify bad epochs
         
     Returns
     -------
-    epochs_final : mne.Epochs
+    epochs_clean : mne.Epochs
         Cleaned epochs
     """
-    print('Starting epoch  and channel cleaning...')
+    print('Starting epoch cleaning...')
     cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
     
-    if not (cleaned_epochs_file and os.path.exists(cleaned_epochs_file) and not rerun_cleaned):        
-        # Drop bad channels
-        detect_bad_channels(epochs_final,
-                            output_path=os.path.join(subj_path, 'channel_timecourses.png') if subj_path else 'channel_timecourses.png')
-
+    if not (cleaned_epochs_file and os.path.exists(cleaned_epochs_file) and not rerun_epoch_cleaning):        
+        from autoreject import AutoReject 
         # Copy epochs before rejection to plot bad ones
-        epochs_before_rejection = epochs_final.copy()
-        num_epochs_before = len(epochs_final)
+        epochs_clean = epochs.copy()
+        num_epochs_before = len(epochs)
 
         # Median Absolute Deviation Filtering to identify bad epochs
-        data = epochs_final.get_data()
-        mad = median_abs_deviation(data, axis=(1,2))
-        bad_epochs = np.where(mad > mad_threshold)[0]
-        epochs_final.drop(bad_epochs, reason='MAD outlier')
+        ar = AutoReject(verbose=True)
+        ar.fit(epochs)
+        reject_log = ar.get_reject_log(epochs)
+        # Drop the bad epochs
+        epochs_clean.drop(reject_log.bad_epochs, reason='AutoReject') 
+        if subj_path:
+            reject_log.plot('horizontal')
+            plt.savefig(os.path.join(subj_path, 'autoreject_log.png'), dpi=150)
+            plt.close()
         
-        num_epochs_after = len(epochs_final)
+        num_epochs_after = len(epochs_clean)
         num_removed = num_epochs_before - num_epochs_after
         
         # Get indices of bad epochs
-        bad_indices = [i for i, log in enumerate(epochs_final.drop_log) if log]
+        bad_indices = [i for i, log in enumerate(epochs.drop_log) if log]
         
         print(f"Epoch rejection: {num_epochs_before} -> {num_epochs_after} epochs ({num_removed} removed)")
         
@@ -527,7 +454,7 @@ def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned,
             
             # Time course of bad epochs (average across channels)
             if bad_indices:
-                bad_epochs = epochs_before_rejection[bad_indices]
+                bad_epochs = epochs[bad_indices]
                 bad_data = bad_epochs.get_data()  # (n_bad_epochs, n_channels, n_times)
                 bad_avg_channels = np.mean(bad_data, axis=1)  # (n_bad_epochs, n_times)
                 bad_avg_channels = bad_avg_channels - bad_avg_channels.mean(axis=1, keepdims=True) # Demean to plot on one axis
@@ -555,19 +482,19 @@ def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned,
             plt.savefig(os.path.join(subj_path, 'epoch_rejection_summary.png'), dpi=150, bbox_inches='tight')
             plt.close()
     
-    return epochs_final
+    return epochs_clean
 
 # ============================================================================
 # ICA to Remove Blinks
 # ============================================================================
 
-def apply_ica_blink_removal(epochs_final, subj_path, rerun_ica):
+def apply_ica_blink_removal(epochs, subj_path, rerun_ica):
     """
     Apply ICA for blink removal.
     
     Parameters
     ----------
-    epochs_final : mne.Epochs
+    epochs : mne.Epochs
         Epochs to apply ICA to
     subj_path : str
         Path to save subject-specific files
@@ -586,44 +513,49 @@ def apply_ica_blink_removal(epochs_final, subj_path, rerun_ica):
         ica = ICA(n_components=20, method='picard', 
                   random_state=42, verbose=False,
                   fit_params=dict(ortho=True, extended=True) )
-        ica.fit(epochs_final)
+        ica.fit(epochs, verbose=False)
 
         # Find the first available channel from the preferred list for EOG detection
         preferred_channels = ['Fp1', 'Fp2', 'AFz', 'AF3', 'AF4', 'AF7', 'AF8']
         ch_name = None
         for ch in preferred_channels:
-            if ch in epochs_final.ch_names:
+            if ch in epochs.ch_names:
                 ch_name = ch
                 break
         # Fallback to first channel if none of the preferred channels exist
         if ch_name is None:
-            ch_name = epochs_final.ch_names[0]
-        eog_indices, _ = ica.find_bads_eog(epochs_final, ch_name=ch_name)
+            ch_name = epochs.ch_names[0]
+        eog_indices, _ = ica.find_bads_eog(epochs, ch_name=ch_name)
         ica.exclude = eog_indices
         
         print(f"ICA: Excluding {len(ica.exclude)} components out of {ica.n_components_}")
         
         # Plot ICA components topomaps
-        _ = ica.plot_components(inst=epochs_final, show=False)
+        _ = ica.plot_components(inst=epochs, show=False)
         plt.suptitle(f'ICA Components (Excluded: {ica.exclude})', fontsize=16)
         plt.savefig(os.path.join(subj_path, 'ica_components_topomaps.png'), dpi=150, bbox_inches='tight')
         plt.close()
         
         # Plot ICA sources time courses
-        _ = ica.plot_sources(epochs_final, show=False)
+        _ = ica.plot_sources(epochs, show=False)
         plt.suptitle(f'ICA Sources Time Courses (Excluded: {ica.exclude})', fontsize=16)
         plt.savefig(os.path.join(subj_path, 'ica_sources_timecourses.png'), dpi=150, bbox_inches='tight')
         plt.close()
-        
+
+        ica.plot_overlay(epochs.average(), exclude=ica.exclude, show=False)
+        plt.suptitle(f'ICA Overlay (Excluded: {ica.exclude})', fontsize=16)
+        plt.savefig(os.path.join(subj_path, 'ica_overlay.png'), dpi=150, bbox_inches='tight')
+        plt.close()
+            
         # Apply ICA
-        epochs_final = ica.apply(epochs_final, verbose=False)
+        epochs_ica = ica.apply(epochs, verbose=False)
         
-        print(f"ICA complete: {len(epochs_final)} epochs")
+        print(f"ICA complete: {len(epochs_ica)} epochs")
         if ica_epochs_file:
-            epochs_final.save(ica_epochs_file, overwrite=True)
+            epochs_ica.save(ica_epochs_file, overwrite=True)
             print("Saved ICA epochs")
     
-    return epochs_final
+    return epochs_ica
 
 
 # ============================================================================
@@ -631,13 +563,13 @@ def apply_ica_blink_removal(epochs_final, subj_path, rerun_ica):
 # ============================================================================
 
 
-def finalize_epochs(epochs_final, prestim_time, subj_path):
+def remove_frontal_channels(epochs, prestim_time, subj_path):
     """
     Finalize epochs by removing frontal channels and applying baseline correction.
     
     Parameters
     ----------
-    epochs_final : mne.Epochs
+    epochs : mne.Epochs
         Epochs to finalize
     prestim_time : float
         Prestimulus period for baseline correction
@@ -646,30 +578,21 @@ def finalize_epochs(epochs_final, prestim_time, subj_path):
         
     Returns
     -------
-    epochs_final : mne.Epochs
-        Finalized epochs
+    epochs : mne.Epochs
+        Corrected epochs
     """
     # Remove frontal electrodes to reduce eye movement artifacts
     frontal_channels = ['Fp1', 'Fp2', 'AF7', 'AF3', 'AFz', 'AF4', 'AF8']
-    existing_frontal = [ch for ch in frontal_channels if ch in epochs_final.ch_names]
+    existing_frontal = [ch for ch in frontal_channels if ch in epochs.ch_names]
     if existing_frontal:
         print(f"Removing frontal channels: {existing_frontal}")
-        epochs_final.drop_channels(existing_frontal)
+        epochs.drop_channels(existing_frontal)
 
-    # Apply baseline correction 
-    print("Applying baseline correction...")
-    epochs_final.apply_baseline(baseline=(-prestim_time, 0))
-
-    if subj_path:
-        epochs_final.plot_psd(fmin=1, fmax=60, average=False, show=False)
-        plt.suptitle('Final Epochs Power Spectral Density', fontsize=16)
-        plt.savefig(os.path.join(subj_path, 'final_epochs_psd.png'), dpi=150, bbox_inches='tight')
-        plt.close()
     
     # Save final epochs
     if subj_path:
         final_epochs_file = os.path.join(subj_path, 'final_epochs-epo.fif')
-        epochs_final.save(final_epochs_file, overwrite=True)
+        epochs.save(final_epochs_file, overwrite=True)
         print("Saved final epochs")
     
-    return epochs_final
+    return epochs

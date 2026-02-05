@@ -62,13 +62,9 @@ preprocess_raw: $(preprocess_raw)/.done
 $(preprocess_raw)/.done: 
 	mkdir -p $(preprocess_raw)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py -s $$s" ""; \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 16 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py -s $$s" ""; \
 	done
 # 	touch $(preprocess_raw)/.done
-
-# Exclude bad subjects identified during preprocessing
-bad_eeg_subs := 10
-eeg_subs := $(filter-out $(bad_eeg_subs), $(eeg_subs))
 
 
 # Preprocess EEG data for regression
