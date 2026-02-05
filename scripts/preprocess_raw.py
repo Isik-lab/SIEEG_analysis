@@ -4,6 +4,7 @@ import mne
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
+import argparse
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -125,8 +126,8 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
         # Clean epochs and interpolate bad channels
         epochs_final = ep.clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned)
     
-    # Apply ICA for artifact removal
-    epochs_final = ep.apply_ica_artifact_removal(epochs_final, subj_path, rerun_ica)
+    # Apply ICA for blink removal
+    epochs_final = ep.apply_ica_blink_removal(epochs_final, subj_path, rerun_ica)
 
     # Finalize epochs
     epochs_final = ep.finalize_epochs(epochs_final, prestim_time, subj_path)
@@ -134,182 +135,103 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
     print(f"Preprocessing pipeline complete: {len(epochs_final)} final epochs")
     return epochs_final
 
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
-def process_subjects(input_path, output_path, s_list=None, 
-                     prestim_time=0.2, poststim_time=1.25,
-                     aligned_poststim_time=1.0, **kwargs):
-    """
-    Process all subjects in the subject list.
+class preprocess_raw:
+    def __init__(self, args):
+        self.sid = f'{args.sid:02d}'
+        self.data_dir = args.data_dir
+        self.prestim_time = args.prestim_time
+        self.poststim_time = args.poststim_time
+        self.aligned_poststim_time = args.aligned_poststim_time
+        self.rerun_initial = args.rerun_initial
+        self.rerun_aligned = args.rerun_aligned
+        self.rerun_filtered = args.rerun_filtered
+        self.rerun_cleaned = args.rerun_cleaned
+        self.rerun_ica = args.rerun_ica
+        self.input_path = os.path.join(self.data_dir, 'data', 'raw', 'SIdyads_EEG')
+        self.output_path = os.path.join(self.data_dir, 'data', 'interim', 'PreprocessRaw', f'sub-{self.sid}')
+        Path(self.output_path).mkdir(parents=True, exist_ok=True)
+        print(vars(self))
 
-    Parameters
-    ----------
-    input_path : str
-        Path to raw EEG data directory
-    output_path : str
-        Path to save preprocessed data
-    s_list : list
-        List of subject IDs (e.g., ['01', '02', ...])
-    prestim_time : float
-        Prestimulus period
-    poststim_time : float
-        Poststimulus period
-    aligned_poststim_time : float
-        Aligned poststimulus period
-    **kwargs : dict
-        Keyword arguments passed to preprocess_eeg_pipeline for rerun control
-
-    Returns
-    -------
-    all_evokeds : list
-        List of evoked objects for all subjects
-    """
-    if s_list is None:
-        s_list = [f'{i:02d}' for i in range(1, 22) if i != 7]  # Exclude sub-07, up to 21
-
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    all_evokeds = []
-
-    iterator = tqdm(s_list, desc='Processing subjects',
-                    leave=True, position=0, total=len(s_list))
-    for subj_id in iterator:
-
-        # Construct file paths correctly
-        subj_dir = input_path / f'sub-{subj_id}'
-        vhdr_file = subj_dir / f'sub-{subj_id}.vhdr'
+    def run(self):
+        # Construct file paths
+        subj_dir = Path(self.input_path) / f'sub-{self.sid}'
+        vhdr_file = subj_dir / f'sub-{self.sid}.vhdr'
 
         if not vhdr_file.exists():
-            print(f"✗ File not found: {vhdr_file}")
-            continue
+            raise FileNotFoundError(f"BrainVision file not found: {vhdr_file}")
 
         # Define trials to remove
-        if subj_id == '01':
+        if self.sid == '01':
             trials_to_remove = [880]  # Python is 0-indexed
         else:
             trials_to_remove = None
-
-        # Create per-subject plot path
-        subj_path = os.path.join(output_path, f'sub-{subj_id}')
-        Path(subj_path).mkdir(parents=True, exist_ok=True)
 
         try:
             # Preprocess
             epochs_preprocessed = preprocess_eeg_pipeline(
                 str(vhdr_file),  # Pass full path with .vhdr extension
-                prestim_time=prestim_time,
-                poststim_time=poststim_time,
-                aligned_poststim_time=aligned_poststim_time,
+                prestim_time=self.prestim_time,
+                poststim_time=self.poststim_time,
+                aligned_poststim_time=self.aligned_poststim_time,
                 trials_to_remove=trials_to_remove,
-                subj_path=subj_path,
-                **kwargs
+                subj_path=self.output_path,
+                rerun_initial=self.rerun_initial,
+                rerun_aligned=self.rerun_aligned,
+                rerun_filtered=self.rerun_filtered,
+                rerun_cleaned=self.rerun_cleaned,
+                rerun_ica=self.rerun_ica
             )
 
             if epochs_preprocessed is None:
-                print(f"Skipping sub-{subj_id} due to preprocessing error")
-                continue
+                print(f"Preprocessing failed for sub-{self.sid}")
+                return
 
         except Exception as e:
-            print(f"Error processing subject {subj_id}: {e}")
+            print(f"Error processing subject {self.sid}: {e}")
             import traceback
             traceback.print_exc()
-            continue
+            return
 
-        # Compute evoked (grand average)
+        # Compute evoked (grand average for this subject)
         evoked = epochs_preprocessed.average()
-        evoked.comment = f'sub-{subj_id}'
-        all_evokeds.append(evoked)
+        evoked.comment = f'sub-{self.sid}'
 
         # Save as epochs
-        epochs_file = output_path / f'sub-{subj_id}' / f'sub-{subj_id}_preproc-epo.fif'
-        epochs_preprocessed.save(str(epochs_file), overwrite=True)
+        epochs_file = os.path.join(self.output_path, f'sub-{self.sid}_preproc-epo.fif')
+        epochs_preprocessed.save(epochs_file, overwrite=True)
 
-    return all_evokeds
-
-
-def plot_grand_average_topomaps(grand_avg, output_path, time_step=0.1):
-    """
-    Create topomap plots for grand average at specified time steps.
-    
-    Parameters
-    ----------
-    grand_avg : mne.Evoked
-        Grand average evoked object
-    output_path : str
-        Path to save figure
-    time_step : float
-        Time step for topomaps
-    """
-    times = np.arange(grand_avg.tmin, grand_avg.tmax, time_step)
-    fig = grand_avg.plot_topomap(times=times, show=False)
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    print(f"Topomap plot saved to {output_path}")
-    plt.close()
+        print(f"✓ Processing complete for sub-{self.sid}!")
 
 
-def plot_erp_trace(grand_avg, output_path, layout='standard_1020'):
-    """
-    Create ERP trace plot.
-    
-    Parameters
-    ----------
-    grand_avg : mne.Evoked
-        Grand average evoked object
-    output_path : str
-        Path to save figure
-    layout : str
-        MNE layout name
-    """
-    
-    fig = grand_avg.plot(layout=layout, gfp=True)
-    
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    print(f"ERP trace plot saved to {output_path}")
-    plt.close()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--sid', '-s', type=int, default=2, help='Subject ID')
+    parser.add_argument('--data_dir', '-d', type=str,
+                         default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis',
+                         help='Data directory')
+    parser.add_argument('--prestim_time', type=float, default=0.2,
+                         help='Prestimulus period (seconds)')
+    parser.add_argument('--poststim_time', type=float, default=1.25,
+                         help='Poststimulus period for initial loading (seconds)')
+    parser.add_argument('--aligned_poststim_time', type=float, default=1.0,
+                         help='Poststimulus period after photodiode alignment (seconds)')
+    parser.add_argument('--rerun_initial', action='store_false',
+                         help='Rerun initial epochs and all subsequent steps')
+    parser.add_argument('--rerun_aligned', action='store_false',
+                         help='Rerun alignment and all subsequent steps')
+    parser.add_argument('--rerun_filtered', action='store_false',
+                         help='Rerun filtering and all subsequent steps')
+    parser.add_argument('--rerun_cleaned', action='store_false',
+                         help='Rerun cleaning and all subsequent steps')
+    parser.add_argument('--rerun_ica', action='store_false',
+                         help='Rerun ICA and all subsequent steps')
+    args = parser.parse_args()
+    preprocess_raw(args).run()
 
-
-# ============================================================================
-# MAIN EXECUTION
-# ============================================================================
 
 if __name__ == '__main__':
-    
-    top_path = '/orcd/data/ngk/001/users/emaliem/SIEEG_analysis'
-    # Define paths
-    input_path = os.path.join(top_path, 'data', 'raw', 'SIdyads_EEG')
-    output_path = os.path.join(top_path, 'data', 'interim', 'PreprocessRaw')
-    Path(output_path).mkdir(parents=True, exist_ok=True)
-    
-    # Subject list
-    s_list = [f'{int(s):02d}' for s in ['01', '02', '03', '04', '05', '06', '08', '09', '10', '11', 
-              '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']]
-    
-    # Parameters
-    prestim_time = 0.2
-    raw_poststim_time = 1.25
-    aligned_poststim_time = 1.0
-    
-    # Process all subjects
-    print(f"Processing {len(s_list)} subjects...")
-    all_evokeds = process_subjects(
-        input_path, output_path, s_list,
-        prestim_time=prestim_time,
-        poststim_time=raw_poststim_time,
-        aligned_poststim_time=aligned_poststim_time
-    )    
-    if len(all_evokeds) == 0:
-        print("No subjects were successfully processed!")
-        exit()
-    
-    print(f"\n{'='*60}")
-    print(f"Computing grand average from {len(all_evokeds)} subjects...")
-    print(f"{'='*60}")
-    
-    # Compute grand average
-    grand_avg = mne.grand_average(all_evokeds)
-    topo_file = output_path / 'topoplot.png'
-    plot_grand_average_topomaps(grand_avg, str(topo_file), time_step=0.1)
-    trace_file = output_path / 'traceplot.png'
-    plot_erp_trace(grand_avg, str(trace_file))
-    print("\n✓ All processing complete!")
+    main()

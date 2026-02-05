@@ -1,11 +1,17 @@
 #/Applications/anaconda3/envs/nibabel/bin/python
+import os
 from pathlib import Path
 import argparse
 import pandas as pd
-from eeg import loading
-from eeg.stats import bootstrap_gpu, perm_gpu, compute_score
+
 from tqdm import tqdm
-import numpy as np
+from scipy.stats import pearsonr
+import matplotlib.pyplot as plt
+
+
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from eeg import loading
 
 
 class eegReliability:
@@ -23,6 +29,7 @@ class eegReliability:
 
     def load_and_average(self):
         eeg = loading.load_eeg(self.eeg_file)
+        print(f'eeg.time.nunique(): {eeg.time.nunique()}')
         eeg_filtered = eeg.loc[eeg.stimulus_set == self.data_split].reset_index(drop=True) #Filter to the right data split
         eeg_average = eeg_filtered.groupby(['time', 'channel', 'video_name', 'even']).mean(numeric_only=True)
         return eeg_average.reset_index()
@@ -34,24 +41,33 @@ class eegReliability:
             for ichannel, (channel, channel_df) in enumerate(time_df.groupby('channel')):
                 even = channel_df.loc[channel_df['even'], 'signal'].to_numpy()
                 odd = channel_df.loc[~channel_df['even'], 'signal'].to_numpy()
-                r = compute_score(even, odd).cpu().detach().numpy()
-
-                # Ensure `r` is a scalar (flatten if needed)
-                if isinstance(r, np.ndarray):
-                    r = r.item()  # Convert single-element array to scalar
-                elif hasattr(r, "__len__") and len(r) > 1:
-                    r = r[0]  # Take the first element if multi-dimensional
+                r = pearsonr(even, odd).statistic
             
-                var =  bootstrap_gpu(even, odd).cpu().detach().numpy()
-                null = perm_gpu(even, odd).cpu().detach().numpy()
                 time_dict = {'time': time, 'ichannel': ichannel, 'channel': channel, 'r': r}
-                time_dict.update({f'var_perm_{i}': val for i, val in enumerate(var)})
-                time_dict.update({f'null_perm_{i}': val for i, val in enumerate(null)})
                 results.append(time_dict)
         return pd.DataFrame(results)
 
     def save(self, df):
         df.to_parquet(f'{self.out_dir}/{self.sid}_set-{self.data_split}.parquet')
+
+    def plot_reliability(self, df):
+        # Average reliability across channels
+        df_wide = df.pivot(index='time', columns='channel', values='r')
+        arr = df_wide.to_numpy()
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(df_wide.index, arr, linewidth=1, color='lightgray', alpha=0.7)
+        plt.plot(df_wide.index, arr.mean(axis=1), color='blue', linewidth=2)
+        plt.xlabel('Time (ms)')
+        plt.ylabel('Average Reliability (r)')
+        plt.title(f'Average Reliability over Trials for {self.sid}, {self.data_split} set')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        plot_path = f'{self.out_dir}/{self.sid}_set-{self.data_split}_reliability.png'
+        plt.savefig(plot_path, dpi=300)
+        plt.close()
+        print(f'Plot saved to {plot_path}')
 
     def run(self):
         df = self.load_and_average()
@@ -59,16 +75,17 @@ class eegReliability:
         results = self.reliability(df)
         print(results.head())
         self.save(results)
+        self.plot_reliability(results)
         print('finished')
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', '-s', type=str, default='1')
+    parser.add_argument('--sid', '-s', type=str, default='2')
     parser.add_argument('--data_split', '-d', type=str, default='test')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegReliability')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/eegReliability')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-01.parquet')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/ReorganizeEEG/all_trials/sub-02.parquet')
     args = parser.parse_args()
     eegReliability(args).run()
 

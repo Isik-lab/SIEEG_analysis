@@ -61,12 +61,15 @@ $(alexnet)/.done:
 preprocess_raw: $(preprocess_raw)/.done
 $(preprocess_raw)/.done: 
 	mkdir -p $(preprocess_raw)
-	bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py" ""
+	for s in $(eeg_subs); do \
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh preprocess_raw 10:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/preprocess_raw.py -s $$s" ""; \
+	done
 # 	touch $(preprocess_raw)/.done
 
 # Exclude bad subjects identified during preprocessing
 bad_eeg_subs := 10
 eeg_subs := $(filter-out $(bad_eeg_subs), $(eeg_subs))
+
 
 # Preprocess EEG data for regression
 reorganize_eeg: $(reorganize_eeg)/.preprocess_done $(preprocess_raw) $(fmri_data)
@@ -84,7 +87,7 @@ eeg_reliability: $(eeg_reliability)/.done $(reorganize_eeg)
 $(eeg_reliability)/.done: 
 	mkdir -p $(eeg_reliability)
 	for s in $(eeg_subs); do \
-		bash $(project_folder)/batch_scripts/submit_sbatch.sh eeg_reliability 48:00:00 48 parallel "$(conda_python) $(project_folder)/scripts/eeg_reliability.py -s $$s" "--account=lisik33" "echo $${s}"
+		bash $(project_folder)/batch_scripts/submit_sbatch.sh eeg_reliability 2:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/eeg_reliability.py -s $$s" "echo $${s}"
 	done
 	touch $(eeg_reliability)/.done
 
@@ -159,7 +162,7 @@ $(roi_plotting)/.plotted:
 plot_features: $(feature_plotting)/.plotted $(feature_decoding)
 $(feature_plotting)/.plotted: 
 	mkdir -p $(feature_plotting)
-	bash $(project_folder)/batch_scripts/submit_sbatch.sh stats_testing 5:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/plot_feature_decoding.py --overwrite" ""
+	bash $(project_folder)/batch_scripts/submit_sbatch.sh stats_testing 3:00:00 12 ou_bcs_normal "$(conda_python) $(project_folder)/scripts/plot_feature_decoding.py --overwrite" ""
 # 	touch $(feature_plotting)/.plotted
 
 

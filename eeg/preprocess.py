@@ -6,144 +6,131 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from mne.preprocessing import ICA
 from scipy.signal import butter, sosfiltfilt
+from scipy.stats import median_abs_deviation
 from functools import partial
+from mne.preprocessing import find_bad_channels_lof
 
 
 # Functions in this file:
-# - detect_bad_channels
-# - process_trial
-# - align_to_photodiode
 # - load_raw_data
 # - find_events_and_create_initial_epochs
+# - align_to_photodiode
 # - perform_photodiode_alignment
+
+# - detect_bad_channels
 # - apply_filtering_and_referencing
 # - clean_epochs_and_channels
-# - apply_ica_artifact_removal
+# - apply_ica_blink_removal
 # - finalize_epochs
 # - plot_channel_timecourses
 
-def detect_bad_channels(epochs, corr_threshold=0.01,
-                        output_path='channel_timecourses.png'):
+# ============================================================================
+# Initial Processing Functions
+# ============================================================================
+
+def load_raw_data(vhdr_file):
     """
-    Detect bad channels based on variance and correlation criteria.
+    Load BrainVision data.
     
     Parameters
     ----------
-    epochs : mne.Epochs
-        The epochs object
-    corr_threshold : float
-        Minimum correlation with channel average
-    output_path : str
-        Path to save the channel time course plot
-
+    vhdr_file : str
+        Path to BrainVision .vhdr file
+        
     Returns
     -------
-    bad_channels : list
-        List of bad channel names
+    raw : mne.io.Raw
+        Loaded raw EEG data
     """
-    bad_channels = []
+    print("Loading BrainVision data...")
+    raw = mne.io.read_raw_brainvision(vhdr_file, preload=True, verbose=False)
     
-    # Get EEG channel names
-    eeg_channels = [ch for ch in epochs.ch_names if ch not in ['photodiode']]
+    # Set channel type for photodiode to misc to avoid coordinate warnings
+    if 'photodiode' in raw.ch_names:
+        raw.set_channel_types({'photodiode': 'misc'})
     
-    if len(eeg_channels) == 0:
-        return bad_channels
-    
-    # Calculate variance for each channel
-    data = epochs.get_data()  # (n_epochs, n_channels, n_times)
-    
-    # Correlation-based detection
-    # Calculate average across all good channels
-    good_data = data[:, :, :]  # all channels initially
-    channel_avg = np.mean(good_data, axis=1)  # average across channels
-    
-    correlations = []
-    for ch_idx in range(data.shape[1]):
-        if eeg_channels[ch_idx] != 'photodiode':
-            corr = np.corrcoef(data[:, ch_idx, :].flatten(), channel_avg.flatten())[0, 1]
-            correlations.append(abs(corr))
-        else:
-            correlations.append(1.0)  # photodiode channel
-    
-    corr_outliers = np.where(np.array(correlations) < corr_threshold)[0]
-    
-    # Combine bad channels
-    all_bad_indices = set(corr_outliers)
-    
-    # Convert indices to channel names
-    for idx in all_bad_indices:
-        if idx < len(eeg_channels):
-            bad_channels.append(eeg_channels[idx])
-    
-    # List of good channels
-    good_channels = [ch for ch in eeg_channels if ch not in bad_channels]
-    
-    # Get data and compute time courses averaged across epochs
-    data = epochs.get_data()  # (n_epochs, n_channels, n_times)
-    time_courses = np.mean(data, axis=0)  # (n_channels, n_times)
-    time_courses = time_courses - np.mean(time_courses, axis=1, keepdims=True)  # Demean each channel
-    
-    # Compute mean of good channels
-    if good_channels:
-        good_indices = [epochs.ch_names.index(ch) for ch in good_channels]
-        good_mean = np.mean(time_courses[good_indices, :], axis=0)
-    
-    # Create plot
-    plt.figure(figsize=(15, 8))
-    
-    # Plot each channel
-    for ch_idx, ch_name in enumerate(epochs.ch_names):
-        if ch_name in eeg_channels:
-            if ch_name in bad_channels:
-                # Plot bad channels in red
-                plt.plot(epochs.times, time_courses[ch_idx, :], 'r-', alpha=0.8, linewidth=1, label='Bad channels' if ch_name == bad_channels[0] else "")
-            else:
-                # Plot good channels in gray with low alpha
-                plt.plot(epochs.times, time_courses[ch_idx, :], 'gray', alpha=0.5, linewidth=0.8)
-    
-    # Plot mean of good channels in black
-    if good_channels:
-        plt.plot(epochs.times, good_mean, 'k-', linewidth=2, label=f'Mean of {len(good_channels)} good channels')
-    
-    # Add legend
-    plt.legend(loc='upper right')
-    
-    # Labels and title
-    plt.xlabel('Time (s)')
-    plt.ylabel('Demeaned Amplitude (V)')
-    plt.title(f'Channel Time Courses (Bad channels: {bad_channels})')
-    
-    # Grid
-    plt.grid(True, alpha=0.3)
-    
-    # Save plot
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    print(f"Channel time course plot saved to {output_path}")
-    print(f"Detected {len(bad_channels)} bad channels: {bad_channels}")
-    print(f"Good channels: {len(good_channels)}")
-    
-    return bad_channels
+    print(f"Data loaded: {raw.info['nchan']} channels, {raw.n_times} samples, {raw.info['sfreq']} Hz")
+    return raw
 
 
-def process_trial(trial_idx, epochs, search_window, acceptable_range, frames_per_second, photodiode_lpf):
-    trial_data = epochs.get_data()[trial_idx]
-    info = epochs.info
-    raw_trial = mne.io.RawArray(trial_data, info, verbose=False)
-    offset, bad_trial = align_to_photodiode(
-        raw_trial,
-        down=True,
-        search_window=search_window,
-        acceptable_range=acceptable_range,
-        frames_per_second=frames_per_second,
-        low_pass_filter=photodiode_lpf,
-    )
-    return (trial_idx, offset, bad_trial)
+def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, trials_to_remove, subj_path, rerun_initial):
+    """
+    Find events and create initial epochs.
+    
+    Parameters
+    ----------
+    raw : mne.io.Raw
+        Raw EEG data
+    prestim_time : float
+        Prestimulus period (seconds)
+    poststim_time : float
+        Poststimulus period for initial loading (seconds)
+    trials_to_remove : list
+        Trial indices to remove
+    subj_path : str
+        Path to save subject-specific files
+    rerun_initial : bool
+        Whether to rerun initial epochs creation
+        
+    Returns
+    -------
+    epochs : mne.Epochs
+        Initial epochs
+    stim_events : ndarray
+        Stimulus events array
+    stim_event_id : int
+        Stimulus event ID
+    """
+    # Find events
+    events, event_id = mne.events_from_annotations(raw, verbose=False)
+    
+    # Filter events for stimulus onset
+    stim_event_keys = [key for key in event_id.keys() if 'Stimulus' in key or 'S  ' in key]
+    
+    if len(stim_event_keys) == 0:
+        raise ValueError("No stimulus events found in data")
+    
+    # Use the first stimulus event type found
+    stim_key = stim_event_keys[0]
+    stim_event_id = event_id[stim_key]
+    stim_events = events[events[:, 2] == stim_event_id]
+    
+    if len(stim_events) == 0:
+        raise ValueError("No stimulus events found after filtering")
+    
+    # Remove predefined bad trials from events (experimental errors)
+    if trials_to_remove is not None:
+        keep_mask = np.ones(len(stim_events), dtype=bool)
+        keep_mask[trials_to_remove] = False
+        stim_events = stim_events[keep_mask]
+    
+    print(f"Found {len(stim_events)} stimulus events after removing bad trials")
+    
+    # Create epochs with initial time window
+    initial_epochs_file = os.path.join(subj_path, 'initial_epochs-epo.fif') if subj_path else None
+    if initial_epochs_file and os.path.exists(initial_epochs_file) and not rerun_initial:
+        print("Loading existing initial epochs...")
+        epochs = mne.read_epochs(initial_epochs_file, verbose=False)
+        print(f"Loaded {len(epochs)} initial epochs")
+    else:
+        print("Creating initial epochs...")
+        epochs = mne.Epochs(raw, stim_events, event_id={stim_key: stim_event_id},
+                            tmin=-prestim_time, tmax=poststim_time,
+                            baseline=None, preload=True, verbose=False)
+        
+        print(f"Created {len(epochs)} initial epochs")
+        if initial_epochs_file:
+            epochs.save(initial_epochs_file, overwrite=True)
+            print("Saved initial epochs")
+    
+    return epochs, stim_events, stim_event_id, stim_key
 
 
-def align_to_photodiode(raw,
+# ============================================================================
+# Photodiode Alignment Functions
+# ============================================================================
+
+def align_to_photodiode(raw, onset_sample_number=None,
                         frames_per_second=None,
                         low_pass_filter=50, plot_file=None, 
                         search_window=(100, 350), 
@@ -227,8 +214,8 @@ def align_to_photodiode(raw,
     
     # Convert to absolute sample number in raw data
     photosmp_abs_idx = search_window[0] + photosmp if not np.isnan(photosmp) else np.nan
-    onset_time = raw_time[photosmp_abs_idx]
-    
+    offset = photosmp_abs_idx - onset_sample_number if not np.isnan(photosmp_abs_idx) else 0
+
     # Plot if requested and trigger is outside expected range
     if plot_file is not None and (np.isnan(photosmp_abs_idx) or
         photosmp_abs_idx < acceptable_range[0] or 
@@ -257,103 +244,7 @@ def align_to_photodiode(raw,
     else:
         bad_trial = False
     
-    return photosmp_abs_idx, onset_time, bad_trial
-
-
-def load_raw_data(vhdr_file):
-    """
-    Load BrainVision data.
-    
-    Parameters
-    ----------
-    vhdr_file : str
-        Path to BrainVision .vhdr file
-        
-    Returns
-    -------
-    raw : mne.io.Raw
-        Loaded raw EEG data
-    """
-    print("Loading BrainVision data...")
-    raw = mne.io.read_raw_brainvision(vhdr_file, preload=True, verbose=False)
-    
-    # Set channel type for photodiode to misc to avoid coordinate warnings
-    if 'photodiode' in raw.ch_names:
-        raw.set_channel_types({'photodiode': 'misc'})
-    
-    print(f"Data loaded: {raw.info['nchan']} channels, {raw.n_times} samples, {raw.info['sfreq']} Hz")
-    return raw
-
-
-def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, trials_to_remove, subj_path, rerun_initial):
-    """
-    Find events and create initial epochs.
-    
-    Parameters
-    ----------
-    raw : mne.io.Raw
-        Raw EEG data
-    prestim_time : float
-        Prestimulus period (seconds)
-    poststim_time : float
-        Poststimulus period for initial loading (seconds)
-    trials_to_remove : list
-        Trial indices to remove
-    subj_path : str
-        Path to save subject-specific files
-    rerun_initial : bool
-        Whether to rerun initial epochs creation
-        
-    Returns
-    -------
-    epochs : mne.Epochs
-        Initial epochs
-    stim_events : ndarray
-        Stimulus events array
-    stim_event_id : int
-        Stimulus event ID
-    """
-    # Find events
-    events, event_id = mne.events_from_annotations(raw, verbose=False)
-    
-    # Filter events for stimulus onset
-    stim_event_keys = [key for key in event_id.keys() if 'Stimulus' in key or 'S  ' in key]
-    
-    if len(stim_event_keys) == 0:
-        raise ValueError("No stimulus events found in data")
-    
-    # Use the first stimulus event type found
-    stim_key = stim_event_keys[0]
-    stim_event_id = event_id[stim_key]
-    stim_events = events[events[:, 2] == stim_event_id]
-    
-    if len(stim_events) == 0:
-        raise ValueError("No stimulus events found after filtering")
-    
-    print(f"Found {len(stim_events)} stimulus events")
-    
-    # Create epochs with initial time window
-    initial_epochs_file = os.path.join(subj_path, 'initial_epochs-epo.fif') if subj_path else None
-    if initial_epochs_file and os.path.exists(initial_epochs_file) and not rerun_initial:
-        print("Loading existing initial epochs...")
-        epochs = mne.read_epochs(initial_epochs_file, verbose=False)
-        print(f"Loaded {len(epochs)} initial epochs")
-    else:
-        print("Creating initial epochs...")
-        epochs = mne.Epochs(raw, stim_events, event_id={stim_key: stim_event_id},
-                            tmin=-prestim_time, tmax=poststim_time,
-                            baseline=None, preload=True, verbose=False)
-        
-        # Remove predefined bad trials
-        if trials_to_remove is not None:
-            epochs.drop(trials_to_remove, reason='manual removal')
-        
-        print(f"Created {len(epochs)} initial epochs")
-        if initial_epochs_file:
-            epochs.save(initial_epochs_file, overwrite=True)
-            print("Saved initial epochs")
-    
-    return epochs, stim_events, stim_event_id, stim_key
+    return offset, bad_trial
 
 
 def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_time, 
@@ -401,8 +292,7 @@ def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_tim
     acceptable_range = (int((prestim_time - earliest_time) * frames_per_second), 
                      int((prestim_time + latest_time) * frames_per_second))
     
-    offsets, offset_times = [], []
-    good_trials_photo, bad_trials_photo = [], []
+    offsets, bad_trials_photo = [], []
     
     # Process each trial individually for photodiode alignment
     for trial_idx in tqdm(range(len(epochs)), desc='Photodiode alignment',
@@ -410,8 +300,9 @@ def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_tim
         trial_data = epochs.get_data()[trial_idx]
         info = epochs.info
         raw_trial = mne.io.RawArray(trial_data, info, verbose=False)
-        offset_index, offset_time, bad_trial = align_to_photodiode(
+        offset_index, bad_trial = align_to_photodiode(
             raw_trial,
+            onset_sample_number=int(prestim_time * frames_per_second),
             search_window=search_window,
             acceptable_range=acceptable_range,
             frames_per_second=frames_per_second,
@@ -419,34 +310,37 @@ def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_tim
             plot_file=os.path.join(subj_path, 'photodiode_plots', f'photodiode_trial{trial_idx+1}.png') if subj_path else None
         )
         offsets.append(offset_index)
-        offset_times.append(offset_time)
+
         if bad_trial:
             bad_trials_photo.append(trial_idx)
-        else:
-            good_trials_photo.append(trial_idx)
 
         if trial_idx == 10 and debug:
             break
     
-    # Remove bad photodiode trials
-    if bad_trials_photo:
-        offsets = np.delete(offsets, bad_trials_photo)
-        offset_times = np.delete(offset_times, bad_trials_photo)
-
-    events_remaining = stim_events[np.isin(np.arange(len(stim_events)), good_trials_photo)]
-
     # Apply offsets to event sample numbers
-    events_shifted = events_remaining.copy()
-    events_shifted[:, 0] = events_remaining[:, 0] + np.array(offsets).astype(int)
+    if debug:
+        print("Debug mode: processed only first 10 trials for photodiode alignment")
+        events_shifted = stim_events[:11].copy()
+    else:
+        events_shifted = stim_events.copy()
+    events_shifted[:, 0] = events_shifted[:, 0] + np.array(offsets).astype(int)
 
     # Create final epochs with shifted events using original raw data
     epochs_final = mne.Epochs(raw, events_shifted, event_id={stim_key: stim_event_id},
                               tmin=-prestim_time, tmax=aligned_poststim_time,
                               baseline=None, preload=True, verbose=False)
     
+    epochs_final.drop(bad_trials_photo, reason='Bad photodiode signal')
+
+    epochs_final.drop_channels('photodiode')  # Remove photodiode channel after alignment
+    
     print(f"Photodiode alignment complete: {len(epochs_final)} epochs after alignment (removed {len(bad_trials_photo)} bad trials)")
     return epochs_final
 
+
+# ============================================================================
+# Low/High Pass Filter
+# ============================================================================
 
 def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
     """
@@ -470,10 +364,6 @@ def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
     
     if not (filtered_epochs_file and os.path.exists(filtered_epochs_file) and not rerun_filtered):
         print("Applying filtering and referencing...")
-        # Remove photodiode channel
-        if 'photodiode' in epochs_final.ch_names:
-            epochs_final.drop_channels('photodiode')
-        
         epochs_final.filter(l_freq=1, h_freq=None, method='iir', 
                            iir_params=dict(order=4, ftype='butter'), verbose=False) # High-pass filter (1 Hz)
         epochs_final.filter(l_freq=None, h_freq=60, method='iir',
@@ -487,8 +377,98 @@ def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
     
     return epochs_final
 
+# ============================================================================
+# Detect Bad Channels and Trials
+# ============================================================================
 
-def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned):
+def detect_bad_channels(epochs, mad_threshold=3,
+                        output_path='channel_timecourses.png'):
+    """
+    Detect bad channels based on variance and correlation criteria.
+    
+    Parameters
+    ----------
+    epochs : mne.Epochs
+        The epochs object
+    mad_threshold : float
+        Threshold for Median Absolute Deviation to identify bad channels
+    output_path : str
+        Path to save the channel time course plot
+
+    Returns
+    -------
+    bad_channels : list
+        List of bad channel names
+    """
+    bad_channels = []
+    
+    # Get EEG channel names
+    eeg_channels = [ch for ch in epochs.ch_names if ch not in ['photodiode']]
+    
+    if len(eeg_channels) == 0:
+        return bad_channels
+    
+    data = epochs.get_data()
+    mad = median_abs_deviation(data, axis=(0, 2))
+    bad_channel_idx = np.where(mad > mad_threshold)[0]
+    bad_channels = [eeg_channels[idx] for idx in bad_channel_idx]
+    epochs.drop_channels(bad_channels)
+    
+    # List of good channels
+    good_channels = [ch for ch in eeg_channels if ch not in bad_channels]
+    
+    # Get data and compute time courses averaged across epochs
+    data = epochs.get_data()  # (n_epochs, n_channels, n_times)
+    time_courses = np.mean(data, axis=0)  # (n_channels, n_times)
+    time_courses = time_courses - np.mean(time_courses, axis=1, keepdims=True)  # Demean each channel
+    
+    # Compute mean of good channels
+    if good_channels:
+        good_indices = [epochs.ch_names.index(ch) for ch in good_channels]
+        good_mean = np.mean(time_courses[good_indices, :], axis=0)
+    
+    # Create plot
+    plt.figure(figsize=(15, 8))
+    
+    # Plot each channel
+    for ch_idx, ch_name in enumerate(epochs.ch_names):
+        if ch_name in eeg_channels:
+            if ch_name in bad_channels:
+                # Plot bad channels in red
+                plt.plot(epochs.times, time_courses[ch_idx, :], 'r-', alpha=0.8, linewidth=1, label='Bad channels' if ch_name == bad_channels[0] else "")
+            else:
+                # Plot good channels in gray with low alpha
+                plt.plot(epochs.times, time_courses[ch_idx, :], 'gray', alpha=0.5, linewidth=0.8)
+    
+    # Plot mean of good channels in black
+    if good_channels:
+        plt.plot(epochs.times, good_mean, 'k-', linewidth=2, label=f'Mean of {len(good_channels)} good channels')
+    
+    # Add legend
+    plt.legend(loc='upper right')
+    
+    # Labels and title
+    plt.xlabel('Time (s)')
+    plt.ylabel('Demeaned Amplitude (V)')
+    plt.title(f'Channel Time Courses (Bad channels: {bad_channels})')
+    
+    # Grid
+    plt.grid(True, alpha=0.3)
+    
+    # Save plot
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Channel time course plot saved to {output_path}")
+    print(f"Detected {len(bad_channels)} bad channels: {bad_channels}")
+    print(f"Good channels: {len(good_channels)}")
+    
+    return bad_channels
+
+
+def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned, 
+                              mad_threshold=3):
     """
     Reject bad epochs and interpolate bad channels.
     
@@ -500,26 +480,32 @@ def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned):
         Path to save subject-specific files
     rerun_cleaned : bool
         Whether to rerun cleaning
+    mad_threshold : float
+        Threshold for Median Absolute Deviation to identify bad epochs
         
     Returns
     -------
     epochs_final : mne.Epochs
         Cleaned epochs
     """
-    print('Starting epoch cleaning and channel interpolation...')
+    print('Starting epoch  and channel cleaning...')
     cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
     
-    if not (cleaned_epochs_file and os.path.exists(cleaned_epochs_file) and not rerun_cleaned):
-        print("Starting epoch rejection and channel interpolation...")
-        # Reject bad epochs based on peak-to-peak amplitude (lenient thresholds)
-        reject_criteria = {'eeg': 400e-6}  # 400 µV peak-to-peak (more lenient)
-        flat_criteria = {'eeg': 1e-8}     # 1 µV flat signal
-        
+    if not (cleaned_epochs_file and os.path.exists(cleaned_epochs_file) and not rerun_cleaned):        
+        # Drop bad channels
+        detect_bad_channels(epochs_final,
+                            output_path=os.path.join(subj_path, 'channel_timecourses.png') if subj_path else 'channel_timecourses.png')
+
         # Copy epochs before rejection to plot bad ones
         epochs_before_rejection = epochs_final.copy()
         num_epochs_before = len(epochs_final)
+
+        # Median Absolute Deviation Filtering to identify bad epochs
+        data = epochs_final.get_data()
+        mad = median_abs_deviation(data, axis=(1,2))
+        bad_epochs = np.where(mad > mad_threshold)[0]
+        epochs_final.drop(bad_epochs, reason='MAD outlier')
         
-        epochs_final.drop_bad(reject=reject_criteria, flat=flat_criteria, verbose=False)
         num_epochs_after = len(epochs_final)
         num_removed = num_epochs_before - num_epochs_after
         
@@ -568,28 +554,16 @@ def clean_epochs_and_channels(epochs_final, subj_path, rerun_cleaned):
             plt.tight_layout()
             plt.savefig(os.path.join(subj_path, 'epoch_rejection_summary.png'), dpi=150, bbox_inches='tight')
             plt.close()
-        
-        # Detect and drop bad channels (lenient criteria)
-        bad_channels = detect_bad_channels(epochs_final, corr_threshold=0.01,
-                                           output_path=os.path.join(subj_path, 'channel_timecourses_after_cleaning.png') if subj_path else None)
-        if bad_channels:
-            print(f"Detected bad channels: {bad_channels}")
-            epochs_final.info['bads'] = bad_channels
-            epochs_final.drop_channels(bad_channels)
-        else:
-            print("No bad channels detected")
-            
-        print(f"Cleaning complete: {len(epochs_final)} epochs")
-        if cleaned_epochs_file:
-            epochs_final.save(cleaned_epochs_file, overwrite=True)
-            print("Saved cleaned epochs")
     
     return epochs_final
 
+# ============================================================================
+# ICA to Remove Blinks
+# ============================================================================
 
-def apply_ica_artifact_removal(epochs_final, subj_path, rerun_ica):
+def apply_ica_blink_removal(epochs_final, subj_path, rerun_ica):
     """
-    Apply ICA for artifact removal.
+    Apply ICA for blink removal.
     
     Parameters
     ----------
@@ -652,6 +626,11 @@ def apply_ica_artifact_removal(epochs_final, subj_path, rerun_ica):
     return epochs_final
 
 
+# ============================================================================
+# Remove frontal channels and baseline correction
+# ============================================================================
+
+
 def finalize_epochs(epochs_final, prestim_time, subj_path):
     """
     Finalize epochs by removing frontal channels and applying baseline correction.
@@ -680,6 +659,12 @@ def finalize_epochs(epochs_final, prestim_time, subj_path):
     # Apply baseline correction 
     print("Applying baseline correction...")
     epochs_final.apply_baseline(baseline=(-prestim_time, 0))
+
+    if subj_path:
+        epochs_final.plot_psd(fmin=1, fmax=60, average=False, show=False)
+        plt.suptitle('Final Epochs Power Spectral Density', fontsize=16)
+        plt.savefig(os.path.join(subj_path, 'final_epochs_psd.png'), dpi=150, bbox_inches='tight')
+        plt.close()
     
     # Save final epochs
     if subj_path:

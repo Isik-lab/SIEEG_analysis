@@ -34,8 +34,9 @@ class reorganize_eeg:
     def load_eeg(self, trials):
         print('loading eeg from MNE epochs...')
         # Load the MNE epochs file instead of .mat file
-        epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/{self.sid}_preproc-epo.fif'
-        
+        # epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/{self.sid}_preproc-epo.fif'
+        epochs_file = f'{self.data_dir}/interim/PreprocessRaw/{self.sid}/filtered_epochs-epo.fif'
+
         if not os.path.exists(epochs_file):
             raise FileNotFoundError(f"MNE epochs file not found: {epochs_file}")
         
@@ -74,11 +75,10 @@ class reorganize_eeg:
         original_trial_indices = eeg_dict['original_trial_indices']
         
         # Filter trials_df to only include trials that have corresponding EEG data
-        kept_trials_df = trials_df[trials_df['trial'].isin(original_trial_indices)].copy()
-        kept_trials_df.set_index('trial', inplace=True)
+        trials_df_ = trials_df.set_index('trial')
         
         print(f"Total trials in dataframe: {len(trials_df)}")
-        print(f"Trials with EEG data: {len(kept_trials_df)}")
+        print(f"Trials with EEG data: {len(trials_df_)}")
         
         iter_top = tqdm(zip(original_trial_indices, eeg_dict['trial']),
                         total=len(eeg_dict['trial']), desc='Reorganizing EEG')
@@ -86,7 +86,7 @@ class reorganize_eeg:
         for original_trial_idx, trial_eeg in iter_top:
             
             # Get condition, response, video_name, stimulus_set
-            vals = kept_trials_df.loc[original_trial_idx][['condition', 'response', 'video_name', 'stimulus_set']]
+            vals = trials_df_.loc[original_trial_idx][['condition', 'response', 'video_name', 'stimulus_set']]
             cond, resp, name, stim = vals
 
             if bool(cond) and (not bool(resp)):
@@ -158,7 +158,7 @@ class reorganize_eeg:
         plt.tight_layout()
         
         # Save the plot
-        plot_path = os.path.join(self.out_dir, f'{self.sid}_average_timecourse.png')
+        plot_path = os.path.join(self.out_dir, 'all_trials', f'{self.sid}_average_timecourse.png')
         plt.savefig(plot_path, dpi=300)
         plt.close()
         print(f'Plot saved to {plot_path}')
@@ -171,15 +171,15 @@ class reorganize_eeg:
 
         self.save(eeg_df)
         eeg_averaged = self.average_repetitions(eeg_df)
-        self.save_time_df(eeg_averaged)
+        # self.save_time_df(eeg_averaged)
         self.plot_average_timecourse(eeg_df)
         print('All done!')
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sid', '-s', type=int, default=1)
-    parser.add_argument('--resample_rate', type=float, default=400)
+    parser.add_argument('--sid', '-s', type=int, default=2)
+    parser.add_argument('--resample_rate', type=float, default=150)
     parser.add_argument('--n_samples_to_smooth', type=int, default=5)
     parser.add_argument('--data_dir', '-d', type=str,
                          default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data')
