@@ -11,6 +11,17 @@ from scipy.stats import wilcoxon, t
 from mne.stats import permutation_cluster_1samp_test
 
 
+def corr(x, y):
+    """Pearson correlation between x and y along axis 0 (columnwise)."""
+    x = np.asarray(x)
+    y = np.asarray(y)
+    xm = x - x.mean(axis=0)
+    ym = y - y.mean(axis=0)
+    num = (xm * ym).sum(axis=0)
+    denom = np.sqrt((xm ** 2).sum(axis=0)) * np.sqrt((ym ** 2).sum(axis=0))
+    return num / denom
+
+
 def calculate_p(r_null, r_true, n_perm, H0):
     # Get the p-value depending on the type of test
     denominator = n_perm + 1

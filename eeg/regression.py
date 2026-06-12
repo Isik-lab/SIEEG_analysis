@@ -11,8 +11,13 @@ from sklearn.metrics import make_scorer
 import torch 
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest, f_regression
-from deepjuice.alignment import TorchRidgeGCV
-from himalaya.ridge import GroupRidgeCV
+try:
+    from deepjuice.alignment import TorchRidgeGCV
+    _HAS_DEEPJUICE = True
+except ImportError:
+    TorchRidgeGCV = None
+    _HAS_DEEPJUICE = False
+from himalaya.ridge import GroupRidgeCV, RidgeCV
 from himalaya.backend import set_backend
 from himalaya.scoring import r2_score_split, r2_score
 from kneed import KneeLocator
@@ -86,8 +91,8 @@ class StandardScaler:
             self
         """
         if not isinstance(X, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor, got {type(X)}")
-        
+            X = torch.from_numpy(np.asarray(X)).float()
+
         # Store device and dtype for later use
         self.device_ = X.device
         self.dtype_ = X.dtype
@@ -116,8 +121,8 @@ class StandardScaler:
             raise RuntimeError("Scaler must be fitted before transform. Call fit() first.")
         
         if not isinstance(X, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor, got {type(X)}")
-        
+            X = torch.from_numpy(np.asarray(X)).float()
+
         # Ensure tensors are on the same device and dtype
         mean = self.mean_.to(X.device).to(X.dtype)
         std = self.std_.to(X.device).to(X.dtype)
@@ -461,26 +466,44 @@ def ridge(X, y,
     alphas = np.matmul(interval, powers).flatten()
     alphas.sort()
 
-    pipe = TorchRidgeGCV(alphas=alphas,
-                        alpha_per_target=True,
-                        device=device,
-                        scale_X=False,
-                        fit_intercept=False,
-                        scoring=scoring)
-    pipe.fit(X_train_scaled, y_train_scaled)
+    if _HAS_DEEPJUICE:
+        pipe = TorchRidgeGCV(alphas=alphas,
+                            alpha_per_target=True,
+                            device=device,
+                            scale_X=False,
+                            fit_intercept=False,
+                            scoring=scoring)
+        pipe.fit(X_train_scaled, y_train_scaled)
 
-    out = dict()
-    if X_test is not None: 
-        yhat = pipe.predict(X_test_scaled)
-        out['yhat'] = yhat
+        out = dict()
+        if X_test is not None:
+            yhat = pipe.predict(X_test_scaled)
+            out['yhat'] = yhat
+        if return_alpha:
+            out['alpha'] = pipe.alpha_
+        if return_betas:
+            out['betas'] = pipe.coef_.T
+    else:
+        # Fallback when deepjuice is unavailable: use himalaya's RidgeCV,
+        # which picks a per-target alpha via cross-validation but (unlike
+        # TorchRidgeGCV) does not support a custom `scoring` function.
+        set_backend("torch_cuda" if device == "cuda" else "torch")
+        pipe = RidgeCV(alphas=alphas, fit_intercept=False)
+        pipe.fit(X_train_scaled, y_train_scaled)
+
+        out = dict()
+        if X_test is not None:
+            yhat = pipe.predict(X_test_scaled)
+            out['yhat'] = yhat
+        if return_alpha:
+            out['alpha'] = pipe.best_alphas_
+        if return_betas:
+            out['betas'] = pipe.coef_.T
+
     if y_test is not None:
-        out['score'] = compute_score(y_test_scaled, yhat, 
+        out['score'] = compute_score(y_test_scaled, yhat,
                                     score_type=scoring,
                                     adjusted=X_train_scaled.size()[1])
-    if return_alpha:
-        out['alpha'] = pipe.alpha_
-    if return_betas:
-        out['betas'] = pipe.coef_.T
     return out
 
 
