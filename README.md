@@ -3,7 +3,7 @@
 
  ## Data
 
-The raw and preprocessed data are available here: **<[https://osf.io/2vnw4/]>**
+The raw and preprocessed data are available here: https://osf.io/2vnw4/
 
 The analysis scripts consume processed data under `data/interim/`:
 
