@@ -6,7 +6,11 @@ import matplotlib.pyplot as plt
 from glob import glob
 from pathlib import Path
 from tqdm import tqdm
-from src.stats import calculate_p, cluster_correction
+from eeg.stats import calculate_p
+try:
+    from eeg.stats import cluster_correction
+except ImportError:
+    cluster_correction = None
 from scipy import ndimage
 from matplotlib import gridspec
 from shutil import copyfile
@@ -29,19 +33,30 @@ def load_timecourse(files):
     # Group stats
     # Variance
     var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
-    scores_var = mean_df[var_cols].to_numpy()
-    mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
-    mean_df.drop(columns=var_cols, inplace=True)
+    if var_cols:
+        scores_var = mean_df[var_cols].to_numpy()
+        mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
+        mean_df.drop(columns=var_cols, inplace=True)
+    else:
+        mean_df['low_ci'] = mean_df['r']
+        mean_df['high_ci'] = mean_df['r']
 
     # P-values
     null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
-    scores_null = mean_df[null_cols].to_numpy().T
-    scores = mean_df['r'].to_numpy().T
-    ps = calculate_p(scores_null, scores, 5000, 'greater')
-    mean_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T,
-                                      verbose=True,
-                                      desc=f'cluster correction')
-    return mean_df.drop(columns=null_cols)
+    if null_cols:
+        scores_null = mean_df[null_cols].to_numpy().T
+        scores = mean_df['r'].to_numpy().T
+        ps = calculate_p(scores_null, scores, 5000, 'greater')
+        if cluster_correction is not None:
+            mean_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T,
+                                              verbose=True,
+                                              desc=f'cluster correction')
+        else:
+            mean_df['p'] = ps
+        mean_df = mean_df.drop(columns=null_cols)
+    else:
+        mean_df['p'] = 1.0
+    return mean_df
 
 
 # Plot the results

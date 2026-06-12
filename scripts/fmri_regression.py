@@ -5,11 +5,13 @@ from eeg import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from eeg.stats import perm_gpu, bootstrap_gpu
-from eeg.regression import ridge, feature_scaler, ols
+try:
+    from eeg.stats import perm_gpu, bootstrap_gpu
+except ImportError:
+    perm_gpu, bootstrap_gpu = None, None
+from eeg.regression import ridge, feature_scaler, ols, compute_score
 import json
 from tqdm import tqdm
-from eeg.stats import compute_score
 from eeg.tools import dict_to_tensor
 
 
@@ -26,10 +28,11 @@ class fMRIRegression:
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
         self.smoothing = args.smoothing
+        eeg_stem = self.eeg_file.split('/')[-1].split('.parquet')[0]
         if self.roi_mean:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_rois.parquet'
+            self.out_name = f'{self.out_dir}/{eeg_stem}_rois.parquet'
         elif not self.roi_mean:
-            self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_full-brain'
+            self.out_name = f'{self.out_dir}/{eeg_stem}_full-brain'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.behavior_categories = {'expanse': 'rating-expanse', 'object': 'rating-object',
@@ -121,6 +124,8 @@ class fMRIRegression:
 
             # Compute stats
             if self.roi_mean and self.run_stats:
+                if perm_gpu is None or bootstrap_gpu is None:
+                    raise ImportError('run_stats requires perm_gpu/bootstrap_gpu in eeg.stats, which are not implemented')
                 perm = perm_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
                                 adjusted=X_train.size()[1])
                 var = bootstrap_gpu(y_true, y_pred, n_perm=self.n_perm, score_type=self.scoring,
@@ -189,6 +194,10 @@ def main():
                         help='the number of permutations for stats')
     parser.add_argument('--run_stats', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to run permutation/bootstrap stats')
+    parser.add_argument('--sid', type=str, default=None,
+                        help='subject id (currently unused; eeg_file determines the subject)')
+    parser.add_argument('--data_split', type=str, default=None,
+                        help='currently unused; train/test split is determined internally from the behavior data')
     args = parser.parse_args()
     fMRIRegression(args).run()
 
