@@ -5,8 +5,11 @@ from eeg import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from eeg.stats import compute_score, perm_gpu, bootstrap_gpu
-from eeg.regression import ridge, feature_scaler, ols
+try:
+    from eeg.stats import perm_gpu, bootstrap_gpu
+except ImportError:
+    perm_gpu, bootstrap_gpu = None, None
+from eeg.regression import ridge, feature_scaler, ols, compute_score
 import json
 from tqdm import tqdm
 from sklearn.model_selection import KFold
@@ -48,7 +51,9 @@ class Back2Back:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
-        self.out_name = f'{self.out_dir}/{self.eeg_file.split('/')[-1].split('.parquet')[0]}_feature-{'-'.join(self.feature)}.parquet'
+        eeg_stem = self.eeg_file.split('/')[-1].split('.parquet')[0]
+        feature_str = '-'.join(self.feature)
+        self.out_name = f'{self.out_dir}/{eeg_stem}_feature-{feature_str}.parquet'
         print(vars(self)) 
         self.fmri_dir = args.fmri_dir
         self.motion_energy = args.motion_energy
@@ -163,6 +168,8 @@ class Back2Back:
             # Evaluate against y and compute stats
             reg2_scores[time_ind] = compute_score(y_test, yhat)
             if self.run_stats:
+                if perm_gpu is None or bootstrap_gpu is None:
+                    raise ImportError('run_stats requires perm_gpu/bootstrap_gpu in eeg.stats, which are not implemented')
                 reg2_scores_null.append(torch.unsqueeze(perm_gpu(y_test, yhat, n_perm=self.n_perm), 2))
                 reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(y_test, yhat, n_perm=self.n_perm), 2))
 
@@ -220,7 +227,7 @@ def main():
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
-    parser.add_argument('--run_stats', action=argparse.BooleanOptionalAction, default=True,
+    parser.add_argument('--run_stats', action=argparse.BooleanOptionalAction, default=False,
                         help='whether to run permutation/bootstrap stats')
     args = parser.parse_args()
     Back2Back(args).run()

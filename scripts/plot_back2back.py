@@ -5,12 +5,16 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from glob import glob
 from tqdm import tqdm 
-from src.stats import calculate_p, cluster_correction
+from eeg.stats import calculate_p
+try:
+    from eeg.stats import cluster_correction
+except ImportError:
+    cluster_correction = None
 from scipy import ndimage
 from pathlib import Path
 import os
 from matplotlib.lines import Line2D
-from src.temporal import bin_time_windows_cut
+from eeg.temporal import bin_time_windows_cut
 import shutil
 
 
@@ -107,20 +111,28 @@ class PlotBack2Back:
         ### Group stats###
         # Variance
         var_cols = [col for col in df_lat.columns if 'var_perm_' in col]
-        scores_var = df_lat[var_cols].to_numpy()
-        df_lat['low_ci'], df_lat['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
-        df_lat.drop(columns=var_cols, inplace=True)
+        if var_cols:
+            scores_var = df_lat[var_cols].to_numpy()
+            df_lat['low_ci'], df_lat['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
+            df_lat.drop(columns=var_cols, inplace=True)
+        else:
+            df_lat['low_ci'] = df_lat['score']
+            df_lat['high_ci'] = df_lat['score']
 
         # P-values
         null_cols = [col for col in df_lat.columns if 'null_perm_' in col]
-        stats_df = []
-        for _, roi_df in df_lat.groupby('roi_name'):
-            scores_null = roi_df[null_cols].to_numpy().T
-            scores = roi_df['score'].to_numpy().T
-            roi_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
-            roi_df.drop(columns=null_cols, inplace=True)
-            stats_df.append(roi_df)
-        return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
+        if null_cols:
+            stats_df = []
+            for _, roi_df in df_lat.groupby('roi_name'):
+                scores_null = roi_df[null_cols].to_numpy().T
+                scores = roi_df['score'].to_numpy().T
+                roi_df['p'] = calculate_p(scores_null, scores, 5000, 'greater')
+                roi_df.drop(columns=null_cols, inplace=True)
+                stats_df.append(roi_df)
+            return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
+        else:
+            df_lat['p'] = 1.0
+            return df_lat
 
     def _calculate_timecourse(self, df):
         """Calculate statistics for the dataset"""
@@ -131,24 +143,34 @@ class PlotBack2Back:
         
         # Calculate variance
         var_cols = [col for col in mean_df.columns if 'var_perm_' in col]
-        scores_var = mean_df[var_cols].to_numpy()
-        mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
-        mean_df.drop(columns=var_cols, inplace=True)
-        
+        if var_cols:
+            scores_var = mean_df[var_cols].to_numpy()
+            mean_df['low_ci'], mean_df['high_ci'] = np.percentile(scores_var, [2.5, 97.5], axis=1)
+            mean_df.drop(columns=var_cols, inplace=True)
+        else:
+            mean_df['low_ci'] = mean_df['score']
+            mean_df['high_ci'] = mean_df['score']
+
         # Calculate p-values
         null_cols = [col for col in mean_df.columns if 'null_perm_' in col]
-        stats_df = []
-        for roi_name, roi_df in mean_df.groupby('roi_name'):
-            stats_df.append(self._process_roi_stats(roi_df, null_cols, roi_name))
-            
-        return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
+        if null_cols:
+            stats_df = []
+            for roi_name, roi_df in mean_df.groupby('roi_name'):
+                stats_df.append(self._process_roi_stats(roi_df, null_cols, roi_name))
+            return pd.concat(stats_df, ignore_index=True).reset_index(drop=True)
+        else:
+            mean_df['p'] = 1.0
+            return mean_df
 
     def _process_roi_stats(self, roi_df, null_cols, roi_name):
         """Process statistics for a specific ROI"""
         scores_null = roi_df[null_cols].to_numpy().T
         scores = roi_df['score'].to_numpy().T
         ps = calculate_p(scores_null, scores, 5000, 'greater')
-        roi_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T)
+        if cluster_correction is not None:
+            roi_df['p'] = cluster_correction(scores.T, ps.T, scores_null.T)
+        else:
+            roi_df['p'] = ps
         roi_df.drop(columns=null_cols, inplace=True)
         return roi_df
     
