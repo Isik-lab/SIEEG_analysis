@@ -30,8 +30,7 @@ smoothing; catch and false-alarm trials removed), producing the
 ## Analyses
 
 - **EEG reliability** — `scripts/eeg_reliability.py`
-- **ROI decoding** (EEG → fMRI ROI) — `scripts/fmri_regression.py` → `plot_roi_decoding.py`
-- **Whole-brain decoding** — `scripts/fmri_regression.py --no-roi_mean` → `fmri_whole_brain.py`
-- **Back-to-back regression** — `scripts/back_to_back.py` → `plot_back2back.py`
+- **fMRI decoding** (EEG → fMRI ROI) — `scripts/fmri_regression.py` 
+- **Back-to-back regression** — `scripts/back_to_back.py`
 
 Subjects are 1–6 and 8–21 (no subject 7). The fMRI regressions expect a GPU.
