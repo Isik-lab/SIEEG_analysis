@@ -419,9 +419,71 @@ def banded_ridge(X_train, y_train, X_test, y_test,
     return {'r2': r2, 'r2_split': r2_split, 'yhat': y_pred}
 
 
+def _torch_ridge_gcv(X, y, X_test, alphas, scoring='pearsonr',
+                     return_alpha=False, return_betas=False):
+    """DeepJuice-free replacement for TorchRidgeGCV.
+
+    Selects a per-target ridge penalty by maximizing the exact leave-one-out
+    score over `alphas`, then refits on all data and predicts `X_test`. For
+    scoring='pearsonr' the selection metric is the leave-one-out Pearson r
+    (scale invariant, matching TorchRidgeGCV); otherwise negative LOO MSE is
+    used, which ranks alphas identically to R²/explained variance.
+
+    Unlike himalaya's RidgeCV (R²-scored), this does not over-regularize
+    low-SNR targets, where R² selection collapses to a near-constant fit.
+    Inputs are assumed already standardized (fit_intercept=False).
+    """
+    squeeze_out = y.ndim == 1
+    y2 = y.unsqueeze(1) if squeeze_out else y
+    alphas_t = torch.as_tensor(np.asarray(alphas, dtype=float),
+                               dtype=X.dtype, device=X.device)
+
+    # Economy SVD: X = U diag(S) Vh. Ridge hat matrix is U diag(d) U^T with
+    # filter factors d = S^2 / (S^2 + alpha), giving closed-form LOO residuals.
+    U, S, Vh = torch.linalg.svd(X, full_matrices=False)
+    S2 = S ** 2
+    UTy = U.T @ y2                                   # (k, t)
+    U2 = U ** 2                                       # (n, k)
+    y_c = y2 - y2.mean(dim=0, keepdim=True)
+    sse_y = (y_c ** 2).sum(dim=0)                     # (t,)
+    t = y2.shape[1]
+
+    best_metric = torch.full((t,), float('-inf'), dtype=X.dtype, device=X.device)
+    best_alpha = torch.zeros(t, dtype=X.dtype, device=X.device)
+    for a in alphas_t:
+        d = S2 / (S2 + a)                             # (k,)
+        yhat = U @ (d.unsqueeze(1) * UTy)            # (n, t)
+        h = (U2 * d.unsqueeze(0)).sum(dim=1)         # (n,) hat diagonal
+        denom = (1.0 - h).clamp_min(1e-8).unsqueeze(1)
+        yhat_loo = (yhat - h.unsqueeze(1) * y2) / denom
+        if scoring == 'pearsonr':
+            yl_c = yhat_loo - yhat_loo.mean(dim=0, keepdim=True)
+            num = (yl_c * y_c).sum(dim=0)
+            den = torch.sqrt((yl_c ** 2).sum(dim=0) * sse_y).clamp_min(1e-12)
+            metric = num / den
+        else:
+            metric = -((yhat_loo - y2) ** 2).mean(dim=0)
+        metric = torch.nan_to_num(metric, nan=float('-inf'))
+        improve = metric > best_metric
+        best_metric = torch.where(improve, metric, best_metric)
+        best_alpha = torch.where(improve, a.expand_as(best_alpha), best_alpha)
+
+    inv = S.unsqueeze(1) / (S2.unsqueeze(1) + best_alpha.unsqueeze(0))   # (k, t)
+    coef = Vh.T @ (inv * UTy)                         # (p, t)
+    out = {}
+    if X_test is not None:
+        yhat_test = X_test @ coef                     # (m, t)
+        out['yhat'] = yhat_test.squeeze(1) if squeeze_out else yhat_test
+    if return_alpha:
+        out['alpha'] = best_alpha
+    if return_betas:
+        out['betas'] = coef.T
+    return out
+
+
 def ridge(X, y,
           X_test=None, y_test=None,
-          groups=None, 
+          groups=None,
           alpha_start=-2, alpha_stop=5,
           scoring='pearsonr', device='cuda',
           n_components=None,
@@ -484,21 +546,14 @@ def ridge(X, y,
         if return_betas:
             out['betas'] = pipe.coef_.T
     else:
-        # Fallback when deepjuice is unavailable: use himalaya's RidgeCV,
-        # which picks a per-target alpha via cross-validation but (unlike
-        # TorchRidgeGCV) does not support a custom `scoring` function.
-        set_backend("torch_cuda" if device == "cuda" else "torch")
-        pipe = RidgeCV(alphas=alphas, fit_intercept=False)
-        pipe.fit(X_train_scaled, y_train_scaled)
-
-        out = dict()
-        if X_test is not None:
-            yhat = pipe.predict(X_test_scaled)
-            out['yhat'] = yhat
-        if return_alpha:
-            out['alpha'] = pipe.best_alphas_
-        if return_betas:
-            out['betas'] = pipe.coef_.T
+        # Fallback when deepjuice is unavailable. himalaya's RidgeCV selects
+        # alpha by R², which over-regularizes low-SNR targets (e.g. EEG->fMRI),
+        # so use a Pearson-scored leave-one-out ridge that mirrors TorchRidgeGCV.
+        out = _torch_ridge_gcv(X_train_scaled, y_train_scaled,
+                               X_test_scaled if X_test is not None else None,
+                               alphas, scoring=scoring,
+                               return_alpha=return_alpha, return_betas=return_betas)
+        yhat = out.get('yhat')
 
     if y_test is not None:
         out['score'] = compute_score(y_test_scaled, yhat,
