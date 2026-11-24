@@ -1,10 +1,11 @@
 import os
 import numpy as np
 import mne
-import matplotlib.pyplot as plt
 from pathlib import Path
-from tqdm import tqdm
 import argparse
+from scipy.ndimage import convolve1d
+import matplotlib.pyplot as plt
+
 
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -12,40 +13,33 @@ from eeg import preprocess as ep
 
 def load_existing_epochs(subj_path, kwargs):
     """Load the most advanced existing epochs file that doesn't need rerunning."""
-    cleaned_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif')
-    if os.path.exists(cleaned_file) and not kwargs.get('rerun_epoch_cleaning', False):
-        print("Loading existing cleaned epochs...")
-        epochs = mne.read_epochs(cleaned_file, verbose=False)
-        print(f"Loaded {len(epochs)} cleaned epochs")
-        return epochs, 'cleaned'
-    
     frontal_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif')
     if os.path.exists(frontal_file) and not kwargs.get('rerun_frontal_drop', False):
         print("Loading existing frontal drop epochs...")
         epochs = mne.read_epochs(frontal_file, verbose=False)
         print(f"Loaded {len(epochs)} frontal drop epochs")
-        return epochs, 'frontal_drop'
+        return epochs, 'epochs_frontal_drop'
     
     ica_file = os.path.join(subj_path, 'ica_epochs-epo.fif')
     if os.path.exists(ica_file) and not kwargs.get('rerun_ica', False):
         print("Loading existing ICA epochs...")
         epochs = mne.read_epochs(ica_file, verbose=False)
         print(f"Loaded {len(epochs)} ICA epochs")
-        return epochs, 'ica'
+        return epochs, 'epochs_ica'
     
     filtered_file = os.path.join(subj_path, 'filtered_epochs-epo.fif')
     if os.path.exists(filtered_file) and not kwargs.get('rerun_filtered', False):
         print("Loading existing filtered epochs...")
         epochs = mne.read_epochs(filtered_file, verbose=False)
         print(f"Loaded {len(epochs)} filtered epochs")
-        return epochs, 'filtered'
+        return epochs, 'epochs_filtered'
     
     aligned_file = os.path.join(subj_path, 'aligned_epochs-epo.fif')
     if os.path.exists(aligned_file) and not kwargs.get('rerun_aligned', False):
         print("Loading existing aligned epochs...")
         epochs = mne.read_epochs(aligned_file, verbose=False)
         print(f"Loaded {len(epochs)} aligned epochs")
-        return epochs, 'aligned'
+        return epochs, 'epochs_aligned'
     
     return None, None
 
@@ -83,8 +77,6 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
         Path to save subject-specific plots
     **kwargs : dict
         Keyword arguments for controlling rerun behavior:
-        - rerun_initial : bool, default False
-            If False, load initial_epochs-epo.fif if exists. If True, rerun initial epochs and all subsequent steps.
         - rerun_aligned : bool, default False
             If False, load aligned_epochs-epo.fif if exists. If True, rerun alignment and all subsequent steps.
         - rerun_filtered : bool, default False
@@ -93,8 +85,6 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
             If False, load ica_epochs-epo.fif if exists. If True, rerun ICA and all subsequent steps.
         - rerun_frontal_drop : bool, default False
             If True, rerun frontal channel removal and all subsequent steps.
-        - rerun_epoch_cleaning : bool, default False
-            If False, load cleaned_epochs-epo.fif if exists. If True, rerun cleaning and all subsequent steps.
 
     Returns
     -------
@@ -103,14 +93,12 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
     """
     
     # Get rerun flags from kwargs
-    rerun_initial = kwargs.get('rerun_initial', False)
-    rerun_aligned = kwargs.get('rerun_aligned', False) or rerun_initial
+    rerun_aligned = kwargs.get('rerun_aligned', False)
     rerun_filtered = kwargs.get('rerun_filtered', False) or rerun_aligned
     rerun_ica = kwargs.get('rerun_ica', False) or rerun_filtered
     rerun_frontal_drop = kwargs.get('rerun_frontal_drop', False) or rerun_ica
-    rerun_epoch_cleaning = kwargs.get('rerun_epoch_cleaning', False) or rerun_frontal_drop
-    
-    print(f"Rerun flags - Initial: {rerun_initial}, Aligned: {rerun_aligned}, Filtered: {rerun_filtered}, ICA: {rerun_ica}, Frontal Drop: {rerun_frontal_drop}, Cleaned: {rerun_epoch_cleaning}")
+
+    print(f"Rerun flags - Aligned: {rerun_aligned}, Filtered: {rerun_filtered}, ICA: {rerun_ica}, Frontal Drop: {rerun_frontal_drop}")
     
     # Verify file exists
     vhdr_path = Path(vhdr_file)
@@ -118,71 +106,35 @@ def preprocess_eeg_pipeline(vhdr_file, prestim_time=0.2,
         raise FileNotFoundError(f"BrainVision file not found: {vhdr_file}")
     
     # Try to load existing epochs from the most advanced stage
-    epochs_final, loaded_stage = load_existing_epochs(subj_path, kwargs)
+    epochs, stage = load_existing_epochs(subj_path, kwargs)
+    print(f"Loaded epochs at stage: {stage}" if epochs is not None else "No existing epochs found.")
     
-    if epochs_final is None:
+    if epochs is None:
+        print('Starting from raw data processing...')
         # Need to process from the beginning
-        aligned_epochs_file = os.path.join(subj_path, 'aligned_epochs-epo.fif') if subj_path else None
-        if aligned_epochs_file and os.path.exists(aligned_epochs_file) and not rerun_aligned:
-            print("Loading existing aligned epochs...")
-            epochs_final = mne.read_epochs(aligned_epochs_file, verbose=False)
-            print(f"Loaded {len(epochs_final)} aligned epochs")
-        else:
-            # Need to load raw data and process from beginning
-            raw = ep.load_raw_data(vhdr_file)
-            
-            # Find events and create initial epochs
-            epochs, stim_events, stim_event_id, stim_key = ep.find_events_and_create_initial_epochs(
-                raw, prestim_time, poststim_time, trials_to_remove, subj_path, rerun_initial)
-            
-            # Perform photodiode alignment
-            epochs_final = ep.perform_photodiode_alignment(
-                epochs, raw, prestim_time, aligned_poststim_time,
-                photodiode_lpf, earliest_time, latest_time, subj_path, debug,
-                stim_events, stim_key, stim_event_id)
-            
-            # Save aligned epochs
-            if aligned_epochs_file:
-                epochs_final.save(aligned_epochs_file, overwrite=True)
-                print("Saved aligned epochs")
+        # Need to load raw data and process from beginning
+        raw = ep.load_raw_data(vhdr_file)
         
-        # Apply filtering and referencing
-        epochs_final = ep.apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered)
+        # Find events and create initial epochs
+        epochs, stim_events, stim_event_id, stim_key = ep.find_events_and_create_initial_epochs(
+            raw, prestim_time, poststim_time, trials_to_remove, subj_path)
         
-        # Apply ICA for blink removal
-        epochs_final = ep.apply_ica_blink_removal(epochs_final, subj_path, rerun_ica)
+        # Perform photodiode alignment
+        epochs = ep.perform_photodiode_alignment(
+            epochs, raw, prestim_time, aligned_poststim_time,
+            photodiode_lpf, earliest_time, latest_time, subj_path, debug,
+            stim_events, stim_key, stim_event_id)
 
-        # Define file paths for subsequent steps
-        frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
-        cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
-
-        if rerun_frontal_drop or (frontal_drop_epochs_file and not os.path.exists(frontal_drop_epochs_file)):
-            # Drop frontal channels epochs
-            epochs_final = ep.remove_frontal_channels(epochs_final, prestim_time, subj_path)
-            # Save frontal drop epochs
-            if frontal_drop_epochs_file:
-                epochs_final.save(frontal_drop_epochs_file, overwrite=True)
-                print("Saved frontal drop epochs")
-
-        if rerun_epoch_cleaning or (cleaned_epochs_file and not os.path.exists(cleaned_epochs_file)):
-            # Clean epochs and interpolate bad channels
-            epochs_final = ep.clean_epochs(epochs_final, subj_path, rerun_epoch_cleaning)
-    else:
-        # Apply any subsequent steps that need rerunning
-        frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
-        cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
-        
-        if loaded_stage not in ['frontal_drop', 'cleaned'] and (rerun_frontal_drop or (frontal_drop_epochs_file and not os.path.exists(frontal_drop_epochs_file))):
-            epochs_final = ep.remove_frontal_channels(epochs_final, prestim_time, subj_path)
-            if frontal_drop_epochs_file:
-                epochs_final.save(frontal_drop_epochs_file, overwrite=True)
-                print("Saved frontal drop epochs")
-        
-        if loaded_stage != 'cleaned' and (rerun_epoch_cleaning or (cleaned_epochs_file and not os.path.exists(cleaned_epochs_file))):
-            epochs_final = ep.clean_epochs(epochs_final, subj_path, rerun_epoch_cleaning)
+    # Apply filtering and referencing
+    epochs = ep.apply_filtering_and_referencing(epochs, subj_path, rerun_filtered)
     
-    print(f"Preprocessing pipeline complete: {len(epochs_final)} final epochs")
-    return epochs_final
+    # Apply ICA for blink removal
+    epochs = ep.apply_ica_blink_removal(epochs, subj_path, rerun_ica)
+
+    # Remove frontal channels
+    epochs = ep.remove_frontal_channels(epochs, subj_path, rerun_frontal_drop)
+
+    return epochs
 
 # ============================================================================
 # MAIN EXECUTION
@@ -200,7 +152,8 @@ class preprocess_raw:
         self.rerun_filtered = args.rerun_filtered
         self.rerun_ica = args.rerun_ica
         self.rerun_frontal_drop = args.rerun_frontal_drop
-        self.rerun_epoch_cleaning = args.rerun_epoch_cleaning
+        self.final_sfreq = args.final_sfreq
+        self.smoothing_window_ms = args.smoothing_window_ms
         self.input_path = os.path.join(self.data_dir, 'data', 'raw', 'SIdyads_EEG')
         self.output_path = os.path.join(self.data_dir, 'data', 'interim', 'PreprocessRaw', f'sub-{self.sid}')
         Path(self.output_path).mkdir(parents=True, exist_ok=True)
@@ -220,40 +173,46 @@ class preprocess_raw:
         else:
             trials_to_remove = None
 
-        try:
-            # Preprocess
-            epochs_preprocessed = preprocess_eeg_pipeline(
-                str(vhdr_file),  # Pass full path with .vhdr extension
-                prestim_time=self.prestim_time,
-                poststim_time=self.poststim_time,
-                aligned_poststim_time=self.aligned_poststim_time,
-                trials_to_remove=trials_to_remove,
-                subj_path=self.output_path,
-                rerun_initial=self.rerun_initial,
-                rerun_aligned=self.rerun_aligned,
-                rerun_filtered=self.rerun_filtered,
-                rerun_ica=self.rerun_ica,
-                rerun_frontal_drop=self.rerun_frontal_drop,
-                rerun_epoch_cleaning=self.rerun_epoch_cleaning
-            )
+        # Preprocess
+        epochs_preprocessed = preprocess_eeg_pipeline(
+            str(vhdr_file),  # Pass full path with .vhdr extension
+            prestim_time=self.prestim_time,
+            poststim_time=self.poststim_time,
+            aligned_poststim_time=self.aligned_poststim_time,
+            trials_to_remove=trials_to_remove,
+            subj_path=self.output_path,
+            rerun_initial=self.rerun_initial,
+            rerun_aligned=self.rerun_aligned,
+            rerun_filtered=self.rerun_filtered,
+            rerun_ica=self.rerun_ica,
+            rerun_frontal_drop=self.rerun_frontal_drop
+        )
 
-            if epochs_preprocessed is None:
-                print(f"Preprocessing failed for sub-{self.sid}")
-                return
-
-        except Exception as e:
-            print(f"Error processing subject {self.sid}: {e}")
-            import traceback
-            traceback.print_exc()
+        if epochs_preprocessed is None:
+            print(f"Preprocessing failed for sub-{self.sid}")
             return
 
-        # Very last step: Apply baseline correction
+        # Very last steps: Apply baseline correction
         print("Applying baseline correction...")
         epochs_preprocessed.apply_baseline(baseline=(-self.prestim_time, 0))
+
+        # Resample epochs to reduce memory usage
+        print(f"Resampling epochs from {epochs_preprocessed.info['sfreq']} Hz to {self.final_sfreq} Hz")
+        epochs_preprocessed.resample(self.final_sfreq)
+        
+        # Apply smoothing to boost SNR
+        n_samples_to_smooth = int((self.smoothing_window_ms / 1000) * self.final_sfreq)
+        print(f"Applying smoothing with window size {self.smoothing_window_ms} ms")
+        kernel = np.ones(n_samples_to_smooth) / n_samples_to_smooth
+        epochs_preprocessed.apply_function(lambda data: convolve1d(data, kernel))
 
         # Save as epochs
         epochs_file = os.path.join(self.output_path, f'sub-{self.sid}_preproc-epo.fif')
         epochs_preprocessed.save(epochs_file, overwrite=True)
+
+        epochs_preprocessed.average().detrend().plot_joint()
+        plt.savefig(os.path.join(self.output_path, 'final_epochs_joint_plot.png'), dpi=150)
+        plt.close()
 
         print(f"✓ Processing complete for sub-{self.sid}!")
 
@@ -270,6 +229,10 @@ def main():
                          help='Poststimulus period for initial loading (seconds)')
     parser.add_argument('--aligned_poststim_time', type=float, default=1.0,
                          help='Poststimulus period after photodiode alignment (seconds)')
+    parser.add_argument('--final_sfreq', type=float, default=500,
+                         help='Final sampling frequency in Hz')
+    parser.add_argument('--smoothing_window_ms', type=float, default=10,
+                         help='Smoothing window in milliseconds')
     parser.add_argument('--rerun_initial',  action=argparse.BooleanOptionalAction, default=False,
                          help='Rerun initial epochs and all subsequent steps')
     parser.add_argument('--rerun_aligned',  action=argparse.BooleanOptionalAction, default=False,
@@ -280,8 +243,6 @@ def main():
                          help='Rerun ICA and all subsequent steps')
     parser.add_argument('--rerun_frontal_drop', action=argparse.BooleanOptionalAction, default=False,
                          help='Rerun frontal channel removal and all subsequent steps')
-    parser.add_argument('--rerun_epoch_cleaning',  action=argparse.BooleanOptionalAction, default=False,
-                         help='Rerun cleaning and all subsequent steps')
     args = parser.parse_args()
     preprocess_raw(args).run()
 

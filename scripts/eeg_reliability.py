@@ -23,8 +23,8 @@ class eegReliability:
         else:
             self.sid = args.sid
         print(vars(self))
-        self.eeg_file = args.eeg_file
-        self.out_dir = args.out_dir
+        self.eeg_file = args.out_dir + f'/ReorganizeEEG/all_trials/{self.sid}.parquet'
+        self.out_dir = f'{args.out_dir}/{self.process}'
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
 
     def load_and_average(self):
@@ -83,9 +83,7 @@ def main():
     parser.add_argument('--sid', '-s', type=str, default='2')
     parser.add_argument('--data_split', '-d', type=str, default='test')
     parser.add_argument('--out_dir', '-o', type=str, help='output directory',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/eegReliability')
-    parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/ReorganizeEEG/all_trials/sub-02.parquet')
+                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim')
     args = parser.parse_args()
     eegReliability(args).run()
 

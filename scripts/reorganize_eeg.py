@@ -7,7 +7,6 @@ from glob import glob
 from tqdm import tqdm
 import numpy as np
 import mne
-from scipy.ndimage import convolve1d
 import matplotlib.pyplot as plt
 
 import sys
@@ -21,8 +20,7 @@ class reorganize_eeg:
         self.process = 'ReorganizeEEG'
         self.data_dir = args.data_dir
         self.sid = f'sub-{str(args.sid).zfill(2)}'
-        self.resample_rate = args.resample_rate
-        self.n_samples_to_smooth = args.n_samples_to_smooth
+        self.debug = args.debug
         print(vars(self))
         self.out_dir = f'{self.data_dir}/interim/{self.process}'
         Path(f'{self.out_dir}/all_trials').mkdir(parents=True, exist_ok=True)
@@ -41,28 +39,19 @@ class reorganize_eeg:
         
         epochs = mne.read_epochs(epochs_file, verbose=False)
         
+
         # Resample epochs to reduce memory usage
-        print(f"Resampling epochs from {epochs.info['sfreq']} Hz to {self.resample_rate} Hz")
-        epochs.resample(self.resample_rate)
-        
-        # Apply smoothing using MNE
-        print(f"Applying smoothing with window size {self.n_samples_to_smooth}")
-        kernel = np.ones(self.n_samples_to_smooth) / self.n_samples_to_smooth
-        epochs.apply_function(lambda data: convolve1d(data, kernel))
-        
-        # Get the original trial indices for the kept epochs
-        original_trial_indices = epochs.selection
-        
-        print(f"Original epochs: {len(epochs.drop_log)}, Remaining epochs: {len(epochs)}")
-        print(f"Original trial indices for kept epochs: {original_trial_indices[:10]}...")
+        if self.debug:
+            resample_rate = 100
+            print(f"Resampling epochs from {epochs.info['sfreq']} Hz to {resample_rate} Hz for debugging")
+            epochs.resample(resample_rate)
         
         eeg_dict = {
             'label': np.array(epochs.ch_names),
             'trial': epochs.get_data().astype(np.float32),  # Make it (1, n_epochs) to match [0] indexing
             'time': epochs.times * 1000,    # Make it (1, n_epochs) to match [0] indexing
-            'original_trial_indices': original_trial_indices,  # Add the mapping to original trial indices
+            'original_trial_indices': epochs.selection,  # Add the mapping to original trial indices
         }
-        
         del epochs 
 
         print(f"Loaded {len(eeg_dict['trial'])} epochs, {len(eeg_dict['label'])} channels, {len(eeg_dict['time'])} time points")
@@ -179,7 +168,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--sid', '-s', type=int, default=2)
     parser.add_argument('--resample_rate', type=float, default=400)
-    parser.add_argument('--n_samples_to_smooth', type=int, default=5)
+    parser.add_argument('--debug', action='store_true', help='Enter debug mode, resample to 100 Hz')
     parser.add_argument('--data_dir', '-d', type=str,
                          default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data')
     args = parser.parse_args()

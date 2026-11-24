@@ -19,8 +19,10 @@ from eeg.stats import get_onset_latency, bootstrap_latency_ci, \
 def load_files(files):
     df = []
     for file in tqdm(files, desc='Loading files'):
-        subj_df = pd.read_parquet(file)
-        subj_df['eeg_subj_id'] = file.split('/')[-1].split('_')[0]
+        subj = file.split('/')[-1].split('_')[0]
+        if subj != 'sub-06':
+            subj_df = pd.read_parquet(file)
+            subj_df['eeg_subj_id'] = subj
         df.append(subj_df)
     df = pd.concat(df, ignore_index=True)
     print('Finished loading files')
@@ -38,16 +40,16 @@ def stat_summary(df, n_samples=1000, seed=42):
                                   seed=seed)
         low_ci, high_ci = bootstrap_ci(corr_data, seed=seed,
                                        n_bootstrap=n_samples)
-        latency_ci = bootstrap_latency_ci(corr_data, times,
-                                            n_bootstrap=n_samples,
-                                            n_permutations=n_samples,
-                                            seed=seed, verbose=True)
+        # latency_ci = bootstrap_latency_ci(corr_data, times,
+        #                                     n_bootstrap=n_samples,
+        #                                     n_permutations=n_samples,
+        #                                     seed=seed, verbose=True)
         
         onset_stats.append({
             'feature': feature,
             'onset_latency': stats['onset_latency_ms'],
-            'onset_low_ci': latency_ci[0],
-            'onset_high_ci': latency_ci[1],
+            # 'onset_low_ci': latency_ci[0],
+            # 'onset_high_ci': latency_ci[1],
         })
 
         plotting_stats.append(pd.DataFrame({
@@ -131,30 +133,24 @@ class PlotFeatureDecoding:
         self.out_csv = args.out_csv
         self.regression_dir = args.regression_dir 
         Path(self.out_dir).mkdir(exist_ok=True, parents=True)
-        self.simplified_plotting = args.simplified_plotting
         self.overwrite = args.overwrite 
         self.final_plot = args.final_plot
         print(vars(self))
 
     def run(self):
-        if self.simplified_plotting:
-            features = ['agent_distance', 'communication']
-            title_names = ['agent distance', 'communication']
-            colors = ['#c83e73', '#59157e']
-            out_plot = 'feature_plot.pdf'
-        else:
-            features = ['expanse', 'object', 'agent_distance', 'facingness',
-                        'joint_action', 'communication', 'valence', 'arousal']
-            title_names = ['spatial expanse', 'object directedness',
-                        'agent distance', 'facingness',
-                        'joint action', 'communication', 'valence', 'arousal']
-            colors = ['#fa7d5e', '#e95462', '#c83e73',
-                      '#a3307e', '#7e2482', '#59157e', '#331067', '#120d31']
-            out_plot = 'supplement_features'
+        features = ['expanse', 'object', 'agent_distance', 'facingness',
+                    'joint_action', 'communication', 'valence', 'arousal']
+        title_names = ['spatial expanse', 'object directedness',
+                    'agent distance', 'facingness',
+                    'joint action', 'communication', 'valence', 'arousal']
+        colors = ['#fa7d5e', '#e95462', '#c83e73',
+                    '#a3307e', '#7e2482', '#59157e', '#331067', '#120d31']
+        out_plot = 'supplement_features'
 
         if self.overwrite or not Path(f'{self.out_dir}/{self.out_csv}').is_file():
             files = glob(f'{self.regression_dir}/*features.parquet')
             df = load_files(files)
+            df.to_csv(f'{self.out_dir}/all_{self.out_csv}', index=False)
             print(df.feature.unique())
             df_time, df_onset = stat_summary(df)
             df_time.to_csv(f'{self.out_dir}/{self.out_csv}', index=False)
@@ -172,8 +168,6 @@ class PlotFeatureDecoding:
 
 def main():
     parser = argparse.ArgumentParser(description='Plot the ROI regression results')
-    parser.add_argument('--simplified_plotting', action=argparse.BooleanOptionalAction, default=False,
-                        help='plot all or only select features')
     parser.add_argument('--overwrite', action=argparse.BooleanOptionalAction, default=True,
                         help='whether to redo the summary statistics')
     parser.add_argument('--final_plot', '-p', type=str,

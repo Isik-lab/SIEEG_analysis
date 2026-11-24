@@ -64,7 +64,6 @@ class FeatureRegression:
                                             dtype=torch.float32, device=self.device)
 
         scores = {}
-        alpha_values = {}
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc=f'Predict features from EEG', leave=True)
         for time_ind in outer_iterator:

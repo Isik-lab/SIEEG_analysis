@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from mne.preprocessing import ICA
 from scipy.signal import butter, sosfiltfilt
-from scipy.stats import median_abs_deviation
-from functools import partial
 from pyprep import NoisyChannels
 
 
@@ -16,13 +14,8 @@ from pyprep import NoisyChannels
 # - find_events_and_create_initial_epochs
 # - align_to_photodiode
 # - perform_photodiode_alignment
-
-# - detect_bad_channels
 # - apply_filtering_and_referencing
-# - clean_epochs_and_channels
 # - apply_ica_blink_removal
-# - finalize_epochs
-# - plot_channel_timecourses
 
 # ============================================================================
 # Initial Processing Functions
@@ -62,7 +55,7 @@ def load_raw_data(vhdr_file):
     return raw
 
 
-def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, trials_to_remove, subj_path, rerun_initial):
+def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, trials_to_remove, subj_path):
     """
     Find events and create initial epochs.
     
@@ -78,8 +71,7 @@ def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, tria
         Trial indices to remove
     subj_path : str
         Path to save subject-specific files
-    rerun_initial : bool
-        Whether to rerun initial epochs creation
+
         
     Returns
     -------
@@ -116,25 +108,15 @@ def find_events_and_create_initial_epochs(raw, prestim_time, poststim_time, tria
     print(f"Found {len(stim_events)} stimulus events after removing bad trials")
     
     # Create epochs with initial time window
-    initial_epochs_file = os.path.join(subj_path, 'initial_epochs-epo.fif') if subj_path else None
-    if initial_epochs_file and os.path.exists(initial_epochs_file) and not rerun_initial:
-        print("Loading existing initial epochs...")
-        epochs = mne.read_epochs(initial_epochs_file, verbose=False)
-        print(f"Loaded {len(epochs)} initial epochs")
-    else:
-        print("Creating initial epochs...")
-        epochs = mne.Epochs(raw, stim_events, event_id={stim_key: stim_event_id},
-                            tmin=-prestim_time, tmax=poststim_time,
-                            baseline=None, preload=True, verbose=False)
-        
-        print(f"Created {len(epochs)} initial epochs")
-        if initial_epochs_file:
-            epochs.save(initial_epochs_file, overwrite=True)
-            print("Saved initial epochs")
-
-            epochs.average().detrend().plot_joint()
-            plt.savefig(os.path.join(subj_path, 'initial_epochs_joint_plot.png'), dpi=150)
-            plt.close()
+    epochs = mne.Epochs(raw, stim_events, event_id={stim_key: stim_event_id},
+                        tmin=-prestim_time, tmax=poststim_time,
+                        baseline=None, preload=True, verbose=False)
+    
+    print(f"Created {len(epochs)} initial epochs")
+    if subj_path:
+        epochs.average().detrend().plot_joint()
+        plt.savefig(os.path.join(subj_path, 'initial_epochs_joint_plot.png'), dpi=150)
+        plt.close()
     
     return epochs, stim_events, stim_event_id, stim_key
 
@@ -348,6 +330,13 @@ def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_tim
     epochs_final.drop_channels('photodiode')  # Remove photodiode channel after alignment
     
     print(f"Photodiode alignment complete: {len(epochs_final)} epochs after alignment (removed {len(bad_trials_photo)} bad trials)")
+    
+    # Save aligned epochs
+    aligned_epochs_file = os.path.join(subj_path, 'aligned_epochs-epo.fif') if subj_path else None
+    if aligned_epochs_file:
+        epochs_final.save(aligned_epochs_file, overwrite=True)
+        print("Saved aligned epochs")
+    
     return epochs_final
 
 
@@ -355,13 +344,13 @@ def perform_photodiode_alignment(epochs, raw, prestim_time, aligned_poststim_tim
 # Low/High Pass Filter
 # ============================================================================
 
-def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
+def apply_filtering_and_referencing(epochs, subj_path, rerun_filtered):
     """
     Apply filtering and referencing to epochs.
     
     Parameters
     ----------
-    epochs_final : mne.Epochs
+    epochs : mne.Epochs
         Epochs to filter and reference
     subj_path : str
         Path to save subject-specific files
@@ -370,119 +359,26 @@ def apply_filtering_and_referencing(epochs_final, subj_path, rerun_filtered):
         
     Returns
     -------
-    epochs_final : mne.Epochs
+    epochs : mne.Epochs
         Filtered and referenced epochs
     """
     filtered_epochs_file = os.path.join(subj_path, 'filtered_epochs-epo.fif') if subj_path else None
     
     if not (filtered_epochs_file and os.path.exists(filtered_epochs_file) and not rerun_filtered):
         print("Applying filtering and referencing...")
-        epochs_final.filter(l_freq=1, h_freq=None, method='iir', 
+        epochs_filtered = epochs.copy()
+        epochs_filtered.filter(l_freq=1, h_freq=None, method='iir', 
                            iir_params=dict(order=4, ftype='butter'), verbose=False) # High-pass filter (1 Hz)
-        epochs_final.filter(l_freq=None, h_freq=60, method='iir',
+        epochs_filtered.filter(l_freq=None, h_freq=60, method='iir',
                            iir_params=dict(order=4, ftype='butter'), verbose=False) # Low-pass filter (60 Hz)
-        mne.set_eeg_reference(epochs_final, ref_channels='average', verbose=False)
+        mne.set_eeg_reference(epochs_filtered, ref_channels='average', verbose=False)
         
-        print(f"Filtering complete: {len(epochs_final)} epochs")
+        print(f"Filtering complete: {len(epochs_filtered)} epochs")
         if filtered_epochs_file:
-            epochs_final.save(filtered_epochs_file, overwrite=True)
+            epochs_filtered.save(filtered_epochs_file, overwrite=True)
             print("Saved filtered epochs")
-    
-    return epochs_final
-
-# ============================================================================
-# Detect Bad Trials
-# ============================================================================
-
-
-def clean_epochs(epochs, subj_path, rerun_epoch_cleaning):
-    """
-    Reject bad epochs.
-    
-    Parameters
-    ----------
-    epochs : mne.Epochs
-        Epochs to clean
-    subj_path : str
-        Path to save subject-specific files
-    rerun_epoch_cleaning : bool
-        Whether to rerun cleaning
-        
-    Returns
-    -------
-    epochs_clean : mne.Epochs
-        Cleaned epochs
-    """
-    print('Starting epoch cleaning...')
-    cleaned_epochs_file = os.path.join(subj_path, 'cleaned_epochs-epo.fif') if subj_path else None
-    
-    if not (cleaned_epochs_file and os.path.exists(cleaned_epochs_file) and not rerun_epoch_cleaning):        
-        from autoreject import AutoReject 
-        # Copy epochs before rejection to plot bad ones
-        epochs_clean = epochs.copy()
-        num_epochs_before = len(epochs)
-
-        # Median Absolute Deviation Filtering to identify bad epochs
-        ar = AutoReject(verbose=True)
-        ar.fit(epochs)
-        reject_log = ar.get_reject_log(epochs)
-        # Drop the bad epochs
-        epochs_clean.drop(reject_log.bad_epochs, reason='AutoReject') 
-        if subj_path:
-            reject_log.plot('horizontal')
-            plt.savefig(os.path.join(subj_path, 'autoreject_log.png'), dpi=150)
-            plt.close()
-        
-        num_epochs_after = len(epochs_clean)
-        num_removed = num_epochs_before - num_epochs_after
-        
-        # Get indices of bad epochs
-        bad_indices = [i for i, log in enumerate(epochs.drop_log) if log]
-        
-        print(f"Epoch rejection: {num_epochs_before} -> {num_epochs_after} epochs ({num_removed} removed)")
-        
-        # Plot summary of rejected epochs
-        if subj_path:
-            _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-            
-            # Bar plot of epochs before/after
-            ax1.bar(['Before Rejection', 'After Rejection'], [num_epochs_before, num_epochs_after], 
-                    color=['red', 'green'])
-            ax1.set_ylabel('Number of Epochs')
-            ax1.set_title(f'Epoch Rejection Summary\n{num_removed} epochs removed')
-            ax1.grid(True, alpha=0.3)
-            
-            # Time course of bad epochs (average across channels)
-            if bad_indices:
-                bad_epochs = epochs[bad_indices]
-                bad_data = bad_epochs.get_data()  # (n_bad_epochs, n_channels, n_times)
-                bad_avg_channels = np.mean(bad_data, axis=1)  # (n_bad_epochs, n_times)
-                bad_avg_channels = bad_avg_channels - bad_avg_channels.mean(axis=1, keepdims=True) # Demean to plot on one axis
-                
-                # Plot up to 10 bad epochs to avoid clutter
-                max_plot = min(10, len(bad_indices))
-                for i in range(max_plot):
-                    ax2.plot(bad_epochs.times, bad_avg_channels[i], 
-                            label=f'Epoch {bad_indices[i]}', alpha=0.7)
-                
-                if len(bad_indices) > max_plot:
-                    ax2.text(0.02, 0.98, f'Showing first {max_plot} of {len(bad_indices)} bad epochs', 
-                            transform=ax2.transAxes, fontsize=8, verticalalignment='top')
-                
-                ax2.set_xlabel('Time (s)')
-                ax2.set_ylabel('Amplitude (V)')
-                ax2.set_title(f'Channel-averaged time courses of rejected epochs')
-                ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-                ax2.grid(True, alpha=0.3)
-            else:
-                ax2.text(0.5, 0.5, 'No epochs rejected', ha='center', va='center', transform=ax2.transAxes)
-                ax2.set_title('Rejected Epochs')
-            
-            plt.tight_layout()
-            plt.savefig(os.path.join(subj_path, 'epoch_rejection_summary.png'), dpi=150, bbox_inches='tight')
-            plt.close()
-    
-    return epochs_clean
+        return epochs_filtered
+    return epochs
 
 # ============================================================================
 # ICA to Remove Blinks
@@ -555,7 +451,8 @@ def apply_ica_blink_removal(epochs, subj_path, rerun_ica):
             epochs_ica.save(ica_epochs_file, overwrite=True)
             print("Saved ICA epochs")
     
-    return epochs_ica
+        return epochs_ica
+    return epochs
 
 
 # ============================================================================
@@ -563,36 +460,39 @@ def apply_ica_blink_removal(epochs, subj_path, rerun_ica):
 # ============================================================================
 
 
-def remove_frontal_channels(epochs, prestim_time, subj_path):
+def remove_frontal_channels(epochs, subj_path, rerun_frontal_drop):
     """
-    Finalize epochs by removing frontal channels and applying baseline correction.
+    Remove frontal channels from epochs.
     
     Parameters
     ----------
     epochs : mne.Epochs
-        Epochs to finalize
-    prestim_time : float
-        Prestimulus period for baseline correction
+        Epochs to process
     subj_path : str
         Path to save subject-specific files
+    rerun_frontal_drop : bool
+        Whether to rerun frontal channel removal
         
     Returns
     -------
     epochs : mne.Epochs
-        Corrected epochs
+        Epochs with frontal channels removed
     """
-    # Remove frontal electrodes to reduce eye movement artifacts
-    frontal_channels = ['Fp1', 'Fp2', 'AF7', 'AF3', 'AFz', 'AF4', 'AF8']
-    existing_frontal = [ch for ch in frontal_channels if ch in epochs.ch_names]
-    if existing_frontal:
-        print(f"Removing frontal channels: {existing_frontal}")
-        epochs.drop_channels(existing_frontal)
-
+    frontal_drop_epochs_file = os.path.join(subj_path, 'frontal_drop_epochs-epo.fif') if subj_path else None
     
-    # Save final epochs
-    if subj_path:
-        final_epochs_file = os.path.join(subj_path, 'final_epochs-epo.fif')
-        epochs.save(final_epochs_file, overwrite=True)
-        print("Saved final epochs")
+    if not (frontal_drop_epochs_file and os.path.exists(frontal_drop_epochs_file) and not rerun_frontal_drop):
+        # Remove frontal electrodes to reduce eye movement artifacts
+        epochs_posterior = epochs.copy()
+        frontal_channels = ['Fp1', 'Fp2', 'AF7', 'AF3', 'AFz', 'AF4', 'AF8']
+        existing_frontal = [ch for ch in frontal_channels if ch in epochs_posterior.ch_names]
+        if existing_frontal:
+            print(f"Removing frontal channels: {existing_frontal}")
+            epochs_posterior.drop_channels(existing_frontal)
+
+        # Save frontal drop epochs
+        if frontal_drop_epochs_file:
+            epochs_posterior.save(frontal_drop_epochs_file, overwrite=True)
+            print("Saved frontal drop epochs")
+        return epochs_posterior
     
     return epochs
