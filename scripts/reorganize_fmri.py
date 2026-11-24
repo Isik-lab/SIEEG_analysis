@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import nibabel as nib
 from tqdm import tqdm
-from eeg.mri import gen_mask
+from src.mri import gen_mask
 from glob import glob
 from nilearn.image import smooth_img
 
@@ -62,30 +62,7 @@ class ReorganizefMRI:
 
             # Add the stream labels
             for stream in self.streams:
-                # Try legacy 'streams' folder first, then fall back to 'localizers' where
-                # the NSD-derived stream ROI masks live in this dataset.
-                stream_upper = stream.upper()
-                stream_patterns = [
-                    f'{self.data_dir}/raw/streams/sub-{sub}/sub-{sub}*roi-{stream}*mask.nii.gz',
-                    f'{self.data_dir}/raw/streams/sub-{sub}/sub-{sub}*roi-{stream_upper}*mask.nii.gz',
-                    f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{stream}*mask.nii.gz',
-                    f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{stream}*roi-mask.nii.gz',
-                    f'{self.data_dir}/raw/localizers/sub-{sub}/*roi-{stream_upper}*mask.nii.gz',
-                ]
-                matches = []
-                for p in stream_patterns:
-                    matches = glob(p)
-                    if matches:
-                        stream_mask_file = matches[0]
-                        break
-                if not matches:
-                    # Provide a helpful error listing nearby files to aid debugging
-                    avail = glob(f'{self.data_dir}/raw/localizers/sub-{sub}/*')
-                    raise FileNotFoundError(
-                        f'No stream mask found for sub-{sub}, stream={stream}.\n'
-                        f'Tried patterns: {stream_patterns}\n'
-                        f'Files in localizers/sub-{sub}: {avail}'
-                    )
+                stream_mask_file = glob(f'{self.data_dir}/raw/streams/sub-{sub}/sub-{sub}*roi-{stream}*mask.nii.gz')[0]
                 stream_mask = nib.load(stream_mask_file).get_fdata().astype('bool')
                 stream_reliability_mask = np.logical_and(reliability_mask, stream_mask)
                 stream_labels[stream_reliability_mask] = stream
@@ -116,7 +93,7 @@ class ReorganizefMRI:
         return metadata, response_data
     
     def load_stimulus_data(self):
-        stim_data = pd.read_csv(f'{self.data_dir}/raw/CaptionData/stimulus_data_w_500ms_ratings.csv')
+        stim_data = pd.read_csv(f'{self.data_dir}/raw/CaptionData/stimulus_data.csv')
 
         # get the sorting indices to combine the train and test fMRI data
         temp = stim_data[['video_name', 'stimulus_set']]
@@ -137,7 +114,7 @@ class ReorganizefMRI:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', '-data', type=str,
-                         default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data')
+                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data')
     parser.add_argument('--fwhm', type=int, default=None,
                         help='smoothing fwhm')        
     args = parser.parse_args()

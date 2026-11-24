@@ -1,12 +1,12 @@
 import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
-from eeg import loading, regression, tools, stats
+from src import loading, regression, tools, stats
 import torch
 from pathlib import Path
 import numpy as np
-from eeg.stats import compute_score, perm_gpu, bootstrap_gpu
-from eeg.regression import ridge, feature_scaler, ols
+from src.stats import compute_score, perm_gpu, bootstrap_gpu
+from src.regression import ridge, feature_scaler, ols
 import json
 from tqdm import tqdm
 from sklearn.model_selection import KFold
@@ -44,7 +44,6 @@ class Back2Back:
         self.alpha_stop = args.alpha_stop
         self.scoring = args.scoring
         self.n_perm = args.n_perm
-        self.run_stats = args.run_stats
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.out_dir = args.out_dir
         self.eeg_file = args.eeg_file
@@ -106,11 +105,9 @@ class Back2Back:
                                             time_map, 'cv_score')
         results = results.join(cv_results)
 
-        if scores_null is not None and scores_var is not None:
-            null_df = self.reorganize_dist(scores_null, 'null', results)
-            var_df = self.reorganize_dist(scores_var, 'var', results)
-            results = results.join(null_df).join(var_df)
-        return results.reset_index()
+        null_df = self.reorganize_dist(scores_null, 'null', results)
+        var_df = self.reorganize_dist(scores_var, 'var', results)
+        return results.join(null_df).join(var_df).reset_index()
     
     def b2b_regression(self, train, test):
         #Define y
@@ -128,8 +125,7 @@ class Back2Back:
         X2_train, X2_test, _ = dict_to_tensor(train, test, self.feature)
 
         reg1_scores, reg2_scores = {}, {}
-        reg2_scores_null = [] if self.run_stats else None
-        reg2_scores_var = [] if self.run_stats else None
+        reg2_scores_null, reg2_scores_var = [], []
         outer_iterator = tqdm(train['eeg'].keys(), total=len(train['eeg']),
                               desc='Back to back regression', leave=True)
         for time_ind in outer_iterator:
@@ -162,18 +158,11 @@ class Back2Back:
 
             # Evaluate against y and compute stats
             reg2_scores[time_ind] = compute_score(y_test, yhat)
-            if self.run_stats:
-                reg2_scores_null.append(torch.unsqueeze(perm_gpu(y_test, yhat, n_perm=self.n_perm), 2))
-                reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(y_test, yhat, n_perm=self.n_perm), 2))
-
-        if self.run_stats:
-            scores_null = torch.cat(reg2_scores_null, 2).cpu().detach().numpy()
-            scores_var = torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
-        else:
-            scores_null = None
-            scores_var = None
-
-        return reg1_scores, reg2_scores, scores_null, scores_var
+            reg2_scores_null.append(torch.unsqueeze(perm_gpu(y_test, yhat, n_perm=self.n_perm), 2))
+            reg2_scores_var.append(torch.unsqueeze(bootstrap_gpu(y_test, yhat, n_perm=self.n_perm), 2))
+        return reg1_scores, reg2_scores, \
+               torch.cat(reg2_scores_null, 2).cpu().detach().numpy(), \
+               torch.cat(reg2_scores_var, 2).cpu().detach().numpy()
 
     def save_results(self, results):
         results.to_parquet(self.out_name, index=False)
@@ -197,15 +186,15 @@ class Back2Back:
 def main():
     parser = argparse.ArgumentParser(description='Decoding behavior or fMRI from EEG responses')
     parser.add_argument('--fmri_dir', '-f', type=str, help='fMRI benchmarks directory',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/ReorganizefMRI')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/ReorganizefMRI')
     parser.add_argument('--eeg_file', '-e', type=str, help='preprocessed EEG file',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/eegPreprocessing/all_trials/sub-06.parquet')
     parser.add_argument('--out_dir', '-o', type=str, help='directory for outputs',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/Back2Back')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/Back2Back')
     parser.add_argument('--alexnet', '-a', type=str, help='AlexNet activation file',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/AlexNetActivations/alexnet_conv2.npy')
     parser.add_argument('--motion_energy', '-m', type=str, help='Motion energy activation file',
-                        default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
+                        default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis/data/interim/MotionEnergyActivations/motion_energy.npy')
     parser.add_argument('--y_names', '-y', type=str, default='["fmri"]',
                         help='a list of data names to be used as regression target')
     parser.add_argument('--feature', '-x', type=str, default='["alexnet"]',
@@ -220,8 +209,6 @@ def main():
                         help='scoring function. see DeepJuice TorchRidgeGV for options')
     parser.add_argument('--n_perm', type=int, default=5000,
                         help='the number of permutations for stats')
-    parser.add_argument('--run_stats', action=argparse.BooleanOptionalAction, default=True,
-                        help='whether to run permutation/bootstrap stats')
     args = parser.parse_args()
     Back2Back(args).run()
 

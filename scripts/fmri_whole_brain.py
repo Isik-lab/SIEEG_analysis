@@ -75,7 +75,7 @@ class fMRIWholeBrain:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--top_dir', '-top', type=str,
-                         default='/orcd/data/ngk/001/users/emaliem/SIEEG_analysis')
+                         default='/home/emcmaho7/scratch4-lisik3/emcmaho7/SIEEG_analysis')
     args = parser.parse_args()
     fMRIWholeBrain(args).run()
 
